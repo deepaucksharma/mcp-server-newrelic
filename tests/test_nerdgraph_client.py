@@ -358,3 +358,27 @@ class TestNerdGraphClient:
         
         # Connection should be cleaned up
         # (actual close is a no-op due to connection pooling)
+
+    @pytest.mark.asyncio
+    async def test_close_releases_connection(self):
+        """Closing a standalone client should close its httpx client"""
+        client = NerdGraphClient(
+            api_key="test-key",
+            endpoint="https://api.test.com/graphql"
+        )
+
+        with patch.object(client.client, 'aclose', new_callable=AsyncMock) as mock_close:
+            await client.close()
+            mock_close.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_close_shared_pool(self):
+        """Closing shared clients should only close pool when last reference is closed"""
+        client1 = NerdGraphClient(api_key="test-key-shared", endpoint="https://api.test.com/graphql")
+        client2 = NerdGraphClient(api_key="test-key-shared", endpoint="https://api.test.com/graphql")
+
+        with patch.object(client1.client, 'aclose', new_callable=AsyncMock) as mock_close:
+            await client1.close()
+            mock_close.assert_not_awaited()
+            await client2.close()
+            mock_close.assert_awaited_once()

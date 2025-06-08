@@ -45,6 +45,7 @@ A comprehensive Model Context Protocol (MCP) server that provides AI assistants 
 
 2. **Install dependencies**
    ```bash
+   # Use the pinned versions for a reproducible environment
    pip install -r requirements.txt
    ```
 

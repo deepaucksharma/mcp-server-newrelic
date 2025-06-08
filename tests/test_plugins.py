@@ -10,6 +10,7 @@ import sys
 
 from fastmcp import FastMCP
 from core.plugin_loader import PluginBase, PluginLoader
+from core.plugin_manager import EnhancedPluginManager
 
 # Import feature plugins
 from features.common import CommonPlugin
@@ -460,3 +461,29 @@ class TestSyntheticsPlugin:
         entities = result_data["actor"]["entitySearch"]["results"]["entities"]
         assert len(entities) == 1
         assert entities[0]["monitorType"] == "SIMPLE_BROWSER"
+
+class TestEnhancedPluginManagerUnload:
+    """Tests for unloading plugins using EnhancedPluginManager"""
+
+    def test_unload_plugin_removes_entries(self, test_app, test_services):
+        manager = EnhancedPluginManager(test_app)
+        plugins = manager.discover_plugins()
+        plugin = plugins['CommonPlugin']
+        # Load plugin
+        assert manager.load_plugin(plugin, test_services)
+        tools = list(plugin.provided_tools)
+        resources = list(plugin.provided_resources)
+
+        # Sanity check that tools/resources registered
+        for t in tools:
+            assert t in test_app._tools
+        for r in resources:
+            assert r in test_app._resources
+
+        manager.unload_plugin('CommonPlugin')
+        assert plugin.state == 'unloaded'
+        for t in tools:
+            assert t not in test_app._tools
+        for r in resources:
+            assert r not in test_app._resources
+
