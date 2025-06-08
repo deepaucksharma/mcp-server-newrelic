@@ -20,6 +20,7 @@ from fastmcp import FastMCP
 from core.account_manager import AccountManager
 from core.nerdgraph_client import NerdGraphClient
 from core.entity_definitions import EntityDefinitionsCache
+from core.docs_cache import DocsCache
 from core.session_manager import SessionManager
 from core.plugin_loader import PluginLoader
 from core.plugin_manager import EnhancedPluginManager
@@ -58,6 +59,7 @@ async def create_app() -> FastMCP:
     - View alerts and incidents
     - Run NRQL queries for custom analysis
     - Explore entity relationships and dependencies
+    - Search the official New Relic documentation
     
     Always specify clear time ranges when querying metrics. Default is last hour.
     Entity names are case-sensitive. Use search if unsure of exact name.
@@ -74,6 +76,9 @@ async def create_app() -> FastMCP:
     
     logger.info("Loading entity definitions cache...")
     entity_defs = EntityDefinitionsCache()
+
+    logger.info("Loading documentation cache...")
+    docs_cache = DocsCache()
     
     # Initialize cache
     cache = get_cache()
@@ -121,6 +126,7 @@ async def create_app() -> FastMCP:
         "session_manager": session_manager,
         "nerdgraph": nerdgraph,
         "entity_definitions": entity_defs,
+        "docs_cache": docs_cache,
         "account_id": creds.get("account_id"),
         "cache": cache,
         "health_monitor": health_monitor,

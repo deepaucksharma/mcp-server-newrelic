@@ -460,3 +460,31 @@ class TestSyntheticsPlugin:
         entities = result_data["actor"]["entitySearch"]["results"]["entities"]
         assert len(entities) == 1
         assert entities[0]["monitorType"] == "SIMPLE_BROWSER"
+
+
+class TestDocsPlugin:
+    """Test documentation plugin"""
+
+    @pytest.mark.asyncio
+    async def test_search_docs(self, test_app, test_services):
+        from features.docs import DocsPlugin
+        DocsPlugin.register(test_app, test_services)
+
+        tool = test_app._tools.get("search_docs")
+        assert tool is not None
+
+        result = await tool["handler"](keyword="python", limit=1)
+        data = json.loads(result)
+        assert isinstance(data, list)
+        assert len(data) == 1
+
+    @pytest.mark.asyncio
+    async def test_get_doc_content(self, test_app, test_services):
+        from features.docs import DocsPlugin
+        DocsPlugin.register(test_app, test_services)
+
+        resource = test_app._resources.get("newrelic://docs/{path}")
+        assert resource is not None
+
+        content = await resource["handler"](path="sample.md")
+        assert "Sample document" in content

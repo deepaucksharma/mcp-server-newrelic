@@ -96,8 +96,18 @@ def mock_entity_definitions():
 
 
 @pytest.fixture
-async def test_services(mock_nerdgraph, mock_account_manager, 
-                       mock_session_manager, mock_entity_definitions):
+def mock_docs_cache():
+    """Mock documentation cache"""
+    cache = MagicMock()
+    cache.search.return_value = [{"path": "sample.md", "excerpt": "example"}]
+    cache.get_content.return_value = "Sample document"
+    return cache
+
+
+@pytest.fixture
+async def test_services(mock_nerdgraph, mock_account_manager,
+                       mock_session_manager, mock_entity_definitions,
+                       mock_docs_cache):
     """Create test services dictionary"""
     # Initialize real cache
     cache = get_cache()
@@ -120,6 +130,7 @@ async def test_services(mock_nerdgraph, mock_account_manager,
         "session_manager": mock_session_manager,
         "nerdgraph": mock_nerdgraph,
         "entity_definitions": mock_entity_definitions,
+        "docs_cache": mock_docs_cache,
         "account_id": "123456",
         "cache": cache,
         "health_monitor": health_monitor,
