@@ -26,5 +26,17 @@ alerts.register(mcp)
 print("Server ready")
 
 if __name__ == "__main__":
-    # Run the server
-    mcp.run()
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Determine transport mode
+    transport = os.getenv("MCP_TRANSPORT", "stdio")
+    
+    if transport == "http":
+        host = os.getenv("HTTP_HOST", "127.0.0.1")
+        port = int(os.getenv("HTTP_PORT", "3000"))
+        logger.info(f"Starting in HTTP mode on {host}:{port}")
+        mcp.run(transport="http", host=host, port=port)
+    else:
+        logger.info("Starting in STDIO mode")
+        mcp.run()

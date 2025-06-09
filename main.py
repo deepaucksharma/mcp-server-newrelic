@@ -46,22 +46,20 @@ async def create_app() -> FastMCP:
     app = FastMCP(
         name="newrelic-mcp",
         version="1.0.0",
-        description="Access New Relic platform data through Model Context Protocol"
+        description="Access New Relic platform data through Model Context Protocol",
+        instructions="""
+You have access to New Relic observability data through this MCP server.
+Available capabilities include:
+- Query application performance metrics (APM)
+- Search and inspect entities (services, hosts, etc.)
+- View alerts and incidents
+- Run NRQL queries for custom analysis
+- Explore entity relationships and dependencies
+
+Always specify clear time ranges when querying metrics. Default is last hour.
+Entity names are case-sensitive. Use search if unsure of exact name.
+"""
     )
-    
-    # Add instructions for AI assistants
-    app.instructions = """
-    You have access to New Relic observability data through this MCP server.
-    Available capabilities include:
-    - Query application performance metrics (APM)
-    - Search and inspect entities (services, hosts, etc.)
-    - View alerts and incidents
-    - Run NRQL queries for custom analysis
-    - Explore entity relationships and dependencies
-    
-    Always specify clear time ranges when querying metrics. Default is last hour.
-    Entity names are case-sensitive. Use search if unsure of exact name.
-    """
     
     logger.info("Initializing New Relic MCP Server...")
     

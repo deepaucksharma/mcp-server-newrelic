@@ -1,0 +1,32 @@
+{
+  "mcpServers": {
+    "newrelic": {
+      "command": "/opt/homebrew/bin/python3.11",
+      "args": ["/Users/deepaksharma/Desktop/src/mcp-server-newrelic/server_simple.py"],
+      "cwd": "/Users/deepaksharma/Desktop/src/mcp-server-newrelic",
+      "env": {
+        "NEW_RELIC_API_KEY": "${env:NEW_RELIC_API_KEY}",
+        "NEW_RELIC_ACCOUNT_ID": "${env:NEW_RELIC_ACCOUNT_ID}",
+        "NEW_RELIC_REGION": "${env:NEW_RELIC_REGION}",
+        "MCP_TRANSPORT": "stdio",
+        "LOG_LEVEL": "INFO",
+        "USE_ENHANCED_PLUGINS": "true",
+        "ENABLE_AUDIT_LOGGING": "true"
+      },
+      "description": "Access New Relic observability data and insights",
+      "tools": [
+        "search_entities",
+        "run_nrql_query",
+        "get_apm_metrics",
+        "list_recent_incidents",
+        "get_entity_golden_signals"
+      ]
+    }
+  },
+  "globalSettings": {
+    "timeout": 30000,
+    "retries": 3,
+    "enableLogging": true,
+    "logLevel": "info"
+  }
+}

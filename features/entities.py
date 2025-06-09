@@ -34,7 +34,7 @@ class EntitiesPlugin(PluginBase):
             target_account_id: Optional[int] = None,  # Allow overriding account ID for search
             limit: int = 50
         ) -> str:
-        """
+            """
         Searches for New Relic entities based on various criteria.
 
         Args:
