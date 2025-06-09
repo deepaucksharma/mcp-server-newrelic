@@ -121,6 +121,14 @@ make release
 
 ## Key Implementation Details
 
+### FastMCP 2.0 Architecture
+The server uses FastMCP 2.0 with enhanced features:
+- **Lifecycle Management**: Async context managers for dependency injection
+- **Context Injection**: Access to MCP context and services within tools
+- **Progress Reporting**: Real-time progress updates for long operations
+- **Enhanced Security**: Built-in error sanitization and security features
+- **Transport Flexibility**: Support for stdio, HTTP, and SSE transports
+
 ### NerdGraph Client Pattern
 All API calls go through `nerdgraph_client.execute_nerdgraph_query()` which:
 - Adds authentication headers
@@ -128,25 +136,31 @@ All API calls go through `nerdgraph_client.execute_nerdgraph_query()` which:
 - Returns consistent JSON responses including GraphQL errors
 - Supports async operations
 
-### Plugin Development
+### Plugin Development (FastMCP 2.0)
 To create a new plugin:
 1. Create a class extending `PluginBase` in `features/`
 2. Implement `register()` method
 3. Use `@app.tool()` decorator for MCP tools
-4. Access core services via dependency injection
+4. Access core services via context injection
 
-Example:
+Example with FastMCP 2.0:
 ```python
-from core.plugin_loader import PluginBase
+from fastmcp.context import get_mcp_context
 
-class MyPlugin(PluginBase):
-    @staticmethod
-    def register(app: FastMCP, services: Dict[str, Any]):
-        @app.tool()
-        async def my_tool(param: str) -> Dict[str, Any]:
-            nerdgraph = services["nerdgraph_client"]
-            result = await nerdgraph.execute_nerdgraph_query(query)
-            return {"result": result}
+@app.tool()
+async def my_enhanced_tool(param: str) -> Dict[str, Any]:
+    # Get context and services using FastMCP 2.0 context injection
+    context = get_mcp_context()
+    services = context.get("services", {})
+    nerdgraph = services.get("nerdgraph")
+    
+    # Report progress for long operations
+    await context.progress("Processing request...")
+    
+    result = await nerdgraph.execute_nerdgraph_query(query)
+    
+    await context.progress("Completed successfully")
+    return {"result": result}
 ```
 
 ### Configuration

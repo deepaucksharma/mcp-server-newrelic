@@ -163,6 +163,8 @@ site_build/
 secrets/
 .env.local
 .env.production
+.env copy
+*.env copy
 
 # Temporary files
 *.tmp
