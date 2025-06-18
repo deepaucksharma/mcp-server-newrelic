@@ -57,15 +57,59 @@ await mcp_client.call_tool("analyze_data_quality", {
 | Track | Component | Language | Status | Test Coverage | Notes |
 |-------|-----------|----------|--------|---------------|-------|
 | 1 | Discovery Core | Go | ✅ Complete | 70% | Schema discovery, pattern detection, quality assessment |
-| 2 | Interface Layer | Go/Python | 🚧 In Progress (60%) | 50% | MCP server, gRPC interface, Python client |
-| 3 | Intelligence Engine | Python | 📝 Planned | - | NLP, ML models, insight generation |
-| 4 | Visualizer | Python/React | ⏳ Not Started | - | Dashboard generation, D3.js visualizations |
+| 2 | MCP Server | Go | ✅ Complete | - | Full MCP protocol with all tools implemented |
+| 3 | Query Tools | Go | ✅ Complete | - | NRQL execution, validation, and builder |
+| 4 | Dashboard Tools | Go | ✅ Complete | - | Dashboard discovery, generation from templates |
+| 5 | Alert Tools | Go | ✅ Complete | - | Alert creation, analysis, bulk operations |
+| 6 | Intelligence Engine | Python | ❌ Not Implemented | - | Planned for future release |
 
-### Current Sprint Focus
-- Completing Track 2 Python client integration
-- Adding authentication and rate limiting
-- Implementing integration tests
-- Creating deployment automation
+## 🚀 Quick Start
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/deepaucksharma/mcp-server-newrelic.git
+cd mcp-server-newrelic
+
+# 2. Set up environment
+cp .env.example .env
+# Edit .env with your New Relic credentials
+
+# 3. Run diagnostics
+make diagnose-fix
+
+# 4. Start the MCP server
+make run
+
+# Or run in mock mode for testing
+make run-mock
+```
+
+### Available MCP Tools
+
+The MCP server now includes all critical tools:
+
+**Query Tools:**
+- `query_nrdb` - Execute NRQL queries
+- `query_check` - Validate queries and estimate costs
+- `query_builder` - Build NRQL from parameters
+
+**Discovery Tools:**
+- `discovery.list_schemas` - List all schemas
+- `discovery.profile_attribute` - Deep attribute analysis
+- `discovery.find_relationships` - Relationship mining
+- `discovery.assess_quality` - Quality assessment
+
+**Dashboard Tools:**
+- `find_usage` - Find dashboards using specific metrics
+- `generate_dashboard` - Create from templates (golden-signals, sli-slo, infrastructure)
+- `list_dashboards` - List all dashboards
+- `get_dashboard` - Get dashboard details
+
+**Alert Tools:**
+- `create_alert` - Create intelligent alerts
+- `list_alerts` - List alert conditions
+- `analyze_alerts` - Analyze alert effectiveness
+- `bulk_update_alerts` - Bulk operations
 
 ## 📚 Documentation
 

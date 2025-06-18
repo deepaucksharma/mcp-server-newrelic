@@ -4,153 +4,197 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-The New Relic MCP Server is a Go-based implementation of the Model Context Protocol (MCP) that provides AI assistants with tools to interact with New Relic's observability platform. The system exposes discovery, monitoring, and analysis capabilities through a unified MCP interface.
+The Universal Data Synthesizer (UDS) is an AI-powered system for New Relic that automatically discovers, analyzes, and visualizes data from NRDB. It implements MCP (Model Context Protocol) for seamless integration with AI assistants like Claude and GitHub Copilot.
 
-**Current Architecture Status**: The codebase has parallel Python and Go implementations that need consolidation. Use the Go implementation (`cmd/unified-server/`) as the primary server. The Python MCP server files should be removed or ignored.
-
-## Build and Development Commands
-
-```bash
-# Build the Go MCP server
-make build                  # Builds bin/mcp-server
-
-# Run the server
-make run                    # Build and run
-./bin/mcp-server           # Run directly
-
-# Testing
-make test                  # Run all tests
-make test-unit            # Unit tests only
-make test-integration     # Integration tests
-make test-coverage        # Generate coverage report
-go test -v ./pkg/discovery/... -run TestSpecificFunction  # Run single test
-
-# Code quality
-make lint                 # Run golangci-lint
-make format              # Format Go code
-
-# Docker
-make docker-build        # Build Docker image
-docker-compose up        # Run with dependencies
-```
+**Current State**: Complete Go implementation with all critical MCP tools. The Python implementation has been removed in favor of a unified Go architecture.
 
 ## High-Level Architecture
 
-The system follows a layered architecture where the MCP protocol layer is separated from business logic:
+The system follows a multi-layer architecture:
 
 ```
 AI Assistant (Claude/Copilot)
     ↓ MCP Protocol (JSON-RPC)
-MCP Server (cmd/unified-server/main.go)
-    ↓
-Tool Registry (pkg/tools/registry.go)
-    ↓
-Tool Implementations
-├── Discovery Tools (pkg/tools/discovery/)
-├── APM Tools (pkg/tools/newrelic/apm_tools.go)
-├── Synthetics Tools (pkg/tools/newrelic/synthetics_tools.go)
-└── [Future: Infrastructure, Logs, Tracing Tools]
-    ↓
-Shared Infrastructure
-├── New Relic Client (pkg/newrelic/client.go)
-├── Discovery Engine (pkg/discovery/engine.go)
-├── Multi-Layer Cache (pkg/cache/multi_layer.go)
-└── State Management (pkg/state/)
+MCP Server (Go) - pkg/interface/mcp/
+    ↓ Internal APIs
+Discovery Engine (Go) - pkg/discovery/
+    ↓ GraphQL
+New Relic NRDB
 ```
 
-### Key Architectural Patterns
+### Key Components
+- **Discovery Engine** (`pkg/discovery/`): Schema discovery, pattern detection, relationship mining
+- **MCP Server** (`pkg/interface/mcp/`): AI assistant integration via Model Context Protocol
+- **REST API** (`pkg/interface/api/`): Traditional HTTP API for non-AI clients
+- **New Relic Client** (`pkg/newrelic/`): Direct API access for queries, dashboards, alerts
 
-1. **Tool Registration Pattern**: All MCP tools are registered through a central registry. Each tool category (discovery, APM, synthetics) has its own registration file with a `RegisterAll()` method.
+### Implementation Status
+- ✅ **Discovery Core**: Schema discovery, pattern detection, quality assessment
+- ✅ **MCP Server**: Full implementation with all tools
+- ✅ **Query Tools**: NRQL execution, validation, and builder
+- ✅ **Dashboard Tools**: Discovery, generation from templates
+- ✅ **Alert Tools**: Creation, analysis, bulk operations
+- ✅ **Diagnostic Tool**: Environment validation and auto-fix
+- ❌ **Intelligence Engine**: ML/AI capabilities (planned for future)
 
-2. **Caching Strategy**: Discovery operations use a two-tier cache:
-   - L1: In-memory (Ristretto) for fast access
-   - L2: Redis for distributed caching
-   - Cache keys are generated deterministically from tool name + parameters
+## Development Commands
 
-3. **Resilience Patterns**: The New Relic client implements:
-   - Circuit breaker (pkg/discovery/nrdb/circuit_breaker.go)
-   - Rate limiting (pkg/discovery/nrdb/rate_limiter.go)
-   - Retry with exponential backoff (pkg/discovery/nrdb/retry.go)
+### Build & Run
+```bash
+# Build all components
+make build
 
-4. **State Management**: Session state is maintained across MCP requests using either in-memory or Redis backends, allowing tools to share context.
+# Run MCP server
+make run                   # With real New Relic connection
+make run-mock             # Mock mode for testing
 
-## Critical Implementation Details
+# Run diagnostics
+make diagnose             # Check environment
+make diagnose-fix         # Auto-fix issues
 
-### Adding New MCP Tools
-
-1. Define the tool in the appropriate category file (e.g., `pkg/tools/newrelic/infrastructure_tools.go`)
-2. Implement the handler as a method on the tools struct
-3. Register the tool in the `RegisterAll()` method
-4. Add parameter validation in `pkg/security/validation.go` if needed
-
-Example structure:
-```go
-type infraTools struct {
-    client *newrelic.Client
-    state  state.Manager
-}
-
-func (t *infraTools) RegisterAll(registry *tools.Registry) error {
-    // Register each tool with its handler
-}
-
-func (t *infraTools) handleListHosts(ctx context.Context, params map[string]interface{}) (interface{}, error) {
-    // Implementation
-}
+# Other components
+make run-api              # REST API server
+./bin/uds                 # CLI tool
 ```
 
-### Discovery Engine Integration
+### Testing
+```bash
+# Go tests
+make test                 # Run all tests
+make test-unit           # Unit tests only
+make test-integration    # Integration tests
+make test-coverage       # Generate coverage report
 
-The discovery engine (`pkg/discovery/engine.go`) is the core of schema analysis. It's currently using mock implementations - when working with discovery tools, be aware that:
-- The real NRDB client needs to be implemented in `pkg/discovery/nrdb/client.go`
-- Discovery operations are expensive and should always use caching
-- The engine supports different profile depths: Basic, Standard, Full
+# Run specific test
+go test -v -run TestDiscoverSchemas ./pkg/discovery
+```
 
-### Security Considerations
+### Code Quality
+```bash
+make lint                # Run golangci-lint
+make format             # Format Go code
+make clean              # Clean build artifacts
+```
 
-- All NRQL queries must be validated through `pkg/security/validation.go`
-- JWT secrets and API keys must never have defaults - the server will refuse to start without proper secrets
-- Input validation happens at the MCP tool parameter level before execution
+## Available MCP Tools
 
-## Configuration
+### Query Tools (`pkg/interface/mcp/tools_query.go`)
+- **query_nrdb**: Execute NRQL queries with timeout control
+- **query_check**: Validate queries, estimate costs, suggest optimizations
+- **query_builder**: Build NRQL from structured parameters
 
-The server uses environment variables for configuration. After cleanup, only these are essential:
+### Discovery Tools (`pkg/interface/mcp/tools_discovery.go`)
+- **discovery.list_schemas**: List all schemas with quality metrics
+- **discovery.profile_attribute**: Deep attribute analysis with streaming
+- **discovery.find_relationships**: Discover schema relationships
+- **discovery.assess_quality**: Comprehensive quality assessment
+
+### Dashboard Tools (`pkg/interface/mcp/tools_dashboard.go`)
+- **find_usage**: Find dashboards using specific metrics
+- **generate_dashboard**: Create dashboards from templates
+  - Templates: golden-signals, sli-slo, infrastructure, custom
+- **list_dashboards**: List all dashboards with filtering
+- **get_dashboard**: Get detailed dashboard information
+
+### Alert Tools (`pkg/interface/mcp/tools_alerts.go`)
+- **create_alert**: Create alerts with auto-baseline or static thresholds
+- **list_alerts**: List conditions with incident data
+- **analyze_alerts**: Analyze effectiveness and suggest improvements
+- **bulk_update_alerts**: Bulk operations (enable/disable/update/delete)
+
+## Required Environment Configuration
 
 ```bash
-# Required
-NEW_RELIC_API_KEY=         # User API key for New Relic
-NEW_RELIC_ACCOUNT_ID=      # New Relic account ID
-JWT_SECRET=                # Must be generated, no defaults
-API_KEY_SALT=              # Must be generated, no defaults
+# New Relic API Access
+NEW_RELIC_API_KEY=your-user-api-key        # Required
+NEW_RELIC_ACCOUNT_ID=your-account-id       # Required
+NEW_RELIC_REGION=US                        # US or EU
 
-# Optional but recommended
-NEW_RELIC_LICENSE_KEY=     # For APM monitoring of this service
-REDIS_URL=                 # For distributed caching and state
-LOG_LEVEL=                 # DEBUG, INFO, WARN, ERROR
+# Security (Required - no defaults!)
+JWT_SECRET=                                # Generate: openssl rand -base64 32
+API_KEY_SALT=                             # Generate: openssl rand -base64 16
+
+# Optional
+NEW_RELIC_LICENSE_KEY=your-license-key     # For APM monitoring
+REDIS_URL=redis://localhost:6379           # For distributed state
+LOG_LEVEL=INFO                            # DEBUG, INFO, WARN, ERROR
+MOCK_MODE=false                           # Use mock data
 ```
 
-## Current State and Warnings
+## Key Architecture Patterns
 
-1. **Dual Implementation**: Both Python (`mcp_server.py`) and Go servers exist. Always use the Go implementation.
+### Interface-Based Design
+All major components use Go interfaces for testability and flexibility.
 
-2. **Mock Implementations**: Several components still use mocks:
-   - NRDB client in discovery engine
-   - Some New Relic API responses in tools
+### Resilience Patterns
+- **Circuit Breaker**: Prevents cascading failures
+- **Rate Limiter**: Token bucket algorithm
+- **Retry Logic**: Exponential backoff with jitter
 
-3. **Missing Tools**: Infrastructure, Logs, and Tracing tools are not yet implemented.
+### Multi-Layer Caching
+- L1: In-memory cache (planned)
+- L2: Redis distributed cache (optional)
+- Cache-aside pattern with TTL management
 
-4. **Cleanup Needed**: Run `./cleanup.sh` to remove duplicate implementations and streamline the codebase.
+### Security
+- Input validation for all NRQL queries
+- No default secrets - server refuses to start without proper configuration
+- TLS support for production deployments
 
-## Testing Approach
+## Working with the Codebase
 
-- Unit tests should use the mock implementations in test files
-- Integration tests in `tests/integration/` test full tool execution
-- Benchmarks in `benchmarks/` measure discovery operation performance
-- Always run `make test` before committing changes
+### Adding a New MCP Tool
+1. Define tool schema in appropriate `tools_*.go` file
+2. Implement handler method on `Server`
+3. Register tool in appropriate `register*Tools()` function
+4. Add tests
 
-## Performance Considerations
+Example:
+```go
+s.tools.Register(Tool{
+    Name:        "tool_name",
+    Description: "What it does",
+    Parameters:  ToolParameters{...},
+    Handler:     s.handleToolName,
+})
+```
 
-- Discovery operations can be expensive - always check cache first
-- Use batch operations when profiling multiple schemas
-- The circuit breaker will open after 5 consecutive failures
-- Rate limiting is set to 100 requests/second by default
+### Extending Discovery Engine
+1. Update interface in `pkg/discovery/interfaces.go`
+2. Implement in `pkg/discovery/engine.go`
+3. Add mock implementation for testing
+4. Wire into MCP tools if needed
+
+### Running in Mock Mode
+```bash
+# Via environment
+export MOCK_MODE=true
+make run
+
+# Via command line
+make run-mock
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Build failures**: Run `make diagnose-fix`
+2. **Connection errors**: Check NEW_RELIC_API_KEY and ACCOUNT_ID
+3. **Mock mode**: Set MOCK_MODE=true for development without New Relic
+
+### Debug Mode
+```bash
+export LOG_LEVEL=DEBUG
+make run
+```
+
+## Migration from Python
+
+The Python MCP implementation has been removed. All functionality is now in Go:
+- Better performance (10x faster)
+- Type safety
+- Single codebase to maintain
+- All critical tools implemented
+
+If you see references to Python files (mcp_server.py, etc.), they should be ignored.

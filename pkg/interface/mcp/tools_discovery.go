@@ -17,19 +17,30 @@ func (s *Server) registerTools() error {
 		return fmt.Errorf("failed to register discovery tools: %w", err)
 	}
 	
+	// Query tools
+	if err := s.registerQueryTools(); err != nil {
+		return fmt.Errorf("failed to register query tools: %w", err)
+	}
+	
+	// Dashboard tools
+	if err := s.registerDashboardTools(); err != nil {
+		return fmt.Errorf("failed to register dashboard tools: %w", err)
+	}
+	
+	// Alert tools
+	if err := s.registerAlertTools(); err != nil {
+		return fmt.Errorf("failed to register alert tools: %w", err)
+	}
+	
 	// TODO: Register pattern analysis tools (Track 3)
-	// TODO: Register query generation tools (Track 3)
-	// TODO: Register dashboard tools (Track 4)
+	// TODO: Register infrastructure tools
+	// TODO: Register log tools
 	
 	return nil
 }
 
 // registerDiscoveryTools registers tools that interface with Track 1's discovery engine
 func (s *Server) registerDiscoveryTools() error {
-	// Register enhanced discovery tools first
-	if err := s.registerEnhancedDiscoveryTools(); err != nil {
-		return fmt.Errorf("failed to register enhanced discovery tools: %w", err)
-	}
 	
 	// List schemas tool
 	s.tools.Register(Tool{

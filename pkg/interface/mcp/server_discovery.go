@@ -18,6 +18,9 @@ type Server struct {
 	discovery discovery.DiscoveryEngine
 	// TODO: Add patterns, query, dashboard when Track 3/4 complete
 	
+	// New Relic client for direct API access
+	nrClient interface{} // Will be *newrelic.Client when imported
+	
 	// MCP components
 	transport    Transport
 	tools        ToolRegistry
@@ -63,6 +66,13 @@ func (s *Server) SetStateManager(sm state.StateManager) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.stateManager = sm
+}
+
+// SetNewRelicClient sets the New Relic API client
+func (s *Server) SetNewRelicClient(client interface{}) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.nrClient = client
 }
 
 // Start initializes and starts the MCP server
