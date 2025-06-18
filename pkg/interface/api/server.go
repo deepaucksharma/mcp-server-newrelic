@@ -33,6 +33,7 @@ type Config struct {
 	MaxRequestSize  int64
 	EnableCORS      bool
 	EnableSwagger   bool
+	EnableAuth      bool
 	RateLimitPerMin int
 }
 
@@ -132,7 +133,9 @@ func (s *Server) setupRoutes() {
 
 	// Protected endpoints (require auth)
 	protected := api.PathPrefix("").Subrouter()
-	protected.Use(auth.RequireAuth(s.jwtManager, s.apiKeyManager))
+	if s.config.EnableAuth {
+		protected.Use(auth.RequireAuth(s.jwtManager, s.apiKeyManager))
+	}
 	
 	// Discovery endpoints
 	protected.HandleFunc("/discovery/schemas", s.handler.ListSchemas).Methods("GET")

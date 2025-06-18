@@ -4,172 +4,153 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-The Universal Data Synthesizer (UDS) is an AI-powered system for New Relic that automatically discovers, analyzes, and visualizes data from NRDB. It implements MCP (Model Context Protocol) for seamless integration with AI assistants like Claude and GitHub Copilot.
+The New Relic MCP Server is a Go-based implementation of the Model Context Protocol (MCP) that provides AI assistants with tools to interact with New Relic's observability platform. The system exposes discovery, monitoring, and analysis capabilities through a unified MCP interface.
 
-**Current State**: The repository has an active implementation with Discovery Core (Track 1) mostly complete, MCP server operational, and Platform Foundation (Track 4) partially implemented. Intelligence Engine (Tracks 2-3) are planned but not yet implemented.
+**Current Architecture Status**: The codebase has parallel Python and Go implementations that need consolidation. Use the Go implementation (`cmd/unified-server/`) as the primary server. The Python MCP server files should be removed or ignored.
 
-## High-Level Architecture
+## Build and Development Commands
 
-The system follows a multi-layer architecture:
-
-```
-AI Assistant (Claude/Copilot)
-    ↓ MCP Protocol (JSON-RPC)
-MCP Server (Go) - pkg/interface/mcp/
-    ↓ Internal APIs
-Discovery Engine (Go) - pkg/discovery/
-    ↓ GraphQL
-New Relic NRDB
-```
-
-### Key Components
-- **Discovery Engine** (`pkg/discovery/`): Schema discovery, pattern detection, relationship mining
-- **MCP Server** (`pkg/interface/mcp/`): AI assistant integration via Model Context Protocol
-- **REST API** (`pkg/interface/api/`): Traditional HTTP API for non-AI clients
-- **Platform Foundation** (`pkg/auth/`, `pkg/telemetry/`): Security, observability, resilience
-
-### Implementation Status
-- ✅ **Track 1**: Discovery Core with sampling, pattern detection, quality assessment
-- ✅ **Track 4**: Authentication, APM integration, resilience patterns
-- 🚧 **MCP Server**: Basic tool registration and execution
-- ❌ **Tracks 2-3**: Intelligence Engine (Python) - not yet implemented
-
-## Development Commands
-
-### Build & Run
 ```bash
 # Build the Go MCP server
 make build                  # Builds bin/mcp-server
 
-# Docker builds
-make build-docker          # Build Docker image
-docker-compose up          # Run full stack with Docker Compose
+# Run the server
+make run                    # Build and run
+./bin/mcp-server           # Run directly
 
-# Development mode
-make dev                   # Run with auto-reload
-make run                   # Run the built server
-```
-
-### Testing
-```bash
-# Go tests
-make test                  # Run all tests with race detection
+# Testing
+make test                  # Run all tests
 make test-unit            # Unit tests only
 make test-integration     # Integration tests
-make test-benchmarks      # Performance benchmarks
 make test-coverage        # Generate coverage report
+go test -v ./pkg/discovery/... -run TestSpecificFunction  # Run single test
 
-# MCP tests
-make test-mcp            # Run MCP test suite
-make test-mcp-interactive # Interactive MCP test runner
-
-# End-to-end tests
-./tests/run_tests.sh      # Full test suite with Docker
-```
-
-### Code Quality
-```bash
+# Code quality
 make lint                 # Run golangci-lint
 make format              # Format Go code
-make tidy                # Tidy dependencies
-make install-tools       # Install dev tools
+
+# Docker
+make docker-build        # Build Docker image
+docker-compose up        # Run with dependencies
 ```
 
-## Key Architecture Patterns
+## High-Level Architecture
 
-### Interface-Based Design
-All major components use Go interfaces for testability:
-- `DiscoveryEngine`, `NRDBClient`, `Cache` interfaces enable easy mocking
-- Clean separation between interface and implementation
+The system follows a layered architecture where the MCP protocol layer is separated from business logic:
 
-### Resilience Patterns
-- **Circuit Breaker** (`pkg/discovery/nrdb/circuit_breaker.go`): Prevents cascading failures
-- **Rate Limiter** (`pkg/discovery/nrdb/rate_limiter.go`): Token bucket algorithm
-- **Retry Logic** (`pkg/discovery/nrdb/retry.go`): Exponential backoff with jitter
+```
+AI Assistant (Claude/Copilot)
+    ↓ MCP Protocol (JSON-RPC)
+MCP Server (cmd/unified-server/main.go)
+    ↓
+Tool Registry (pkg/tools/registry.go)
+    ↓
+Tool Implementations
+├── Discovery Tools (pkg/tools/discovery/)
+├── APM Tools (pkg/tools/newrelic/apm_tools.go)
+├── Synthetics Tools (pkg/tools/newrelic/synthetics_tools.go)
+└── [Future: Infrastructure, Logs, Tracing Tools]
+    ↓
+Shared Infrastructure
+├── New Relic Client (pkg/newrelic/client.go)
+├── Discovery Engine (pkg/discovery/engine.go)
+├── Multi-Layer Cache (pkg/cache/multi_layer.go)
+└── State Management (pkg/state/)
+```
 
-### Worker Pool Pattern
-Parallel processing for discovery tasks:
-- Configurable pool size based on workload
-- Graceful shutdown with context cancellation
-- Type-safe task execution
+### Key Architectural Patterns
 
-### Multi-Layer Caching
-- L1: In-memory cache (ristretto)
-- L2: Redis distributed cache
-- Cache-aside pattern with TTL management
+1. **Tool Registration Pattern**: All MCP tools are registered through a central registry. Each tool category (discovery, APM, synthetics) has its own registration file with a `RegisterAll()` method.
 
-## Required Environment Configuration
+2. **Caching Strategy**: Discovery operations use a two-tier cache:
+   - L1: In-memory (Ristretto) for fast access
+   - L2: Redis for distributed caching
+   - Cache keys are generated deterministically from tool name + parameters
+
+3. **Resilience Patterns**: The New Relic client implements:
+   - Circuit breaker (pkg/discovery/nrdb/circuit_breaker.go)
+   - Rate limiting (pkg/discovery/nrdb/rate_limiter.go)
+   - Retry with exponential backoff (pkg/discovery/nrdb/retry.go)
+
+4. **State Management**: Session state is maintained across MCP requests using either in-memory or Redis backends, allowing tools to share context.
+
+## Critical Implementation Details
+
+### Adding New MCP Tools
+
+1. Define the tool in the appropriate category file (e.g., `pkg/tools/newrelic/infrastructure_tools.go`)
+2. Implement the handler as a method on the tools struct
+3. Register the tool in the `RegisterAll()` method
+4. Add parameter validation in `pkg/security/validation.go` if needed
+
+Example structure:
+```go
+type infraTools struct {
+    client *newrelic.Client
+    state  state.Manager
+}
+
+func (t *infraTools) RegisterAll(registry *tools.Registry) error {
+    // Register each tool with its handler
+}
+
+func (t *infraTools) handleListHosts(ctx context.Context, params map[string]interface{}) (interface{}, error) {
+    // Implementation
+}
+```
+
+### Discovery Engine Integration
+
+The discovery engine (`pkg/discovery/engine.go`) is the core of schema analysis. It's currently using mock implementations - when working with discovery tools, be aware that:
+- The real NRDB client needs to be implemented in `pkg/discovery/nrdb/client.go`
+- Discovery operations are expensive and should always use caching
+- The engine supports different profile depths: Basic, Standard, Full
+
+### Security Considerations
+
+- All NRQL queries must be validated through `pkg/security/validation.go`
+- JWT secrets and API keys must never have defaults - the server will refuse to start without proper secrets
+- Input validation happens at the MCP tool parameter level before execution
+
+## Configuration
+
+The server uses environment variables for configuration. After cleanup, only these are essential:
 
 ```bash
-# New Relic API Access
-NEW_RELIC_API_KEY=your-user-api-key        # Required: User API key for NRDB access
-NEW_RELIC_ACCOUNT_ID=your-account-id       # Required: Your New Relic account ID
-NEW_RELIC_REGION=US                        # US or EU
+# Required
+NEW_RELIC_API_KEY=         # User API key for New Relic
+NEW_RELIC_ACCOUNT_ID=      # New Relic account ID
+JWT_SECRET=                # Must be generated, no defaults
+API_KEY_SALT=              # Must be generated, no defaults
 
-# New Relic APM (for monitoring this service)
-NEW_RELIC_LICENSE_KEY=your-license-key     # Optional: For APM instrumentation
-NEW_RELIC_APP_NAME=mcp-server-newrelic     # Optional: APM app name
-
-# Service Configuration
-MCP_TRANSPORT=stdio                        # stdio, http, or sse
-SERVER_PORT=8080                          # REST API port
-LOG_LEVEL=INFO                            # DEBUG, INFO, WARN, ERROR
+# Optional but recommended
+NEW_RELIC_LICENSE_KEY=     # For APM monitoring of this service
+REDIS_URL=                 # For distributed caching and state
+LOG_LEVEL=                 # DEBUG, INFO, WARN, ERROR
 ```
 
-Copy `.env.example` to `.env` and fill in your values.
+## Current State and Warnings
 
-## Component Communication Flow
+1. **Dual Implementation**: Both Python (`mcp_server.py`) and Go servers exist. Always use the Go implementation.
 
-### MCP Tool Execution
-1. AI assistant sends JSON-RPC request to MCP server
-2. MCP server validates request and extracts parameters
-3. Tool handler calls Discovery Engine with context
-4. Discovery Engine queries NRDB with circuit breaker protection
-5. Results are cached and returned to AI assistant
-6. APM tracks the entire transaction
+2. **Mock Implementations**: Several components still use mocks:
+   - NRDB client in discovery engine
+   - Some New Relic API responses in tools
 
-### Discovery Process
-1. **Event Type Discovery**: Find all available event types
-2. **Schema Profiling**: Analyze attributes and data types
-3. **Pattern Detection**: Identify common patterns and anomalies
-4. **Quality Assessment**: Score data completeness and consistency
-5. **Relationship Mining**: Find connections between schemas
+3. **Missing Tools**: Infrastructure, Logs, and Tracing tools are not yet implemented.
 
-## New Relic APM Integration
+4. **Cleanup Needed**: Run `./cleanup.sh` to remove duplicate implementations and streamline the codebase.
 
-The codebase includes native New Relic APM instrumentation:
-- Transaction tracking for all major operations
-- Custom metrics for discovery operations
-- Distributed tracing across services
-- Error tracking and alerting
+## Testing Approach
 
-APM instrumentation points:
-- `pkg/discovery/engine.go`: Discovery operations
-- `pkg/interface/api/server.go`: HTTP endpoints
-- `pkg/interface/mcp/server.go`: MCP tool execution
+- Unit tests should use the mock implementations in test files
+- Integration tests in `tests/integration/` test full tool execution
+- Benchmarks in `benchmarks/` measure discovery operation performance
+- Always run `make test` before committing changes
 
-## Working with the Codebase
+## Performance Considerations
 
-### Adding a New MCP Tool
-1. Define tool schema in `pkg/interface/mcp/tools_*.go`
-2. Implement handler method on `MCPServer`
-3. Register tool in `RegisterTools()` method
-4. Add tests in `pkg/interface/mcp/*_test.go`
-
-### Extending Discovery Engine
-1. Implement new interface in `pkg/discovery/types.go`
-2. Add implementation in appropriate package
-3. Wire into `Engine` in `pkg/discovery/engine.go`
-4. Add configuration in `pkg/config/config.go`
-
-### Running Single Tests
-```bash
-# Run specific Go test
-go test -v -run TestDiscoverSchemas ./pkg/discovery
-
-# Run specific test file
-go test -v ./pkg/discovery/sampling/strategies_test.go
-
-# Run with race detection
-go test -race -v ./pkg/discovery/...
-```
+- Discovery operations can be expensive - always check cache first
+- Use batch operations when profiling multiple schemas
+- The circuit breaker will open after 5 consecutive failures
+- Rate limiting is set to 100 requests/second by default

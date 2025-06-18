@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/deepaucksharma/mcp-server-newrelic/pkg/discovery"
+	"github.com/deepaucksharma/mcp-server-newrelic/pkg/state"
 )
 
 // Server implements the Model Context Protocol server
@@ -18,10 +19,11 @@ type Server struct {
 	// TODO: Add patterns, query, dashboard when Track 3/4 complete
 	
 	// MCP components
-	transport  Transport
-	tools      ToolRegistry
-	sessions   SessionManager
-	protocol   *ProtocolHandler
+	transport    Transport
+	tools        ToolRegistry
+	sessions     SessionManager
+	protocol     *ProtocolHandler
+	stateManager state.StateManager
 	
 	// Configuration
 	config     ServerConfig
@@ -54,6 +56,13 @@ func (s *Server) SetDiscovery(engine discovery.DiscoveryEngine) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.discovery = engine
+}
+
+// SetStateManager sets the state manager
+func (s *Server) SetStateManager(sm state.StateManager) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.stateManager = sm
 }
 
 // Start initializes and starts the MCP server

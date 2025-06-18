@@ -206,9 +206,9 @@ func Load() (*Config, error) {
 		},
 		Security: SecurityConfig{
 			AuthEnabled:      getBoolEnv("AUTH_ENABLED", false),
-			JWTSecret:        getEnv("JWT_SECRET", "change-me-in-production"),
+			JWTSecret:        getEnv("JWT_SECRET", ""),
 			JWTExpiry:        getDurationEnv("JWT_EXPIRY", 24*time.Hour),
-			APIKeySalt:       getEnv("API_KEY_SALT", "change-me-in-production"),
+			APIKeySalt:       getEnv("API_KEY_SALT", ""),
 			RateLimitEnabled: getBoolEnv("RATE_LIMIT_ENABLED", true),
 			RateLimitPerMin:  getIntEnv("RATE_LIMIT_PER_MIN", 60),
 			RateLimitBurst:   getIntEnv("RATE_LIMIT_BURST", 10),
@@ -345,5 +345,32 @@ func (c *Config) Validate() error {
 	if c.APM.Enabled && c.APM.LicenseKey == "" {
 		return fmt.Errorf("NEW_RELIC_LICENSE_KEY is required when APM is enabled")
 	}
+	
+	// Security validation
+	if c.Security.AuthEnabled {
+		if c.Security.JWTSecret == "" {
+			return fmt.Errorf("JWT_SECRET is required when authentication is enabled")
+		}
+		if len(c.Security.JWTSecret) < 32 {
+			return fmt.Errorf("JWT_SECRET must be at least 32 characters long for security")
+		}
+		if c.Security.APIKeySalt == "" {
+			return fmt.Errorf("API_KEY_SALT is required when authentication is enabled")
+		}
+		if len(c.Security.APIKeySalt) < 16 {
+			return fmt.Errorf("API_KEY_SALT must be at least 16 characters long for security")
+		}
+	}
+	
+	// Production environment checks
+	if c.APM.Environment == "production" || c.Development.DevMode == false {
+		if c.Security.JWTSecret == "change-me-in-production" || c.Security.JWTSecret == "default-secret-change-me" {
+			return fmt.Errorf("JWT_SECRET must be changed from default value in production")
+		}
+		if c.Security.APIKeySalt == "change-me-in-production" || c.Security.APIKeySalt == "default-salt-change-me" {
+			return fmt.Errorf("API_KEY_SALT must be changed from default value in production")
+		}
+	}
+	
 	return nil
 }

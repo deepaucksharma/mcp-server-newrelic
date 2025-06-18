@@ -26,6 +26,11 @@ func (s *Server) registerTools() error {
 
 // registerDiscoveryTools registers tools that interface with Track 1's discovery engine
 func (s *Server) registerDiscoveryTools() error {
+	// Register enhanced discovery tools first
+	if err := s.registerEnhancedDiscoveryTools(); err != nil {
+		return fmt.Errorf("failed to register enhanced discovery tools: %w", err)
+	}
+	
 	// List schemas tool
 	s.tools.Register(Tool{
 		Name:        "discovery.list_schemas",

@@ -1,102 +1,72 @@
-# UDS Discovery Core Makefile
-
-.PHONY: help build test bench lint clean coverage run install-tools
+.PHONY: build test run clean docker-build docker-run lint format help
 
 # Default target
-help:
-	@echo "MCP Server for New Relic"
-	@echo ""
-	@echo "Build targets:"
-	@echo "  build             Build MCP server"
-	@echo ""
-	@echo "Run targets:"
-	@echo "  run               Run MCP server"
-	@echo ""
-	@echo "Development targets:"
-	@echo "  test              Run comprehensive test suite (all tests)"
-	@echo "  diagnose          Run system diagnostics"
-	@echo "  fix               Run diagnostics and auto-fix issues"
-	@echo "  lint              Run golangci-lint"
-	@echo "  clean             Clean build artifacts"
-	@echo "  install-tools     Install development tools"
-	@echo ""
+default: build
 
-# Build binaries
+# Build the application
 build:
-	@echo "Building MCP server..."
-	@go build -o bin/mcp-server ./cmd/server
+	@echo "Building API server..."
+	@go build -o bin/api-server ./cmd/api-server
 
-# Testing targets
-.PHONY: test
-
-# Run all tests - comprehensive test suite that includes everything
+# Run tests
 test:
-	@echo "Running comprehensive test suite..."
-	@echo "This includes: unit tests, integration tests, real NRDB tests, mock tests, performance tests, etc."
-	@echo ""
-	@python3 tests/test_all.py
+	@./test.sh all
 
-# Run diagnostics
-diagnose:
-	@echo "Running system diagnostics..."
-	@python3 diagnose.py
+test-unit:
+	@./test.sh unit
 
-# Run diagnostics and auto-fix
-fix:
-	@echo "Running diagnostics with auto-fix..."
-	@python3 diagnose.py --fix
+test-integration:
+	@./test.sh integration
 
-# Run linter
-lint:
-	@echo "Running linter..."
-	@golangci-lint run ./...
+test-benchmark:
+	@./test.sh benchmark
+
+test-coverage:
+	@./test.sh coverage
+
+# Run the application
+run: build
+	@echo "Starting API server..."
+	@./bin/api-server
 
 # Clean build artifacts
 clean:
 	@echo "Cleaning..."
-	@rm -rf bin/ coverage.out coverage.html test_report_*.json
+	@rm -rf bin/
+	@rm -f coverage.out coverage.html
+	@go clean -testcache
 
-# Install development tools
-install-tools:
-	@echo "Installing development tools..."
-	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-	@go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-	@go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-	@echo "Tools installed!"
+# Docker operations
+docker-build:
+	@echo "Building Docker image..."
+	@docker build -t mcp-server-newrelic .
 
-# Generate protobuf files
-.PHONY: proto proto-go proto-python
+docker-run:
+	@echo "Running with Docker Compose..."
+	@docker-compose up
 
-proto: proto-go proto-python
-
-proto-go:
-	@echo "Generating Go protobuf files..."
-	@protoc --go_out=. --go_opt=paths=source_relative \
-		--go-grpc_out=. --go-grpc_opt=paths=source_relative \
-		pkg/intelligence/proto/intelligence.proto
-
-proto-python:
-	@echo "Generating Python protobuf files..."
-	@python -m grpc_tools.protoc \
-		-I. \
-		--python_out=. \
-		--grpc_python_out=. \
-		pkg/intelligence/proto/intelligence.proto
-
-# Run the server
-run: build
-	@echo "Running MCP server..."
-	@./bin/mcp-server
-
-# Development helpers
-dev:
-	@echo "Starting development server with auto-reload..."
-	@go run ./cmd/server
+# Code quality
+lint:
+	@echo "Running linter..."
+	@golangci-lint run
 
 format:
 	@echo "Formatting code..."
 	@go fmt ./...
 
-tidy:
-	@echo "Tidying dependencies..."
-	@go mod tidy
+# Help
+help:
+	@echo "Available targets:"
+	@echo "  build          - Build the MCP server"
+	@echo "  test           - Run all tests"
+	@echo "  test-unit      - Run unit tests"
+	@echo "  test-integration - Run integration tests"
+	@echo "  test-benchmark - Run benchmarks"
+	@echo "  test-coverage  - Generate coverage report"
+	@echo "  run            - Build and run the server"
+	@echo "  clean          - Clean build artifacts"
+	@echo "  docker-build   - Build Docker image"
+	@echo "  docker-run     - Run with Docker Compose"
+	@echo "  lint           - Run linter"
+	@echo "  format         - Format code"
+	@echo "  help           - Show this help"

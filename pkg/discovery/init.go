@@ -8,6 +8,11 @@ import (
 
 // InitializeEngine creates and starts a discovery engine
 func InitializeEngine(ctx context.Context) (DiscoveryEngine, error) {
+	// Check for mock mode
+	if os.Getenv("MOCK_MODE") == "true" || os.Getenv("DEVELOPMENT_MOCK_MODE") == "true" {
+		return NewMockEngine(), nil
+	}
+	
 	// Load configuration
 	config := DefaultConfig()
 	

@@ -22,6 +22,11 @@ type FactoryConfig struct {
 	RedisConfig     *RedisConfig // Optional, only needed for Redis
 }
 
+// NewMemoryStateManager creates a new in-memory state manager with default config
+func NewMemoryStateManager() StateManager {
+	return NewManager(DefaultManagerConfig())
+}
+
 // NewStateManager creates a state manager based on configuration
 func NewStateManager(config FactoryConfig) (StateManager, error) {
 	switch config.StoreType {
