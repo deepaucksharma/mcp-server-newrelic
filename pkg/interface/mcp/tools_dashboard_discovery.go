@@ -45,7 +45,7 @@ func (s *Server) generateDiscoveryBasedDashboard(ctx context.Context, name strin
 
 	// Build dashboard pages based on discovered schemas
 	pages := []map[string]interface{}{}
-	
+
 	// Group schemas by type
 	schemaGroups := groupSchemasByType(schemas)
 
@@ -86,7 +86,7 @@ func (s *Server) generateDiscoveryBasedDashboard(ctx context.Context, name strin
 		"pages":       pages,
 		"metadata": map[string]interface{}{
 			"generated_from_discovery": true,
-			"schemas_used":            len(schemas),
+			"schemas_used":             len(schemas),
 		},
 	}
 
@@ -163,7 +163,7 @@ func (s *Server) createWidgetsFromProfile(schema *discovery.Schema, profile *dis
 
 		widget := s.createNumericWidget(schema.EventType, attr, accountID, accountIDs, *currentRow, (i%2)*6+1)
 		widgets = append(widgets, widget)
-		
+
 		if i%2 == 1 {
 			*currentRow += 3
 		}
@@ -202,13 +202,13 @@ func (s *Server) createOverviewWidget(schema *discovery.Schema, profile *discove
 	keyAttr := "entity.guid" // default
 	for _, attr := range profile.Attributes {
 		// Look for attributes that might be keys based on their name or cardinality
-		if strings.Contains(strings.ToLower(attr.Name), "id") || strings.Contains(strings.ToLower(attr.Name), "guid") || 
-		   strings.Contains(strings.ToLower(attr.Name), "key") || attr.Cardinality.IsHighCardinality {
+		if strings.Contains(strings.ToLower(attr.Name), "id") || strings.Contains(strings.ToLower(attr.Name), "guid") ||
+			strings.Contains(strings.ToLower(attr.Name), "key") || attr.Cardinality.IsHighCardinality {
 			keyAttr = attr.Name
 			break
 		}
 	}
-	
+
 	// Build account IDs clause for cross-account queries
 	accountClause := ""
 	if len(accountIDs) > 0 {
@@ -218,15 +218,15 @@ func (s *Server) createOverviewWidget(schema *discovery.Schema, profile *discove
 		}
 		accountClause = fmt.Sprintf(" WITH accountIds = [%s]", strings.Join(accountIDStrs, ", "))
 	}
-	
+
 	// Determine query based on schema characteristics
 	query := fmt.Sprintf("SELECT count(*) as 'Events', uniqueCount(%s) as 'Unique %s' FROM %s SINCE 1 hour ago%s",
 		keyAttr, strings.Title(keyAttr), schema.EventType, accountClause)
 
 	return map[string]interface{}{
-		"title": fmt.Sprintf("%s Overview", schema.Name),
-		"type":  newrelic.VizBillboard,
-		"row":   row,
+		"title":  fmt.Sprintf("%s Overview", schema.Name),
+		"type":   newrelic.VizBillboard,
+		"row":    row,
 		"column": 1,
 		"width":  12,
 		"height": 3,
@@ -361,11 +361,11 @@ func filterArrayAttributes(attrs []discovery.Attribute) []*discovery.Attribute {
 		attr := &attrs[i]
 		// Detect array attributes by name patterns or data characteristics
 		if strings.Contains(strings.ToLower(attr.Name), "array") ||
-		   strings.Contains(strings.ToLower(attr.Name), "list") ||
-		   strings.Contains(strings.ToLower(attr.Name), "tags") ||
-		   strings.Contains(strings.ToLower(attr.Name), "labels") ||
-		   strings.Contains(strings.ToLower(attr.Name), "attributes.") ||
-		   strings.Contains(strings.ToLower(attr.Name), "[]") {
+			strings.Contains(strings.ToLower(attr.Name), "list") ||
+			strings.Contains(strings.ToLower(attr.Name), "tags") ||
+			strings.Contains(strings.ToLower(attr.Name), "labels") ||
+			strings.Contains(strings.ToLower(attr.Name), "attributes.") ||
+			strings.Contains(strings.ToLower(attr.Name), "[]") {
 			arrays = append(arrays, attr)
 		}
 	}
@@ -445,8 +445,8 @@ func (s *Server) createIntelligentDashboard(ctx context.Context, request map[str
 // analyzeUserIntent interprets what the user is trying to achieve
 func analyzeUserIntent(request map[string]interface{}) map[string]interface{} {
 	intent := map[string]interface{}{
-		"type": "general", // general, performance, troubleshooting, capacity, etc.
-		"focus": []string{},
+		"type":      "general", // general, performance, troubleshooting, capacity, etc.
+		"focus":     []string{},
 		"timeRange": "1 hour ago",
 	}
 
@@ -498,7 +498,7 @@ func extractSchemaNames(schemas []discovery.Schema) []string {
 // buildOptimalDashboard creates the best possible dashboard from discovered data
 func (s *Server) buildOptimalDashboard(intent map[string]interface{}, schemas []discovery.Schema, relationships []discovery.Relationship) map[string]interface{} {
 	dashboard := map[string]interface{}{
-		"name": "Intelligent Dashboard",
+		"name":  "Intelligent Dashboard",
 		"pages": []map[string]interface{}{},
 	}
 

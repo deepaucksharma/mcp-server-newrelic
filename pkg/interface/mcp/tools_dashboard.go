@@ -275,7 +275,10 @@ func (s *Server) handleGenerateDashboard(ctx context.Context, params map[string]
 	}
 
 	// Generate dashboard name if not provided
-	dashboardName := params["name"].(string)
+	dashboardName := ""
+	if name, ok := params["name"].(string); ok {
+		dashboardName = name
+	}
 	if dashboardName == "" {
 		dashboardName = fmt.Sprintf("%s Dashboard - %s", strings.Title(template), time.Now().Format("2006-01-02"))
 	}
@@ -309,7 +312,10 @@ func (s *Server) handleGenerateDashboard(ctx context.Context, params map[string]
 		dashboard, err = s.generateSLISLODashboard(dashboardName, sliConfig, accountIDs)
 
 	case "infrastructure":
-		hostPattern := params["host_pattern"].(string)
+		hostPattern := ""
+		if hp, ok := params["host_pattern"].(string); ok {
+			hostPattern = hp
+		}
 		if hostPattern == "" {
 			hostPattern = "*"
 		}
@@ -346,8 +352,8 @@ func (s *Server) handleGenerateDashboard(ctx context.Context, params map[string]
 		// Return just the config if no NR client
 		return map[string]interface{}{
 			"dashboard": dashboard,
-			"created": false,
-			"message": "Dashboard configuration generated (no New Relic client configured)",
+			"created":   false,
+			"message":   "Dashboard configuration generated (no New Relic client configured)",
 		}, nil
 	}
 
@@ -362,7 +368,7 @@ func (s *Server) handleGenerateDashboard(ctx context.Context, params map[string]
 		Permissions: "PUBLIC_READ_WRITE", // Default permission
 		Pages:       []newrelic.DashboardPage{},
 	}
-	
+
 	if desc, ok := dashboard["description"].(string); ok {
 		dashboardData.Description = desc
 	}
@@ -375,7 +381,7 @@ func (s *Server) handleGenerateDashboard(ctx context.Context, params map[string]
 				Name:    pageMap["name"].(string),
 				Widgets: []newrelic.DashboardWidget{},
 			}
-			
+
 			// Convert widgets
 			if widgets, ok := pageMap["widgets"].([]interface{}); ok {
 				for _, w := range widgets {
@@ -404,9 +410,9 @@ func (s *Server) handleGenerateDashboard(ctx context.Context, params map[string]
 		// Return the config even if creation fails
 		return map[string]interface{}{
 			"dashboard": dashboard,
-			"created": false,
-			"error": err.Error(),
-			"message": "Dashboard configuration generated but creation failed",
+			"created":   false,
+			"error":     err.Error(),
+			"message":   "Dashboard configuration generated but creation failed",
 		}, nil
 	}
 
@@ -414,11 +420,11 @@ func (s *Server) handleGenerateDashboard(ctx context.Context, params map[string]
 	dashboardURL := fmt.Sprintf("https://one.newrelic.com/dashboards/%s", created.ID)
 
 	return map[string]interface{}{
-		"dashboard": created,
-		"created": true,
-		"dashboard_id": created.ID,
+		"dashboard":     created,
+		"created":       true,
+		"dashboard_id":  created.ID,
 		"dashboard_url": dashboardURL,
-		"message": fmt.Sprintf("Dashboard '%s' created successfully", dashboardName),
+		"message":       fmt.Sprintf("Dashboard '%s' created successfully", dashboardName),
 	}, nil
 }
 
@@ -488,10 +494,10 @@ func (s *Server) handleListDashboards(ctx context.Context, params map[string]int
 
 	if includeMetadata {
 		result["metadata"] = map[string]interface{}{
-			"filter":        filter,
-			"limit":         limit,
-			"has_more":      len(dashboards) == limit,
-			"retrieved_at":  time.Now(),
+			"filter":       filter,
+			"limit":        limit,
+			"has_more":     len(dashboards) == limit,
+			"retrieved_at": time.Now(),
 		}
 	}
 
@@ -593,9 +599,9 @@ func (s *Server) generateGoldenSignalsDashboard(name, serviceName string, accoun
 				"widgets": []map[string]interface{}{
 					// Latency widget with sliding window for smoother visualization
 					{
-						"title": "Latency (Response Time)",
-						"type":  "line",
-						"row":   1,
+						"title":  "Latency (Response Time)",
+						"type":   "line",
+						"row":    1,
 						"column": 1,
 						"width":  6,
 						"height": 3,
@@ -607,9 +613,9 @@ func (s *Server) generateGoldenSignalsDashboard(name, serviceName string, accoun
 					},
 					// Traffic widget using rate() function with sliding window
 					{
-						"title": "Traffic (Request Rate)",
-						"type":  "line",
-						"row":   1,
+						"title":  "Traffic (Request Rate)",
+						"type":   "line",
+						"row":    1,
 						"column": 7,
 						"width":  6,
 						"height": 3,
@@ -621,9 +627,9 @@ func (s *Server) generateGoldenSignalsDashboard(name, serviceName string, accoun
 					},
 					// Errors widget
 					{
-						"title": "Errors",
-						"type":  "line",
-						"row":   4,
+						"title":  "Errors",
+						"type":   "line",
+						"row":    4,
 						"column": 1,
 						"width":  6,
 						"height": 3,
@@ -635,9 +641,9 @@ func (s *Server) generateGoldenSignalsDashboard(name, serviceName string, accoun
 					},
 					// Saturation widget (CPU)
 					{
-						"title": "Saturation (CPU Usage)",
-						"type":  "line",
-						"row":   4,
+						"title":  "Saturation (CPU Usage)",
+						"type":   "line",
+						"row":    4,
 						"column": 7,
 						"width":  6,
 						"height": 3,
@@ -664,9 +670,20 @@ func (s *Server) generateGoldenSignalsDashboard(name, serviceName string, accoun
 
 func (s *Server) generateSLISLODashboard(name string, sliConfig map[string]interface{}, accountIDs []int) (map[string]interface{}, error) {
 	// Extract SLI configuration
-	sliName := sliConfig["name"].(string)
-	sloTarget := sliConfig["target"].(float64)
-	query := sliConfig["query"].(string)
+	sliName, ok := sliConfig["name"].(string)
+	if !ok || sliName == "" {
+		return nil, fmt.Errorf("sli_config.name is required")
+	}
+
+	sloTarget, ok := sliConfig["target"].(float64)
+	if !ok {
+		return nil, fmt.Errorf("sli_config.target is required and must be a number")
+	}
+
+	query, ok := sliConfig["query"].(string)
+	if !ok || query == "" {
+		return nil, fmt.Errorf("sli_config.query is required")
+	}
 
 	// Build account IDs clause for cross-account queries
 	accountClause := ""
@@ -886,7 +903,7 @@ func (s *Server) searchDashboards(ctx context.Context, searchTerm, searchType st
 
 	// For more detailed search (by metric/attribute), we need to fetch each dashboard
 	results := []map[string]interface{}{}
-	
+
 	for _, dash := range dashboards {
 		// For basic name search, just include the dashboard
 		if searchType == "dashboard_name" || strings.Contains(strings.ToLower(dash.Name), strings.ToLower(searchTerm)) {
@@ -993,14 +1010,14 @@ func (s *Server) handleUpdateDashboard(ctx context.Context, params map[string]in
 		}
 		existing.Name = name
 	}
-	
+
 	if desc, ok := updates["description"].(string); ok {
 		if len(desc) > MaxDashboardDescLen {
 			return nil, fmt.Errorf("dashboard description exceeds maximum length of %d characters", MaxDashboardDescLen)
 		}
 		existing.Description = desc
 	}
-	
+
 	if perm, ok := updates["permissions"].(string); ok {
 		existing.Permissions = perm
 	}
@@ -1145,20 +1162,20 @@ func validateDashboardPage(page map[string]interface{}) error {
 	if !ok || name == "" {
 		return fmt.Errorf("page name is required")
 	}
-	
+
 	if len(name) > MaxDashboardNameLen {
 		return fmt.Errorf("page name exceeds maximum length of %d characters", MaxDashboardNameLen)
 	}
-	
+
 	widgets, ok := page["widgets"].([]interface{})
 	if !ok {
 		return fmt.Errorf("page must have widgets array")
 	}
-	
+
 	if len(widgets) > MaxWidgetsPerPage {
 		return fmt.Errorf("page has %d widgets, maximum is %d", len(widgets), MaxWidgetsPerPage)
 	}
-	
+
 	// Validate each widget
 	for i, w := range widgets {
 		widget, ok := w.(map[string]interface{})
@@ -1169,7 +1186,7 @@ func validateDashboardPage(page map[string]interface{}) error {
 			return fmt.Errorf("widget %d: %w", i, err)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -1183,27 +1200,27 @@ func validateWidget(widget map[string]interface{}) error {
 	if len(title) > MaxDashboardNameLen {
 		return fmt.Errorf("widget title exceeds maximum length of %d characters", MaxDashboardNameLen)
 	}
-	
+
 	// Validate layout if present
 	if layout, ok := widget["layout"].(map[string]interface{}); ok {
 		col := getIntValue(layout["column"])
 		width := getIntValue(layout["width"])
 		height := getIntValue(layout["height"])
-		
+
 		if col < 1 || col > MaxDashboardColumns {
 			return fmt.Errorf("column must be between 1 and %d", MaxDashboardColumns)
 		}
 		if width < 1 || width > MaxDashboardColumns {
 			return fmt.Errorf("width must be between 1 and %d", MaxDashboardColumns)
 		}
-		if col + width - 1 > MaxDashboardColumns {
+		if col+width-1 > MaxDashboardColumns {
 			return fmt.Errorf("widget extends beyond dashboard width (column + width > %d)", MaxDashboardColumns)
 		}
 		if height < 1 || height > MaxWidgetHeight {
 			return fmt.Errorf("height must be between 1 and %d", MaxWidgetHeight)
 		}
 	}
-	
+
 	// Validate query is present
 	if _, ok := widget["query"].(string); !ok {
 		if config, ok := widget["configuration"].(map[string]interface{}); ok {
@@ -1214,7 +1231,7 @@ func validateWidget(widget map[string]interface{}) error {
 			return fmt.Errorf("widget must have a query")
 		}
 	}
-	
+
 	return nil
 }
 
@@ -1223,9 +1240,9 @@ func convertToDashboardPage(page map[string]interface{}) newrelic.DashboardPage 
 	dashPage := newrelic.DashboardPage{
 		Name: page["name"].(string),
 	}
-	
+
 	// Note: DashboardPage doesn't have a description field in the New Relic API
-	
+
 	if widgets, ok := page["widgets"].([]interface{}); ok {
 		dashPage.Widgets = make([]newrelic.DashboardWidget, len(widgets))
 		for i, w := range widgets {
@@ -1233,24 +1250,24 @@ func convertToDashboardPage(page map[string]interface{}) newrelic.DashboardPage 
 			dashPage.Widgets[i] = convertToDashboardWidget(widget)
 		}
 	}
-	
+
 	return dashPage
 }
 
 // convertToDashboardWidget converts a map to DashboardWidget structure
 func convertToDashboardWidget(widget map[string]interface{}) newrelic.DashboardWidget {
 	dashWidget := newrelic.DashboardWidget{
-		Title: widget["title"].(string),
+		Title:         widget["title"].(string),
 		Configuration: make(map[string]interface{}),
 	}
-	
+
 	// Set type
 	if vizType, ok := widget["type"].(string); ok {
 		dashWidget.Type = vizType
 	} else if vizType, ok := widget["visualization"].(string); ok {
 		dashWidget.Type = vizType
 	}
-	
+
 	// Handle configuration
 	if config, ok := widget["configuration"].(map[string]interface{}); ok {
 		dashWidget.Configuration = config
@@ -1264,7 +1281,7 @@ func convertToDashboardWidget(widget map[string]interface{}) newrelic.DashboardW
 				},
 			}
 		}
-		
+
 		// Add layout
 		if layout, ok := widget["layout"].(map[string]interface{}); ok {
 			dashWidget.Configuration["layout"] = layout
@@ -1278,7 +1295,7 @@ func convertToDashboardWidget(widget map[string]interface{}) newrelic.DashboardW
 			}
 		}
 	}
-	
+
 	return dashWidget
 }
 
