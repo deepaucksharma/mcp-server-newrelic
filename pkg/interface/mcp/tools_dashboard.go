@@ -280,6 +280,16 @@ func (s *Server) handleGenerateDashboard(ctx context.Context, params map[string]
 		dashboardName = fmt.Sprintf("%s Dashboard - %s", strings.Title(template), time.Now().Format("2006-01-02"))
 	}
 
+	// Extract account IDs for cross-account support
+	var accountIDs []int
+	if accountIDsParam, ok := params["account_ids"].([]interface{}); ok {
+		for _, id := range accountIDsParam {
+			if idFloat, ok := id.(float64); ok {
+				accountIDs = append(accountIDs, int(idFloat))
+			}
+		}
+	}
+
 	var dashboard map[string]interface{}
 	var err error
 
@@ -289,21 +299,21 @@ func (s *Server) handleGenerateDashboard(ctx context.Context, params map[string]
 		if !ok || serviceName == "" {
 			return nil, fmt.Errorf("service_name is required for golden-signals template")
 		}
-		dashboard, err = s.generateGoldenSignalsDashboard(dashboardName, serviceName)
+		dashboard, err = s.generateGoldenSignalsDashboard(dashboardName, serviceName, accountIDs)
 
 	case "sli-slo":
 		sliConfig, ok := params["sli_config"].(map[string]interface{})
 		if !ok {
 			return nil, fmt.Errorf("sli_config is required for sli-slo template")
 		}
-		dashboard, err = s.generateSLISLODashboard(dashboardName, sliConfig)
+		dashboard, err = s.generateSLISLODashboard(dashboardName, sliConfig, accountIDs)
 
 	case "infrastructure":
 		hostPattern := params["host_pattern"].(string)
 		if hostPattern == "" {
 			hostPattern = "*"
 		}
-		dashboard, err = s.generateInfrastructureDashboard(dashboardName, hostPattern)
+		dashboard, err = s.generateInfrastructureDashboard(dashboardName, hostPattern, accountIDs)
 
 	case "custom":
 		customConfig, ok := params["custom_config"].(map[string]interface{})
@@ -318,6 +328,7 @@ func (s *Server) handleGenerateDashboard(ctx context.Context, params map[string]
 			"name":         dashboardName,
 			"domain":       params["domain"],
 			"service_name": params["service_name"],
+			"account_ids":  accountIDs,
 		}
 		dashboard, err = s.generateDiscoveryBasedDashboard(ctx, dashboardName, request)
 
