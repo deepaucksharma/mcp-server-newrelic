@@ -64,6 +64,9 @@ coverage.xml
 # Logs
 *.log
 logs/
+server.log
+*.txt
+*_test.log
 
 # Temporary files
 *.tmp
@@ -155,6 +158,9 @@ site_build/
 /data/
 /uploads/
 /downloads/
+mcp-server
+server.pid
+env.example
 
 # Test outputs
 test-results/
