@@ -32,6 +32,11 @@ func (s *Server) registerTools() error {
 		return fmt.Errorf("failed to register alert tools: %w", err)
 	}
 	
+	// Bulk operations tools
+	if err := s.registerBulkTools(); err != nil {
+		return fmt.Errorf("failed to register bulk tools: %w", err)
+	}
+	
 	// TODO: Register pattern analysis tools (Track 3)
 	// TODO: Register infrastructure tools
 	// TODO: Register log tools

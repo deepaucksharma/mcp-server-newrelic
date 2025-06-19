@@ -1,10 +1,15 @@
-# Universal Data Synthesizer (UDS)
+# New Relic MCP Server
 
 ## Overview
 
-AI-powered New Relic dashboard generation system that leverages MCP (Model Context Protocol) and A2A (Agent-to-Agent) standards to provide intelligent data discovery, analysis, and visualization capabilities.
+A comprehensive Model Context Protocol (MCP) server that provides AI assistants (GitHub Copilot, Claude, etc.) with intelligent access to New Relic observability data. Built in Go with full MCP protocol compliance, this server enables AI-powered observability workflows including NRQL queries, dashboard generation, alert management, and bulk operations.
 
 ## 🚀 Quick Start
+
+### Prerequisites
+- Go 1.21+
+- New Relic API Key and Account ID
+- Docker (optional)
 
 ### Installation
 
@@ -13,169 +18,134 @@ AI-powered New Relic dashboard generation system that leverages MCP (Model Conte
 git clone https://github.com/deepaucksharma/mcp-server-newrelic.git
 cd mcp-server-newrelic
 
-# Install Go dependencies
-go mod download
-
-# Install Python dependencies
-pip install -r requirements.txt
-
-# Set up environment variables
+# Set up environment
 cp .env.example .env
 # Edit .env with your New Relic credentials
+
+# Build all components
+make build
+
+# Run diagnostics
+make diagnose
 ```
 
-### Basic Usage
+### Running the Server
 
 ```bash
-# Start the Discovery Engine (Go)
-make run-discovery
+# Run MCP server (default: stdio transport)
+make run
 
-# Start the MCP Server (Python)
-python main.py
+# Run in mock mode (no New Relic connection)
+make run-mock
 
-# Or use Docker Compose
+# Run with HTTP transport
+./bin/mcp-server --transport http --port 8080
+
+# Run with Docker
 docker-compose up
 ```
 
-### Example MCP Tool Usage
+## 📊 Implementation Status
 
-```python
-# Discover schemas in your New Relic account
-await mcp_client.call_tool("discover_schemas", {
-    "account_id": "123456",
-    "pattern": "Transaction"
-})
+### ✅ Implemented Features
 
-# Analyze data quality
-await mcp_client.call_tool("analyze_data_quality", {
-    "event_type": "Transaction"
-})
+| Category | Tools | Status |
+|----------|-------|--------|
+| **Query Execution** | `query_nrdb`, `query_check`, `query_builder` | ✅ Complete |
+| **Discovery** | `list_schemas`, `profile_attribute`, `find_relationships`, `assess_quality` | ✅ Complete |
+| **Dashboards** | `find_usage`, `generate_dashboard`, `list_dashboards`, `get_dashboard` | ✅ Complete |
+| **Alerts** | `create_alert`, `list_alerts`, `analyze_alerts`, `bulk_update_alerts` | ✅ Complete |
+| **State Management** | Session tracking, caching (Memory/Redis) | ✅ Complete |
+| **Resilience** | Circuit breaker, retry logic, rate limiting | ✅ Complete |
+
+### 🚧 In Progress
+
+- Enhanced error handling and telemetry
+- Comprehensive test coverage
+- CI/CD pipeline setup
+
+### 📝 Planned Features
+
+- Intelligence Engine (Python) for ML-powered insights
+- Advanced bulk operations
+- Multi-account support
+- EU region support
+
+## 🛠️ Available MCP Tools
+
+### Query Tools
+```json
+{
+  "tool": "query_nrdb",
+  "params": {
+    "query": "SELECT count(*) FROM Transaction WHERE appName = 'myapp' SINCE 1 hour ago",
+    "account_id": "optional-override"
+  }
+}
 ```
 
-## 📊 Project Status
-
-| Track | Component | Language | Status | Test Coverage | Notes |
-|-------|-----------|----------|--------|---------------|-------|
-| 1 | Discovery Core | Go | ✅ Complete | 70% | Schema discovery, pattern detection, quality assessment |
-| 2 | MCP Server | Go | ✅ Complete | - | Full MCP protocol with all tools implemented |
-| 3 | Query Tools | Go | ✅ Complete | - | NRQL execution, validation, and builder |
-| 4 | Dashboard Tools | Go | ✅ Complete | - | Dashboard discovery, generation from templates |
-| 5 | Alert Tools | Go | ✅ Complete | - | Alert creation, analysis, bulk operations |
-| 6 | Intelligence Engine | Python | ❌ Not Implemented | - | Planned for future release |
-
-## 🚀 Quick Start
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/deepaucksharma/mcp-server-newrelic.git
-cd mcp-server-newrelic
-
-# 2. Set up environment
-cp .env.example .env
-# Edit .env with your New Relic credentials
-
-# 3. Run diagnostics
-make diagnose-fix
-
-# 4. Start the MCP server
-make run
-
-# Or run in mock mode for testing
-make run-mock
+### Discovery Tools
+```json
+{
+  "tool": "discovery.list_schemas",
+  "params": {
+    "filter": "Transaction",
+    "include_quality": true
+  }
+}
 ```
 
-### Available MCP Tools
+### Dashboard Tools
+```json
+{
+  "tool": "generate_dashboard",
+  "params": {
+    "template": "golden-signals",
+    "service_name": "myapp",
+    "name": "My App Golden Signals"
+  }
+}
+```
 
-The MCP server now includes all critical tools:
-
-**Query Tools:**
-- `query_nrdb` - Execute NRQL queries
-- `query_check` - Validate queries and estimate costs
-- `query_builder` - Build NRQL from parameters
-
-**Discovery Tools:**
-- `discovery.list_schemas` - List all schemas
-- `discovery.profile_attribute` - Deep attribute analysis
-- `discovery.find_relationships` - Relationship mining
-- `discovery.assess_quality` - Quality assessment
-
-**Dashboard Tools:**
-- `find_usage` - Find dashboards using specific metrics
-- `generate_dashboard` - Create from templates (golden-signals, sli-slo, infrastructure)
-- `list_dashboards` - List all dashboards
-- `get_dashboard` - Get dashboard details
-
-**Alert Tools:**
-- `create_alert` - Create intelligent alerts
-- `list_alerts` - List alert conditions
-- `analyze_alerts` - Analyze alert effectiveness
-- `bulk_update_alerts` - Bulk operations
-
-## 📚 Documentation
-
-- **[Architecture Overview](./docs/ARCHITECTURE.md)** - System design and component interaction
-- **[API Reference](./docs/API_REFERENCE.md)** - Complete API documentation
-- **[Development Guide](./docs/DEVELOPMENT.md)** - Setup and contribution guidelines
-- **[Deployment Guide](./docs/DEPLOYMENT.md)** - Production deployment instructions
-- **[Implementation Status](./docs/IMPLEMENTATION_STATUS.md)** - Detailed progress tracking
-
-## 🛠️ Key Features
-
-### Track 1: Discovery Core (Go)
-- ✅ Schema discovery with parallel processing
-- ✅ Pattern detection (time series, distributions)
-- ✅ Relationship mining between data types
-- ✅ Data quality assessment (5 dimensions)
-- ✅ Resilient NRDB client (circuit breaker, retries)
-- ✅ OpenTelemetry tracing integration
-
-### Track 2: Interface Layer
-- ✅ MCP protocol implementation
-- ✅ Multi-transport support (STDIO, HTTP, SSE)
-- ✅ Plugin architecture for extensibility
-- 🚧 Python client for Discovery Engine
-- 🚧 Authentication and authorization
-- 🚧 Rate limiting and quota management
-
-### Track 3: Intelligence Engine (Planned)
-- 📝 Natural language to NRQL translation
-- 📝 Anomaly detection and prediction
-- 📝 Automated insight generation
-- 📝 Dashboard recommendation system
-
-### Track 4: Visualizer (Planned)
-- 📝 Dynamic dashboard generation
-- 📝 Interactive visualizations
-- 📝 Export to New Relic dashboards
-- 📝 Custom widget library
+### Alert Tools
+```json
+{
+  "tool": "create_alert",
+  "params": {
+    "name": "High Error Rate",
+    "query": "SELECT percentage(count(*), WHERE error IS true) FROM Transaction",
+    "sensitivity": "medium",
+    "auto_baseline": true
+  }
+}
+```
 
 ## 🏗️ Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        AI Assistant (Claude, etc)                    │
-└────────────────────────────┬────────────────────────────────────────┘
-                             │ MCP Protocol
-┌────────────────────────────▼────────────────────────────────────────┐
-│                     Python MCP Server                                │
-│  ┌────────────────┐  ┌──────────────┐  ┌────────────────────────┐  │
-│  │  MCP Handler   │  │ Tool Registry │  │  Discovery Client      │  │
-│  │  (FastMCP)     │  │  (Plugins)    │  │  (gRPC Client)         │  │
-│  └────────────────┘  └──────────────┘  └───────────┬──────────┘  │
-└─────────────────────────────────────────────────────┼──────────────┘
-                                                      │ gRPC
-┌─────────────────────────────────────────────────────▼──────────────┐
-│                      Go Discovery Engine                            │
-│  ┌────────────────┐  ┌──────────────┐  ┌────────────────────────┐  │
-│  │ gRPC Server    │  │  Discovery   │  │  NRDB Client           │  │
-│  │                │  │  Engine      │  │  (Resilient)           │  │
-│  └────────────────┘  └──────────────┘  └───────────┬──────────┘  │
-└─────────────────────────────────────────────────────┼──────────────┘
-                                                      │ HTTPS
-                                                      ▼
-                                            ┌─────────────────┐
-                                            │  New Relic API  │
-                                            └─────────────────┘
+┌─────────────────────────────────────────────────┐
+│            MCP Client (AI Assistant)             │
+└────────────────────┬────────────────────────────┘
+                     │ MCP Protocol (JSON-RPC)
+┌────────────────────▼────────────────────────────┐
+│                Go MCP Server                     │
+├─────────────────────────────────────────────────┤
+│  • MCP Handler (stdio/http/sse)                 │
+│  • Tool Registry & Execution                    │
+│  • Request Validation & Error Handling          │
+├─────────────────────────────────────────────────┤
+│  • Discovery Engine (schema analysis)           │
+│  • State Manager (sessions & caching)           │
+│  • New Relic Client (GraphQL/NerdGraph)         │
+├─────────────────────────────────────────────────┤
+│  • Resilience Layer (circuit breaker, retry)    │
+│  • Observability (APM, logging, metrics)        │
+└────────────────────┬────────────────────────────┘
+                     │ HTTPS/GraphQL
+                     ▼
+            ┌─────────────────┐
+            │  New Relic API  │
+            └─────────────────┘
 ```
 
 ## 🔧 Configuration
@@ -183,22 +153,25 @@ The MCP server now includes all critical tools:
 ### Required Environment Variables
 
 ```bash
-# New Relic Credentials
-NEW_RELIC_API_KEY=your_api_key
-NEW_RELIC_ACCOUNT_ID=your_account_id
-NEW_RELIC_REGION=US  # or EU
+# New Relic API Access
+NEW_RELIC_API_KEY=your-user-api-key
+NEW_RELIC_ACCOUNT_ID=your-account-id
+NEW_RELIC_REGION=US  # or EU (EU support planned)
 
-# Service Configuration
-DISCOVERY_ENGINE_PORT=8081
-MCP_SERVER_PORT=8080
+# Optional: New Relic APM (for monitoring the server itself)
+NEW_RELIC_LICENSE_KEY=your-license-key
+NEW_RELIC_APP_NAME=mcp-server-newrelic
 
-# Observability
-OTEL_ENABLED=true
-OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp.nr-data.net:4317
-OTEL_EXPORTER_OTLP_HEADERS=Api-Key=your_license_key
+# Server Configuration
+MCP_TRANSPORT=stdio  # stdio, http, or sse
+SERVER_PORT=8080
+LOG_LEVEL=INFO
+
+# State Management
+REDIS_URL=redis://localhost:6379  # Optional, defaults to in-memory
 ```
 
-See [.env.example](./.env.example) for full configuration options.
+See [.env.example](./.env.example) for complete configuration options.
 
 ## 🧪 Testing
 
@@ -207,28 +180,52 @@ See [.env.example](./.env.example) for full configuration options.
 make test
 
 # Run specific test suites
-make test-unit         # Unit tests only
+make test-unit         # Unit tests
 make test-integration  # Integration tests
-make test-benchmarks   # Performance benchmarks
+make test-mcp         # MCP protocol tests
 
 # Generate coverage report
 make test-coverage
+
+# Run benchmarks
+make test-benchmarks
 ```
+
+## 📚 Documentation
+
+- **[Architecture Overview](./docs/ARCHITECTURE.md)** - System design and components
+- **[Development Guide](./docs/DEVELOPMENT.md)** - Setup and contribution guidelines
+- **[API Reference](./docs/API_REFERENCE.md)** - Complete tool documentation
+- **[Deployment Guide](./docs/DEPLOYMENT.md)** - Production deployment
+- **[Roadmap](./ROADMAP.md)** - Future development plans
+- **[Technical Specification](./TECHNICAL_SPEC.md)** - Detailed specifications
 
 ## 🚀 Deployment
 
 ### Docker
 
 ```bash
-# Build images
-docker build -t uds-discovery:latest -f Dockerfile.discovery .
-docker build -t uds-mcp:latest -f Dockerfile.mcp .
+# Build image
+make build-docker
 
 # Run with Docker Compose
 docker-compose up -d
+
+# Or run standalone
+docker run -p 8080:8080 --env-file .env mcp-server-newrelic
 ```
 
-See [Deployment Guide](./docs/DEPLOYMENT.md) for detailed deployment instructions.
+### Kubernetes
+
+```bash
+# Apply manifests
+kubectl apply -f k8s/
+
+# Configure secrets
+kubectl create secret generic newrelic-creds \
+  --from-literal=api-key=$NEW_RELIC_API_KEY \
+  --from-literal=account-id=$NEW_RELIC_ACCOUNT_ID
+```
 
 ## 🤝 Contributing
 
@@ -236,7 +233,30 @@ We welcome contributions! Please see our [Development Guide](./docs/DEVELOPMENT.
 - Code style guidelines
 - Testing requirements
 - Pull request process
-- Issue reporting
+- Architecture decisions
+
+### Development Setup
+
+```bash
+# Install development tools
+make install-tools
+
+# Run linting
+make lint
+
+# Format code
+make format
+
+# Run in development mode
+make dev
+```
+
+## 🔒 Security
+
+- API keys are never logged or exposed
+- All inputs are validated
+- Rate limiting prevents abuse
+- See [SECURITY.md](./SECURITY.md) for reporting vulnerabilities
 
 ## 📄 License
 
@@ -244,9 +264,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🙏 Acknowledgments
 
-- Built with [FastMCP](https://github.com/jlowin/fastmcp) for MCP protocol support
-- Uses [OpenTelemetry](https://opentelemetry.io/) for observability
-- Powered by [New Relic](https://newrelic.com/) APIs
+- Built on the [Model Context Protocol](https://modelcontextprotocol.io/) standard
+- Integrates with [New Relic NerdGraph API](https://docs.newrelic.com/docs/apis/nerdgraph/get-started/introduction-new-relic-nerdgraph/)
+- Uses [Ristretto](https://github.com/dgraph-io/ristretto) for high-performance caching
 
 ## 📞 Support
 
@@ -256,4 +276,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-**Current Version**: 0.3.0-alpha | **Last Updated**: December 2024
+**Version**: 1.0.0-beta | **Last Updated**: June 2025

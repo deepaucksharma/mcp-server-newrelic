@@ -1,0 +1,70 @@
+# Add 'documentation' label to any change in docs folder
+documentation:
+  - changed-files:
+    - any-glob-to-any-file: 
+      - docs/**
+      - '**/*.md'
+
+# Add 'test' label to any change in test files
+test:
+  - changed-files:
+    - any-glob-to-any-file:
+      - '**/*_test.go'
+      - tests/**
+      - .github/workflows/*test*.yml
+
+# Add 'build' label to build-related files
+build:
+  - changed-files:
+    - any-glob-to-any-file:
+      - Dockerfile
+      - docker-compose.yml
+      - Makefile
+      - go.mod
+      - go.sum
+      - .github/workflows/release.yml
+
+# Add 'ci' label to CI-related files
+ci:
+  - changed-files:
+    - any-glob-to-any-file:
+      - .github/workflows/**
+      - .github/dependabot.yml
+
+# Add 'mcp' label to MCP-related changes
+mcp:
+  - changed-files:
+    - any-glob-to-any-file:
+      - pkg/interface/mcp/**
+      - cmd/mcp-server/**
+
+# Add 'discovery' label to discovery-related changes
+discovery:
+  - changed-files:
+    - any-glob-to-any-file:
+      - pkg/discovery/**
+      - cmd/uds-discovery/**
+
+# Add 'newrelic' label to New Relic client changes
+newrelic:
+  - changed-files:
+    - any-glob-to-any-file:
+      - pkg/newrelic/**
+
+# Add 'config' label to configuration changes
+config:
+  - changed-files:
+    - any-glob-to-any-file:
+      - pkg/config/**
+      - .env.example
+      - '**/*.yaml'
+      - '**/*.yml'
+
+# Add 'security' label to security-related changes
+security:
+  - changed-files:
+    - any-glob-to-any-file:
+      - pkg/auth/**
+      - pkg/security/**
+      - '**/*secret*'
+      - '**/*auth*'

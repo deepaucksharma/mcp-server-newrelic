@@ -256,7 +256,61 @@ func Load() (*Config, error) {
 		cfg.NewRelic.GraphQLEndpoint = endpoint
 	}
 
+	// Validate required configuration
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+
 	return cfg, nil
+}
+
+// Validate checks that all required configuration is present
+func (c *Config) Validate() error {
+	// Skip validation in mock mode
+	if c.Development.MockMode {
+		return nil
+	}
+
+	// Validate New Relic configuration
+	if c.NewRelic.APIKey == "" {
+		return fmt.Errorf("NEW_RELIC_API_KEY is required (or set MOCK_MODE=true)")
+	}
+	if c.NewRelic.AccountID == "" {
+		return fmt.Errorf("NEW_RELIC_ACCOUNT_ID is required (or set MOCK_MODE=true)")
+	}
+
+	// Validate security configuration
+	if c.Security.AuthEnabled {
+		if c.Security.JWTSecret == "" || c.Security.JWTSecret == "change-me-in-production" {
+			return fmt.Errorf("JWT_SECRET must be set to a secure value when AUTH_ENABLED=true")
+		}
+		if c.Security.APIKeySalt == "" || c.Security.APIKeySalt == "change-me-in-production" {
+			return fmt.Errorf("API_KEY_SALT must be set to a secure value when AUTH_ENABLED=true")
+		}
+	}
+
+	// Warn about default security values in non-dev mode
+	if !c.Development.DevMode {
+		if c.Security.JWTSecret == "change-me-in-production" {
+			fmt.Fprintf(os.Stderr, "WARNING: JWT_SECRET is using default value. This is insecure for production.\n")
+		}
+		if c.Security.APIKeySalt == "change-me-in-production" {
+			fmt.Fprintf(os.Stderr, "WARNING: API_KEY_SALT is using default value. This is insecure for production.\n")
+		}
+	}
+
+	// Validate server configuration
+	if c.Server.Port <= 0 || c.Server.Port > 65535 {
+		return fmt.Errorf("SERVER_PORT must be between 1 and 65535")
+	}
+
+	// Validate transport
+	validTransports := map[string]bool{"stdio": true, "http": true, "sse": true}
+	if !validTransports[c.Server.MCPTransport] {
+		return fmt.Errorf("MCP_TRANSPORT must be one of: stdio, http, sse")
+	}
+
+	return nil
 }
 
 // NewAPMApplication creates a New Relic APM application
@@ -332,45 +386,4 @@ func getDurationEnv(key string, defaultValue time.Duration) time.Duration {
 		}
 	}
 	return defaultValue
-}
-
-// Validate validates the configuration
-func (c *Config) Validate() error {
-	if c.NewRelic.APIKey == "" {
-		return fmt.Errorf("NEW_RELIC_API_KEY is required")
-	}
-	if c.NewRelic.AccountID == "" {
-		return fmt.Errorf("NEW_RELIC_ACCOUNT_ID is required")
-	}
-	if c.APM.Enabled && c.APM.LicenseKey == "" {
-		return fmt.Errorf("NEW_RELIC_LICENSE_KEY is required when APM is enabled")
-	}
-	
-	// Security validation
-	if c.Security.AuthEnabled {
-		if c.Security.JWTSecret == "" {
-			return fmt.Errorf("JWT_SECRET is required when authentication is enabled")
-		}
-		if len(c.Security.JWTSecret) < 32 {
-			return fmt.Errorf("JWT_SECRET must be at least 32 characters long for security")
-		}
-		if c.Security.APIKeySalt == "" {
-			return fmt.Errorf("API_KEY_SALT is required when authentication is enabled")
-		}
-		if len(c.Security.APIKeySalt) < 16 {
-			return fmt.Errorf("API_KEY_SALT must be at least 16 characters long for security")
-		}
-	}
-	
-	// Production environment checks
-	if c.APM.Environment == "production" || c.Development.DevMode == false {
-		if c.Security.JWTSecret == "change-me-in-production" || c.Security.JWTSecret == "default-secret-change-me" {
-			return fmt.Errorf("JWT_SECRET must be changed from default value in production")
-		}
-		if c.Security.APIKeySalt == "change-me-in-production" || c.Security.APIKeySalt == "default-salt-change-me" {
-			return fmt.Errorf("API_KEY_SALT must be changed from default value in production")
-		}
-	}
-	
-	return nil
 }

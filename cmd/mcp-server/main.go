@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -13,6 +11,7 @@ import (
 	"github.com/deepaucksharma/mcp-server-newrelic/pkg/config"
 	"github.com/deepaucksharma/mcp-server-newrelic/pkg/discovery"
 	"github.com/deepaucksharma/mcp-server-newrelic/pkg/interface/mcp"
+	"github.com/deepaucksharma/mcp-server-newrelic/pkg/logger"
 	"github.com/deepaucksharma/mcp-server-newrelic/pkg/newrelic"
 	"github.com/deepaucksharma/mcp-server-newrelic/pkg/state"
 	"github.com/joho/godotenv"
@@ -29,9 +28,12 @@ func main() {
 	)
 	flag.Parse()
 
+	// Set up logging
+	logger.SetLevel(*logLevel)
+
 	// Load environment variables
 	if err := godotenv.Load(*envFile); err != nil {
-		log.Printf("Warning: failed to load env file %s: %v", *envFile, err)
+		logger.Warn("Failed to load env file %s: %v", *envFile, err)
 	}
 
 	// Override with command line flags
@@ -45,11 +47,10 @@ func main() {
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		logger.Error("Failed to load configuration: %v", err)
+		os.Exit(1)
 	}
 
-	// Set log level
-	setupLogging(*logLevel)
 
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
@@ -60,7 +61,7 @@ func main() {
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
 	// Initialize components
-	log.Println("Initializing MCP server...")
+	logger.Info("Initializing MCP server...")
 
 	// Create MCP server
 	mcpConfig := mcp.ServerConfig{
@@ -72,7 +73,7 @@ func main() {
 	server := mcp.NewServer(mcpConfig)
 
 	// Initialize state manager
-	log.Println("Initializing state management...")
+	logger.Info("Initializing state management...")
 	
 	// Determine store type from environment
 	storeType := state.StoreTypeMemory
@@ -87,6 +88,7 @@ func main() {
 			CacheTTL:        5 * time.Minute,   // Default cache TTL
 			MaxSessions:     10000,
 			MaxCacheEntries: 100000,
+			MaxCacheMemory:  1 << 30,          // 1GB cache memory limit
 		},
 	}
 	
@@ -103,63 +105,69 @@ func main() {
 	
 	stateManager, err := state.NewStateManager(stateConfig)
 	if err != nil {
-		log.Fatalf("Failed to initialize state manager: %v", err)
+		logger.Error("Failed to initialize state manager: %v", err)
+		os.Exit(1)
 	}
 	server.SetStateManager(stateManager)
 
 	// Initialize discovery engine
-	log.Println("Initializing discovery engine...")
+	logger.Info("Initializing discovery engine...")
 	discoveryEngine, err := discovery.InitializeEngine(ctx)
 	if err != nil {
-		log.Fatalf("Failed to initialize discovery engine: %v", err)
+		logger.Error("Failed to initialize discovery engine: %v", err)
+		os.Exit(1)
 	}
 	server.SetDiscovery(discoveryEngine)
 
 	// Initialize New Relic client (if not in mock mode)
-	if !*mockMode && os.Getenv("MOCK_MODE") != "true" {
-		log.Println("Initializing New Relic client...")
+	if !*mockMode && !cfg.Development.MockMode {
+		logger.Info("Initializing New Relic client...")
 		nrClient, err := newrelic.NewClient(newrelic.Config{
 			APIKey:    cfg.NewRelic.APIKey,
 			AccountID: cfg.NewRelic.AccountID,
 			Region:    cfg.NewRelic.Region,
 		})
 		if err != nil {
-			log.Fatalf("Failed to initialize New Relic client: %v", err)
+			logger.Error("Failed to initialize New Relic client: %v", err)
+			os.Exit(1)
 		}
 		server.SetNewRelicClient(nrClient)
 
 		// Test connection
 		if _, err := nrClient.GetAccountInfo(ctx); err != nil {
-			log.Printf("Warning: Failed to connect to New Relic: %v", err)
-			log.Println("Continuing in degraded mode...")
+			logger.Warn("Failed to connect to New Relic: %v", err)
+			logger.Warn("Continuing in degraded mode...")
 		} else {
-			log.Printf("Successfully connected to New Relic account %s", cfg.NewRelic.AccountID)
+			logger.Info("Successfully connected to New Relic account %s", cfg.NewRelic.AccountID)
 		}
 	} else {
-		log.Println("Running in MOCK MODE - no New Relic connection")
+		logger.Info("Running in MOCK MODE - no New Relic connection")
+		// Set mock mode flag in development config to ensure consistency
+		cfg.Development.MockMode = true
 	}
 
 	// Start the server
-	log.Printf("Starting MCP server with %s transport...", cfg.Server.MCPTransport)
+	logger.Info("Starting MCP server with %s transport...", cfg.Server.MCPTransport)
 	if err := server.Start(ctx); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+		logger.Error("Failed to start server: %v", err)
+		os.Exit(1)
 	}
 
 	// Log startup information
 	switch cfg.Server.MCPTransport {
 	case "stdio":
-		log.Println("MCP server running on stdio")
-		log.Println("Ready to receive MCP protocol messages...")
+		logger.Info("MCP server running on stdio")
+		logger.Info("Ready to receive MCP protocol messages...")
 	case "http":
-		log.Printf("MCP server running on http://%s:%d", cfg.Server.Host, *port)
+		logger.Info("MCP server running on http://%s:%d", cfg.Server.Host, *port)
 	case "sse":
-		log.Printf("MCP server running on http://%s:%d (SSE)", cfg.Server.Host, *port)
+		logger.Info("MCP server running on http://%s:%d (SSE)", cfg.Server.Host, *port)
 	}
 
 	// Wait for shutdown signal
 	go func() {
 		<-sigChan
-		log.Println("Shutdown signal received")
+		logger.Info("Shutdown signal received")
 		cancel()
 	}()
 
@@ -167,35 +175,19 @@ func main() {
 	<-ctx.Done()
 
 	// Graceful shutdown
-	log.Println("Shutting down server...")
+	logger.Info("Shutting down server...")
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()
 
 	if err := server.Stop(shutdownCtx); err != nil {
-		log.Printf("Error during shutdown: %v", err)
+		logger.Error("Error during shutdown: %v", err)
 	}
 
 	// Stop discovery engine
 	if err := discoveryEngine.Stop(shutdownCtx); err != nil {
-		log.Printf("Error stopping discovery engine: %v", err)
+		logger.Error("Error stopping discovery engine: %v", err)
 	}
 
-	log.Println("Server stopped")
+	logger.Info("Server stopped")
 }
 
-func setupLogging(level string) {
-	// Configure logging based on level
-	switch level {
-	case "debug":
-		log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile)
-	case "info":
-		log.SetFlags(log.Ldate | log.Ltime)
-	case "warn", "error":
-		log.SetFlags(log.Ldate | log.Ltime)
-	default:
-		log.SetFlags(log.Ldate | log.Ltime)
-	}
-
-	// Set prefix
-	log.SetPrefix(fmt.Sprintf("[%s] ", level))
-}

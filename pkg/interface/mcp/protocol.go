@@ -7,6 +7,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/deepaucksharma/mcp-server-newrelic/pkg/logger"
 )
 
 // ProtocolHandler implements the JSON-RPC 2.0 protocol for MCP
@@ -51,7 +53,7 @@ func (h *ProtocolHandler) HandleMessage(ctx context.Context, message []byte) ([]
 // OnError handles transport errors
 func (h *ProtocolHandler) OnError(err error) {
 	// Log error (implement proper logging)
-	fmt.Printf("Protocol error: %v\n", err)
+	logger.Error("Protocol error: %v", err)
 }
 
 // handleInitialize handles the MCP initialization handshake
@@ -300,7 +302,7 @@ func (h *ProtocolHandler) handleStreamingExecution(ctx context.Context, streamID
 	for chunk := range stream {
 		// In a real implementation, this would send to SSE manager
 		// For now, we'll just log
-		fmt.Printf("Stream %s: %+v\n", streamID, chunk)
+		logger.Debug("Stream %s: %+v", streamID, chunk)
 	}
 }
 

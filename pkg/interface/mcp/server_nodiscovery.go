@@ -6,6 +6,8 @@ import (
 	"context"
 	"fmt"
 	"sync"
+
+	"github.com/deepaucksharma/mcp-server-newrelic/pkg/logger"
 )
 
 // Server implements the Model Context Protocol server (without discovery dependency)
@@ -113,7 +115,7 @@ func (s *Server) HandleStreamingMessage(ctx context.Context, message []byte, str
 // OnError handles transport errors
 func (s *Server) OnError(err error) {
 	// Log error (in production would use proper logging)
-	fmt.Printf("Transport error: %v\n", err)
+	logger.Error("Transport error: %v", err)
 }
 
 // GetInfo returns server information
