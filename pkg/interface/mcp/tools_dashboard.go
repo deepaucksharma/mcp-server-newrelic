@@ -573,7 +573,17 @@ func (s *Server) handleGetDashboard(ctx context.Context, params map[string]inter
 
 // Template generation functions
 
-func (s *Server) generateGoldenSignalsDashboard(name, serviceName string) (map[string]interface{}, error) {
+func (s *Server) generateGoldenSignalsDashboard(name, serviceName string, accountIDs []int) (map[string]interface{}, error) {
+	// Build account IDs clause for cross-account queries
+	accountClause := ""
+	if len(accountIDs) > 0 {
+		accountIDStrs := make([]string, len(accountIDs))
+		for i, id := range accountIDs {
+			accountIDStrs[i] = fmt.Sprintf("%d", id)
+		}
+		accountClause = fmt.Sprintf(" WITH accountIds = [%s]", strings.Join(accountIDStrs, ", "))
+	}
+
 	dashboard := map[string]interface{}{
 		"name":        name,
 		"description": fmt.Sprintf("Golden signals dashboard for %s", serviceName),
@@ -581,7 +591,7 @@ func (s *Server) generateGoldenSignalsDashboard(name, serviceName string) (map[s
 			{
 				"name": "Golden Signals",
 				"widgets": []map[string]interface{}{
-					// Latency widget
+					// Latency widget with sliding window for smoother visualization
 					{
 						"title": "Latency (Response Time)",
 						"type":  "line",
@@ -590,11 +600,12 @@ func (s *Server) generateGoldenSignalsDashboard(name, serviceName string) (map[s
 						"width":  6,
 						"height": 3,
 						"query": fmt.Sprintf(
-							"SELECT average(duration) as 'Average', percentile(duration, 95) as 'P95', percentile(duration, 99) as 'P99' FROM Transaction WHERE appName = '%s' TIMESERIES",
+							"SELECT average(duration) as 'Average', percentile(duration, 95) as 'P95', percentile(duration, 99) as 'P99' FROM Transaction WHERE appName = '%s' TIMESERIES 1 minute SLIDE BY 30 seconds%s",
 							serviceName,
+							accountClause,
 						),
 					},
-					// Traffic widget
+					// Traffic widget using rate() function with sliding window
 					{
 						"title": "Traffic (Request Rate)",
 						"type":  "line",
@@ -603,8 +614,9 @@ func (s *Server) generateGoldenSignalsDashboard(name, serviceName string) (map[s
 						"width":  6,
 						"height": 3,
 						"query": fmt.Sprintf(
-							"SELECT rate(count(*), 1 minute) as 'Requests/min' FROM Transaction WHERE appName = '%s' TIMESERIES",
+							"SELECT rate(count(*), 1 minute) as 'Requests/min' FROM Transaction WHERE appName = '%s' TIMESERIES 1 minute SLIDE BY 30 seconds%s",
 							serviceName,
+							accountClause,
 						),
 					},
 					// Errors widget
@@ -616,8 +628,9 @@ func (s *Server) generateGoldenSignalsDashboard(name, serviceName string) (map[s
 						"width":  6,
 						"height": 3,
 						"query": fmt.Sprintf(
-							"SELECT count(*) as 'Total Errors', percentage(count(*), WHERE error IS true) as 'Error Rate' FROM Transaction WHERE appName = '%s' TIMESERIES",
+							"SELECT count(*) as 'Total Errors', percentage(count(*), WHERE error IS true) as 'Error Rate' FROM Transaction WHERE appName = '%s' TIMESERIES%s",
 							serviceName,
+							accountClause,
 						),
 					},
 					// Saturation widget (CPU)
@@ -629,8 +642,9 @@ func (s *Server) generateGoldenSignalsDashboard(name, serviceName string) (map[s
 						"width":  6,
 						"height": 3,
 						"query": fmt.Sprintf(
-							"SELECT average(cpuPercent) FROM SystemSample WHERE apmApplicationNames LIKE '%%%s%%' TIMESERIES",
+							"SELECT average(cpuPercent) FROM SystemSample WHERE apmApplicationNames LIKE '%%%s%%' TIMESERIES%s",
 							serviceName,
+							accountClause,
 						),
 					},
 				},
@@ -640,14 +654,35 @@ func (s *Server) generateGoldenSignalsDashboard(name, serviceName string) (map[s
 		"template":   "golden-signals",
 	}
 
+	// Add account IDs to metadata if specified
+	if len(accountIDs) > 0 {
+		dashboard["account_ids"] = accountIDs
+	}
+
 	return dashboard, nil
 }
 
-func (s *Server) generateSLISLODashboard(name string, sliConfig map[string]interface{}) (map[string]interface{}, error) {
+func (s *Server) generateSLISLODashboard(name string, sliConfig map[string]interface{}, accountIDs []int) (map[string]interface{}, error) {
 	// Extract SLI configuration
 	sliName := sliConfig["name"].(string)
 	sloTarget := sliConfig["target"].(float64)
 	query := sliConfig["query"].(string)
+
+	// Build account IDs clause for cross-account queries
+	accountClause := ""
+	if len(accountIDs) > 0 {
+		accountIDStrs := make([]string, len(accountIDs))
+		for i, id := range accountIDs {
+			accountIDStrs[i] = fmt.Sprintf("%d", id)
+		}
+		accountClause = fmt.Sprintf(" WITH accountIds = [%s]", strings.Join(accountIDStrs, ", "))
+	}
+
+	// Append account clause to the base query if provided
+	queryWithAccounts := query
+	if accountClause != "" {
+		queryWithAccounts = query + accountClause
+	}
 
 	dashboard := map[string]interface{}{
 		"name":        name,
@@ -664,7 +699,7 @@ func (s *Server) generateSLISLODashboard(name string, sliConfig map[string]inter
 						"column": 1,
 						"width":  4,
 						"height": 3,
-						"query":  query,
+						"query":  queryWithAccounts,
 						"thresholds": []map[string]interface{}{
 							{"value": sloTarget, "severity": "success"},
 							{"value": sloTarget * 0.95, "severity": "warning"},
@@ -679,7 +714,7 @@ func (s *Server) generateSLISLODashboard(name string, sliConfig map[string]inter
 						"column": 5,
 						"width":  8,
 						"height": 3,
-						"query":  fmt.Sprintf("%s TIMESERIES", query),
+						"query":  fmt.Sprintf("%s TIMESERIES%s", query, accountClause),
 					},
 					// Error budget
 					{
@@ -689,7 +724,7 @@ func (s *Server) generateSLISLODashboard(name string, sliConfig map[string]inter
 						"column": 1,
 						"width":  4,
 						"height": 3,
-						"query":  fmt.Sprintf("SELECT 100 * (1 - (1 - %f) * count(*) / count(*)) as 'Error Budget %%' FROM (%s)", sloTarget/100, query),
+						"query":  fmt.Sprintf("SELECT 100 * (1 - (1 - %f) * count(*) / count(*)) as 'Error Budget %%' FROM (%s)%s", sloTarget/100, query, accountClause),
 					},
 				},
 			},
@@ -698,13 +733,28 @@ func (s *Server) generateSLISLODashboard(name string, sliConfig map[string]inter
 		"template":   "sli-slo",
 	}
 
+	// Add account IDs to metadata if specified
+	if len(accountIDs) > 0 {
+		dashboard["account_ids"] = accountIDs
+	}
+
 	return dashboard, nil
 }
 
-func (s *Server) generateInfrastructureDashboard(name, hostPattern string) (map[string]interface{}, error) {
+func (s *Server) generateInfrastructureDashboard(name, hostPattern string, accountIDs []int) (map[string]interface{}, error) {
 	whereClause := ""
 	if hostPattern != "*" {
 		whereClause = fmt.Sprintf("WHERE hostname LIKE '%s'", hostPattern)
+	}
+
+	// Build account IDs clause for cross-account queries
+	accountClause := ""
+	if len(accountIDs) > 0 {
+		accountIDStrs := make([]string, len(accountIDs))
+		for i, id := range accountIDs {
+			accountIDStrs[i] = fmt.Sprintf("%d", id)
+		}
+		accountClause = fmt.Sprintf(" WITH accountIds = [%s]", strings.Join(accountIDStrs, ", "))
 	}
 
 	dashboard := map[string]interface{}{
@@ -722,7 +772,7 @@ func (s *Server) generateInfrastructureDashboard(name, hostPattern string) (map[
 						"column": 1,
 						"width":  6,
 						"height": 3,
-						"query":  fmt.Sprintf("SELECT average(cpuPercent) FROM SystemSample %s FACET hostname TIMESERIES", whereClause),
+						"query":  fmt.Sprintf("SELECT average(cpuPercent) FROM SystemSample %s FACET hostname TIMESERIES%s", whereClause, accountClause),
 					},
 					// Memory usage
 					{
@@ -732,7 +782,7 @@ func (s *Server) generateInfrastructureDashboard(name, hostPattern string) (map[
 						"column": 7,
 						"width":  6,
 						"height": 3,
-						"query":  fmt.Sprintf("SELECT average(memoryUsedPercent) FROM SystemSample %s FACET hostname TIMESERIES", whereClause),
+						"query":  fmt.Sprintf("SELECT average(memoryUsedPercent) FROM SystemSample %s FACET hostname TIMESERIES%s", whereClause, accountClause),
 					},
 					// Disk usage
 					{
@@ -742,7 +792,7 @@ func (s *Server) generateInfrastructureDashboard(name, hostPattern string) (map[
 						"column": 1,
 						"width":  6,
 						"height": 3,
-						"query":  fmt.Sprintf("SELECT average(diskUsedPercent) as 'Disk Used %%', max(diskUsedPercent) as 'Max %%' FROM SystemSample %s FACET hostname, diskPath", whereClause),
+						"query":  fmt.Sprintf("SELECT average(diskUsedPercent) as 'Disk Used %%', max(diskUsedPercent) as 'Max %%' FROM SystemSample %s FACET hostname, diskPath%s", whereClause, accountClause),
 					},
 					// Network I/O
 					{
@@ -752,13 +802,18 @@ func (s *Server) generateInfrastructureDashboard(name, hostPattern string) (map[
 						"column": 7,
 						"width":  6,
 						"height": 3,
-						"query":  fmt.Sprintf("SELECT average(receiveBytesPerSecond + transmitBytesPerSecond) as 'Total Bytes/sec' FROM NetworkSample %s FACET hostname TIMESERIES", whereClause),
+						"query":  fmt.Sprintf("SELECT average(receiveBytesPerSecond + transmitBytesPerSecond) as 'Total Bytes/sec' FROM NetworkSample %s FACET hostname TIMESERIES%s", whereClause, accountClause),
 					},
 				},
 			},
 		},
 		"created_at": time.Now(),
 		"template":   "infrastructure",
+	}
+
+	// Add account IDs to metadata if specified
+	if len(accountIDs) > 0 {
+		dashboard["account_ids"] = accountIDs
 	}
 
 	return dashboard, nil

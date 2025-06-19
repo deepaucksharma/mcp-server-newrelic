@@ -116,6 +116,84 @@ func (s *Server) registerQueryTools() error {
 		Handler: s.handleQueryBuilder,
 	})
 
+	// Build advanced NRQL query with new features
+	s.tools.Register(Tool{
+		Name:        "query_builder_advanced",
+		Description: "Build advanced NRQL queries with array functions, sliding windows, subqueries, and more",
+		Parameters: ToolParameters{
+			Type:     "object",
+			Required: []string{"query_type"},
+			Properties: map[string]Property{
+				"query_type": {
+					Type:        "string",
+					Description: "Type of advanced query: 'array', 'sliding_window', 'funnel', 'subquery', 'join', 'nested_aggregation', 'rate', 'buckets'",
+				},
+				// Array query parameters
+				"array_field": {
+					Type:        "string",
+					Description: "For array queries: the array field to operate on",
+				},
+				"array_operation": {
+					Type:        "string",
+					Description: "Array operation: 'getfield', 'length', 'contains'",
+				},
+				"array_index": {
+					Type:        "integer",
+					Description: "Array index for getfield operation",
+				},
+				"array_value": {
+					Type:        "string",
+					Description: "Value to check for contains operation",
+				},
+				// Sliding window parameters
+				"slide_by": {
+					Type:        "string",
+					Description: "Sliding window interval (e.g., '5 minutes')",
+				},
+				// Funnel parameters
+				"funnel_steps": {
+					Type:        "array",
+					Description: "Funnel steps with WHERE conditions",
+					Items:       &Property{Type: "object"},
+				},
+				// Subquery/JOIN parameters
+				"primary_query": {
+					Type:        "string",
+					Description: "Primary query for subquery or JOIN",
+				},
+				"secondary_query": {
+					Type:        "string",
+					Description: "Secondary query for JOIN",
+				},
+				"join_keys": {
+					Type:        "array",
+					Description: "Keys to join on",
+					Items:       &Property{Type: "string"},
+				},
+				// Rate parameters
+				"rate_metric": {
+					Type:        "string",
+					Description: "Metric to calculate rate for",
+				},
+				"rate_interval": {
+					Type:        "string",
+					Description: "Rate calculation interval",
+				},
+				// Common parameters
+				"event_type": {
+					Type:        "string",
+					Description: "Event type to query",
+				},
+				"time_range": {
+					Type:        "string",
+					Description: "Time range for the query",
+					Default:     "1 hour ago",
+				},
+			},
+		},
+		Handler: s.handleAdvancedQueryBuilder,
+	})
+
 	return nil
 }
 
@@ -534,6 +612,7 @@ func isValidAggregateFunction(fn string) bool {
 	
 	// List of valid NRQL aggregate functions
 	validFunctions := []string{
+		// Basic aggregation functions
 		"average(", "avg(",
 		"count(",
 		"latest(",
@@ -546,11 +625,31 @@ func isValidAggregateFunction(fn string) bool {
 		"stddev(",
 		"sum(",
 		"uniqueCount(", "uniques(",
+		
+		// Advanced aggregation functions
 		"apdex(",
 		"histogram(",
 		"keyset(",
 		"eventType(",
 		"filter(",
+		
+		// Array functions (NEW)
+		"getfield(",
+		"length(",
+		"contains(",
+		
+		// Time-based functions (NEW)
+		"latestRate(",
+		
+		// Bucketing functions (NEW)
+		"buckets(",
+		
+		// Funnel functions (NEW)
+		"funnel(",
+		
+		// Nested aggregation support (NEW)
+		"derivative(",
+		"predictLinear(",
 	}
 	
 	for _, valid := range validFunctions {
@@ -560,4 +659,297 @@ func isValidAggregateFunction(fn string) bool {
 	}
 	
 	return false
+}
+
+// handleAdvancedQueryBuilder builds advanced NRQL queries with new features
+func (s *Server) handleAdvancedQueryBuilder(ctx context.Context, params map[string]interface{}) (interface{}, error) {
+	queryType, ok := params["query_type"].(string)
+	if !ok || queryType == "" {
+		return nil, fmt.Errorf("query_type parameter is required")
+	}
+
+	var query string
+	var err error
+
+	switch queryType {
+	case "array":
+		query, err = s.buildArrayQuery(params)
+	case "sliding_window":
+		query, err = s.buildSlidingWindowQuery(params)
+	case "funnel":
+		query, err = s.buildFunnelQuery(params)
+	case "subquery":
+		query, err = s.buildSubquery(params)
+	case "join":
+		query, err = s.buildJoinQuery(params)
+	case "nested_aggregation":
+		query, err = s.buildNestedAggregationQuery(params)
+	case "rate":
+		query, err = s.buildRateQuery(params)
+	case "buckets":
+		query, err = s.buildBucketsQuery(params)
+	default:
+		return nil, fmt.Errorf("unsupported query type: %s", queryType)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to build %s query: %w", queryType, err)
+	}
+
+	// Validate the built query
+	if err := s.validateNRQLSyntax(query); err != nil {
+		return nil, fmt.Errorf("built query is invalid: %w", err)
+	}
+
+	return map[string]interface{}{
+		"query":       query,
+		"query_type":  queryType,
+		"explanation": s.explainQuery(query),
+		"warnings":    s.checkQueryWarnings(query),
+	}, nil
+}
+
+// buildArrayQuery builds a query using array functions
+func (s *Server) buildArrayQuery(params map[string]interface{}) (string, error) {
+	eventType, ok := params["event_type"].(string)
+	if !ok || eventType == "" {
+		return "", fmt.Errorf("event_type is required for array queries")
+	}
+
+	arrayField, ok := params["array_field"].(string)
+	if !ok || arrayField == "" {
+		return "", fmt.Errorf("array_field is required for array queries")
+	}
+
+	operation, ok := params["array_operation"].(string)
+	if !ok || operation == "" {
+		return "", fmt.Errorf("array_operation is required for array queries")
+	}
+
+	timeRange := "1 hour ago"
+	if tr, ok := params["time_range"].(string); ok {
+		timeRange = tr
+	}
+
+	var query string
+	switch operation {
+	case "getfield":
+		index, ok := params["array_index"].(float64)
+		if !ok {
+			return "", fmt.Errorf("array_index is required for getfield operation")
+		}
+		query = fmt.Sprintf("SELECT getfield(%s, %d) as 'Array Element %d' FROM %s SINCE %s", 
+			arrayField, int(index), int(index), eventType, timeRange)
+	
+	case "length":
+		query = fmt.Sprintf("SELECT average(length(%s)) as 'Avg Array Length', max(length(%s)) as 'Max Array Length' FROM %s SINCE %s",
+			arrayField, arrayField, eventType, timeRange)
+	
+	case "contains":
+		value, ok := params["array_value"].(string)
+		if !ok || value == "" {
+			return "", fmt.Errorf("array_value is required for contains operation")
+		}
+		// Escape the value for NRQL
+		value = s.nrqlValidator.SanitizeStringValue(value)
+		query = fmt.Sprintf("SELECT count(*) as 'Total', filter(count(*), WHERE contains(%s, '%s')) as 'Contains \"%s\"' FROM %s SINCE %s",
+			arrayField, value, value, eventType, timeRange)
+	
+	default:
+		return "", fmt.Errorf("unsupported array operation: %s", operation)
+	}
+
+	return query, nil
+}
+
+// buildSlidingWindowQuery builds a query with sliding window (SLIDE BY)
+func (s *Server) buildSlidingWindowQuery(params map[string]interface{}) (string, error) {
+	eventType, ok := params["event_type"].(string)
+	if !ok || eventType == "" {
+		return "", fmt.Errorf("event_type is required for sliding window queries")
+	}
+
+	slideBy, ok := params["slide_by"].(string)
+	if !ok || slideBy == "" {
+		return "", fmt.Errorf("slide_by is required for sliding window queries")
+	}
+
+	timeRange := "1 hour ago"
+	if tr, ok := params["time_range"].(string); ok {
+		timeRange = tr
+	}
+
+	// Example: moving average with sliding window
+	query := fmt.Sprintf("SELECT average(duration) FROM %s SINCE %s TIMESERIES 1 minute SLIDE BY %s",
+		eventType, timeRange, slideBy)
+
+	return query, nil
+}
+
+// buildFunnelQuery builds a funnel analysis query
+func (s *Server) buildFunnelQuery(params map[string]interface{}) (string, error) {
+	eventType, ok := params["event_type"].(string)
+	if !ok || eventType == "" {
+		return "", fmt.Errorf("event_type is required for funnel queries")
+	}
+
+	funnelSteps, ok := params["funnel_steps"].([]interface{})
+	if !ok || len(funnelSteps) == 0 {
+		return "", fmt.Errorf("funnel_steps is required for funnel queries")
+	}
+
+	timeRange := "1 hour ago"
+	if tr, ok := params["time_range"].(string); ok {
+		timeRange = tr
+	}
+
+	// Build funnel steps
+	steps := make([]string, len(funnelSteps))
+	for i, step := range funnelSteps {
+		stepMap, ok := step.(map[string]interface{})
+		if !ok {
+			return "", fmt.Errorf("invalid funnel step at index %d", i)
+		}
+		
+		name, ok := stepMap["name"].(string)
+		if !ok {
+			return "", fmt.Errorf("funnel step %d missing name", i)
+		}
+		
+		condition, ok := stepMap["condition"].(string)
+		if !ok {
+			return "", fmt.Errorf("funnel step %d missing condition", i)
+		}
+		
+		steps[i] = fmt.Sprintf("WHERE %s AS '%s'", condition, name)
+	}
+
+	query := fmt.Sprintf("SELECT funnel(session, %s) FROM %s SINCE %s",
+		strings.Join(steps, ", "), eventType, timeRange)
+
+	return query, nil
+}
+
+// buildSubquery builds a query with subquery
+func (s *Server) buildSubquery(params map[string]interface{}) (string, error) {
+	primaryQuery, ok := params["primary_query"].(string)
+	if !ok || primaryQuery == "" {
+		return "", fmt.Errorf("primary_query is required for subqueries")
+	}
+
+	// Example: percentile of aggregated values using subquery
+	query := fmt.Sprintf("SELECT percentile(aggregated_value, 95) FROM (%s) SINCE 1 hour ago", primaryQuery)
+
+	return query, nil
+}
+
+// buildJoinQuery builds a JOIN query
+func (s *Server) buildJoinQuery(params map[string]interface{}) (string, error) {
+	primaryQuery, ok := params["primary_query"].(string)
+	if !ok || primaryQuery == "" {
+		return "", fmt.Errorf("primary_query is required for JOIN queries")
+	}
+
+	secondaryQuery, ok := params["secondary_query"].(string)
+	if !ok || secondaryQuery == "" {
+		return "", fmt.Errorf("secondary_query is required for JOIN queries")
+	}
+
+	joinKeys, ok := params["join_keys"].([]interface{})
+	if !ok || len(joinKeys) == 0 {
+		return "", fmt.Errorf("join_keys is required for JOIN queries")
+	}
+
+	// Convert join keys
+	keys := make([]string, len(joinKeys))
+	for i, key := range joinKeys {
+		keys[i] = key.(string)
+	}
+
+	query := fmt.Sprintf("FROM (%s) AS a, (%s) AS b SELECT * WHERE %s SINCE 1 hour ago",
+		primaryQuery, secondaryQuery, "a." + keys[0] + " = b." + keys[0])
+
+	return query, nil
+}
+
+// buildNestedAggregationQuery builds a query with nested aggregation
+func (s *Server) buildNestedAggregationQuery(params map[string]interface{}) (string, error) {
+	eventType, ok := params["event_type"].(string)
+	if !ok || eventType == "" {
+		return "", fmt.Errorf("event_type is required for nested aggregation queries")
+	}
+
+	timeRange := "1 hour ago"
+	if tr, ok := params["time_range"].(string); ok {
+		timeRange = tr
+	}
+
+	// Example: derivative of average response time
+	query := fmt.Sprintf("SELECT derivative(average(duration), 1 minute) as 'Rate of Change' FROM %s SINCE %s TIMESERIES",
+		eventType, timeRange)
+
+	return query, nil
+}
+
+// buildRateQuery builds a query using rate functions
+func (s *Server) buildRateQuery(params map[string]interface{}) (string, error) {
+	eventType, ok := params["event_type"].(string)
+	if !ok || eventType == "" {
+		return "", fmt.Errorf("event_type is required for rate queries")
+	}
+
+	rateMetric, ok := params["rate_metric"].(string)
+	if !ok || rateMetric == "" {
+		return "", fmt.Errorf("rate_metric is required for rate queries")
+	}
+
+	rateInterval := "1 minute"
+	if ri, ok := params["rate_interval"].(string); ok {
+		rateInterval = ri
+	}
+
+	timeRange := "1 hour ago"
+	if tr, ok := params["time_range"].(string); ok {
+		timeRange = tr
+	}
+
+	// Build rate query
+	query := fmt.Sprintf("SELECT rate(sum(%s), %s) as '%s per %s' FROM %s SINCE %s TIMESERIES",
+		rateMetric, rateInterval, rateMetric, rateInterval, eventType, timeRange)
+
+	return query, nil
+}
+
+// buildBucketsQuery builds a query using buckets for histogram segmentation
+func (s *Server) buildBucketsQuery(params map[string]interface{}) (string, error) {
+	eventType, ok := params["event_type"].(string)
+	if !ok || eventType == "" {
+		return "", fmt.Errorf("event_type is required for buckets queries")
+	}
+
+	metric, ok := params["metric"].(string)
+	if !ok {
+		metric = "duration" // default metric
+	}
+
+	bucketSize := 10.0
+	if bs, ok := params["bucket_size"].(float64); ok {
+		bucketSize = bs
+	}
+
+	bucketCount := 10
+	if bc, ok := params["bucket_count"].(float64); ok {
+		bucketCount = int(bc)
+	}
+
+	timeRange := "1 hour ago"
+	if tr, ok := params["time_range"].(string); ok {
+		timeRange = tr
+	}
+
+	// Build buckets query
+	query := fmt.Sprintf("SELECT count(*) FROM %s SINCE %s FACET buckets(%s, %f, %d)",
+		eventType, timeRange, metric, bucketSize, bucketCount)
+
+	return query, nil
 }

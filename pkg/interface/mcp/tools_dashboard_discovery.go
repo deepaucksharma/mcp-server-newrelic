@@ -22,6 +22,12 @@ func (s *Server) generateDiscoveryBasedDashboard(ctx context.Context, name strin
 		serviceName = sn
 	}
 
+	// Extract account IDs for cross-account support
+	var accountIDs []int
+	if accountIDsParam, ok := request["account_ids"].([]int); ok {
+		accountIDs = accountIDsParam
+	}
+
 	// Use discovery to find relevant schemas
 	filter := discovery.DiscoveryFilter{}
 	if serviceName != "" {
@@ -58,7 +64,7 @@ func (s *Server) generateDiscoveryBasedDashboard(ctx context.Context, name strin
 			}
 
 			// Create widgets based on schema profile
-			widgets := s.createWidgetsFromProfile(schema, profile, &row)
+			widgets := s.createWidgetsFromProfile(schema, profile, &row, accountIDs)
 			for _, widget := range widgets {
 				page["widgets"] = append(page["widgets"].([]map[string]interface{}), widget)
 			}
@@ -82,6 +88,11 @@ func (s *Server) generateDiscoveryBasedDashboard(ctx context.Context, name strin
 			"generated_from_discovery": true,
 			"schemas_used":            len(schemas),
 		},
+	}
+
+	// Add account IDs to metadata if specified
+	if len(accountIDs) > 0 {
+		dashboard["account_ids"] = accountIDs
 	}
 
 	return dashboard, nil
@@ -123,12 +134,12 @@ func determineSchemaGroup(schema *discovery.Schema) string {
 }
 
 // createWidgetsFromProfile generates appropriate widgets based on schema profile
-func (s *Server) createWidgetsFromProfile(schema *discovery.Schema, profile *discovery.Schema, currentRow *int) []map[string]interface{} {
+func (s *Server) createWidgetsFromProfile(schema *discovery.Schema, profile *discovery.Schema, currentRow *int, accountIDs []int) []map[string]interface{} {
 	widgets := []map[string]interface{}{}
 
-	// Get account ID
+	// Get default account ID if no cross-account IDs provided
 	accountID := 0
-	if s.nrClient != nil {
+	if len(accountIDs) == 0 && s.nrClient != nil {
 		if client, ok := s.nrClient.(*newrelic.Client); ok {
 			if id, err := client.AccountID(); err == nil {
 				accountID = id
@@ -138,7 +149,7 @@ func (s *Server) createWidgetsFromProfile(schema *discovery.Schema, profile *dis
 
 	// Create overview widget if we have good sample data
 	if schema.SampleCount > 100 {
-		overviewWidget := s.createOverviewWidget(schema, profile, accountID, *currentRow)
+		overviewWidget := s.createOverviewWidget(schema, profile, accountID, accountIDs, *currentRow)
 		widgets = append(widgets, overviewWidget)
 		*currentRow += 3
 	}
@@ -150,7 +161,7 @@ func (s *Server) createWidgetsFromProfile(schema *discovery.Schema, profile *dis
 			break
 		}
 
-		widget := s.createNumericWidget(schema.EventType, attr, accountID, *currentRow, (i%2)*6+1)
+		widget := s.createNumericWidget(schema.EventType, attr, accountID, accountIDs, *currentRow, (i%2)*6+1)
 		widgets = append(widgets, widget)
 		
 		if i%2 == 1 {
@@ -166,8 +177,19 @@ func (s *Server) createWidgetsFromProfile(schema *discovery.Schema, profile *dis
 	// Create a faceted widget if we have categorical attributes
 	categoricalAttrs := filterCategoricalAttributes(profile.Attributes)
 	if len(categoricalAttrs) > 0 && len(numericAttrs) > 0 {
-		facetWidget := s.createFacetedWidget(schema.EventType, numericAttrs[0], categoricalAttrs[0], accountID, *currentRow)
+		facetWidget := s.createFacetedWidget(schema.EventType, numericAttrs[0], categoricalAttrs[0], accountID, accountIDs, *currentRow)
 		widgets = append(widgets, facetWidget)
+		*currentRow += 3
+	}
+
+	// Create array-based widgets if we have array attributes (NEW)
+	arrayAttrs := filterArrayAttributes(profile.Attributes)
+	for i, attr := range arrayAttrs {
+		if i >= 2 { // Limit to 2 array widgets per schema
+			break
+		}
+		arrayWidget := s.createArrayWidget(schema.EventType, attr, accountID, accountIDs, *currentRow)
+		widgets = append(widgets, arrayWidget)
 		*currentRow += 3
 	}
 
@@ -175,7 +197,7 @@ func (s *Server) createWidgetsFromProfile(schema *discovery.Schema, profile *dis
 }
 
 // createOverviewWidget creates a summary widget for the schema
-func (s *Server) createOverviewWidget(schema *discovery.Schema, profile *discovery.Schema, accountID int, row int) map[string]interface{} {
+func (s *Server) createOverviewWidget(schema *discovery.Schema, profile *discovery.Schema, accountID int, accountIDs []int, row int) map[string]interface{} {
 	// Find a good key attribute from profile
 	keyAttr := "entity.guid" // default
 	for _, attr := range profile.Attributes {
@@ -187,9 +209,19 @@ func (s *Server) createOverviewWidget(schema *discovery.Schema, profile *discove
 		}
 	}
 	
+	// Build account IDs clause for cross-account queries
+	accountClause := ""
+	if len(accountIDs) > 0 {
+		accountIDStrs := make([]string, len(accountIDs))
+		for i, id := range accountIDs {
+			accountIDStrs[i] = fmt.Sprintf("%d", id)
+		}
+		accountClause = fmt.Sprintf(" WITH accountIds = [%s]", strings.Join(accountIDStrs, ", "))
+	}
+	
 	// Determine query based on schema characteristics
-	query := fmt.Sprintf("SELECT count(*) as 'Events', uniqueCount(%s) as 'Unique %s' FROM %s SINCE 1 hour ago",
-		keyAttr, strings.Title(keyAttr), schema.EventType)
+	query := fmt.Sprintf("SELECT count(*) as 'Events', uniqueCount(%s) as 'Unique %s' FROM %s SINCE 1 hour ago%s",
+		keyAttr, strings.Title(keyAttr), schema.EventType, accountClause)
 
 	return map[string]interface{}{
 		"title": fmt.Sprintf("%s Overview", schema.Name),
@@ -211,10 +243,20 @@ func (s *Server) createOverviewWidget(schema *discovery.Schema, profile *discove
 }
 
 // createNumericWidget creates a widget for a numeric attribute
-func (s *Server) createNumericWidget(eventType string, attr *discovery.Attribute, accountID int, row int, column int) map[string]interface{} {
+func (s *Server) createNumericWidget(eventType string, attr *discovery.Attribute, accountID int, accountIDs []int, row int, column int) map[string]interface{} {
 	// Choose visualization based on attribute characteristics
 	vizType := newrelic.VizLine
 	query := ""
+
+	// Build account IDs clause for cross-account queries
+	accountClause := ""
+	if len(accountIDs) > 0 {
+		accountIDStrs := make([]string, len(accountIDs))
+		for i, id := range accountIDs {
+			accountIDStrs[i] = fmt.Sprintf("%d", id)
+		}
+		accountClause = fmt.Sprintf(" WITH accountIds = [%s]", strings.Join(accountIDStrs, ", "))
+	}
 
 	// Check semantic type for counters and percentages
 	isCounter := attr.SemanticType == discovery.SemanticTypeDuration || strings.Contains(strings.ToLower(attr.Name), "count")
@@ -222,16 +264,16 @@ func (s *Server) createNumericWidget(eventType string, attr *discovery.Attribute
 
 	if isCounter {
 		// For counters, show rate over time
-		query = fmt.Sprintf("SELECT rate(sum(%s), 1 minute) as '%s/min' FROM %s TIMESERIES SINCE 1 hour ago",
-			attr.Name, attr.Name, eventType)
+		query = fmt.Sprintf("SELECT rate(sum(%s), 1 minute) as '%s/min' FROM %s TIMESERIES SINCE 1 hour ago%s",
+			attr.Name, attr.Name, eventType, accountClause)
 	} else if isPercentage {
 		// For percentages, show average over time
-		query = fmt.Sprintf("SELECT average(%s) as 'Avg %s' FROM %s TIMESERIES SINCE 1 hour ago",
-			attr.Name, attr.Name, eventType)
+		query = fmt.Sprintf("SELECT average(%s) as 'Avg %s' FROM %s TIMESERIES SINCE 1 hour ago%s",
+			attr.Name, attr.Name, eventType, accountClause)
 	} else {
 		// For other numerics, show percentiles
-		query = fmt.Sprintf("SELECT average(%s) as 'Avg', percentile(%s, 95) as 'P95', max(%s) as 'Max' FROM %s TIMESERIES SINCE 1 hour ago",
-			attr.Name, attr.Name, attr.Name, eventType)
+		query = fmt.Sprintf("SELECT average(%s) as 'Avg', percentile(%s, 95) as 'P95', max(%s) as 'Max' FROM %s TIMESERIES SINCE 1 hour ago%s",
+			attr.Name, attr.Name, attr.Name, eventType, accountClause)
 	}
 
 	return map[string]interface{}{
@@ -254,10 +296,20 @@ func (s *Server) createNumericWidget(eventType string, attr *discovery.Attribute
 }
 
 // createFacetedWidget creates a widget that breaks down a metric by a dimension
-func (s *Server) createFacetedWidget(eventType string, metric *discovery.Attribute, dimension *discovery.Attribute, accountID int, row int) map[string]interface{} {
+func (s *Server) createFacetedWidget(eventType string, metric *discovery.Attribute, dimension *discovery.Attribute, accountID int, accountIDs []int, row int) map[string]interface{} {
+	// Build account IDs clause for cross-account queries
+	accountClause := ""
+	if len(accountIDs) > 0 {
+		accountIDStrs := make([]string, len(accountIDs))
+		for i, id := range accountIDs {
+			accountIDStrs[i] = fmt.Sprintf("%d", id)
+		}
+		accountClause = fmt.Sprintf(" WITH accountIds = [%s]", strings.Join(accountIDStrs, ", "))
+	}
+
 	// Create a bar chart showing metric broken down by dimension
-	query := fmt.Sprintf("SELECT average(%s) FROM %s FACET %s SINCE 1 hour ago LIMIT 10",
-		metric.Name, eventType, dimension.Name)
+	query := fmt.Sprintf("SELECT average(%s) FROM %s FACET %s SINCE 1 hour ago LIMIT 10%s",
+		metric.Name, eventType, dimension.Name, accountClause)
 
 	return map[string]interface{}{
 		"title":  fmt.Sprintf("%s by %s", metric.Name, dimension.Name),
@@ -300,6 +352,65 @@ func filterCategoricalAttributes(attrs []discovery.Attribute) []*discovery.Attri
 		}
 	}
 	return categorical
+}
+
+// filterArrayAttributes returns attributes that appear to be arrays
+func filterArrayAttributes(attrs []discovery.Attribute) []*discovery.Attribute {
+	var arrays []*discovery.Attribute
+	for i := range attrs {
+		attr := &attrs[i]
+		// Detect array attributes by name patterns or data characteristics
+		if strings.Contains(strings.ToLower(attr.Name), "array") ||
+		   strings.Contains(strings.ToLower(attr.Name), "list") ||
+		   strings.Contains(strings.ToLower(attr.Name), "tags") ||
+		   strings.Contains(strings.ToLower(attr.Name), "labels") ||
+		   strings.Contains(strings.ToLower(attr.Name), "attributes.") ||
+		   strings.Contains(strings.ToLower(attr.Name), "[]") {
+			arrays = append(arrays, attr)
+		}
+	}
+	return arrays
+}
+
+// createArrayWidget creates a widget for array attributes using new NRQL features
+func (s *Server) createArrayWidget(eventType string, attr *discovery.Attribute, accountID int, accountIDs []int, row int) map[string]interface{} {
+	// Build account IDs clause for cross-account queries
+	accountClause := ""
+	if len(accountIDs) > 0 {
+		accountIDStrs := make([]string, len(accountIDs))
+		for i, id := range accountIDs {
+			accountIDStrs[i] = fmt.Sprintf("%d", id)
+		}
+		accountClause = fmt.Sprintf(" WITH accountIds = [%s]", strings.Join(accountIDStrs, ", "))
+	}
+
+	// Use array functions to analyze the array attribute
+	query := fmt.Sprintf(`SELECT 
+		average(length(%s)) as 'Avg Array Size',
+		max(length(%s)) as 'Max Array Size',
+		uniqueCount(getfield(%s, 0)) as 'Unique First Elements'
+	FROM %s 
+	WHERE %s IS NOT NULL 
+	SINCE 1 hour ago%s`,
+		attr.Name, attr.Name, attr.Name, eventType, attr.Name, accountClause)
+
+	return map[string]interface{}{
+		"title":  fmt.Sprintf("%s Analysis", attr.Name),
+		"type":   newrelic.VizBillboard,
+		"row":    row,
+		"column": 1,
+		"width":  12,
+		"height": 3,
+		"query":  query,
+		"configuration": map[string]interface{}{
+			"nrqlQueries": []map[string]interface{}{
+				{
+					"accountId": accountID,
+					"query":     query,
+				},
+			},
+		},
+	}
 }
 
 // createIntelligentDashboard creates a dashboard using full discovery and intelligence
