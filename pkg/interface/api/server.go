@@ -10,6 +10,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
 	"github.com/deepaucksharma/mcp-server-newrelic/pkg/auth"
+	"github.com/deepaucksharma/mcp-server-newrelic/pkg/utils"
 	"github.com/newrelic/go-agent/v3/newrelic"
 )
 
@@ -89,11 +90,11 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Start server in goroutine
 	errChan := make(chan error, 1)
-	go func() {
+	utils.SafeGoWithContext("APIServer.ListenAndServe", func() {
 		if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			errChan <- err
 		}
-	}()
+	})
 
 	// Wait for context cancellation or error
 	select {

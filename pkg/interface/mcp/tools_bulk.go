@@ -183,7 +183,7 @@ func (s *Server) handleBulkTagEntities(ctx context.Context, params map[string]in
 	}
 
 	// Check for mock mode
-	if s.nrClient == nil {
+	if s.getNRClient() == nil {
 		return map[string]interface{}{
 			"summary": map[string]interface{}{
 				"total_entities": len(guids),
@@ -278,7 +278,7 @@ func (s *Server) handleBulkCreateMonitors(ctx context.Context, params map[string
 		}
 
 		// Check for mock mode
-		if s.nrClient == nil {
+		if s.getNRClient() == nil {
 			results = append(results, map[string]interface{}{
 				"index":      i,
 				"name":       name,
@@ -334,7 +334,7 @@ func (s *Server) handleBulkUpdateDashboards(ctx context.Context, params map[stri
 	}
 
 	// Check for mock mode
-	if s.nrClient == nil {
+	if s.getNRClient() == nil {
 		results := []map[string]interface{}{}
 		for _, id := range dashboardIDs {
 			results = append(results, map[string]interface{}{
@@ -406,7 +406,7 @@ func (s *Server) handleBulkDeleteEntities(ctx context.Context, params map[string
 	}
 
 	// Check for mock mode
-	if s.nrClient == nil {
+	if s.getNRClient() == nil {
 		results := []map[string]interface{}{}
 		for _, id := range entityIDs {
 			results = append(results, map[string]interface{}{
@@ -505,7 +505,7 @@ func (s *Server) handleBulkExecuteQueries(ctx context.Context, params map[string
 		}
 
 		// Check for mock mode
-		if s.nrClient == nil {
+		if s.getNRClient() == nil {
 			results = append(results, map[string]interface{}{
 				"index":  i,
 				"name":   name,

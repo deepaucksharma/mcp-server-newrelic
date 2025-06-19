@@ -578,7 +578,7 @@ func (s *Server) handleCreateAlertPolicy(ctx context.Context, params map[string]
 	}
 
 	// Check for mock mode
-	if s.nrClient == nil {
+	if s.getNRClient() == nil {
 		return map[string]interface{}{
 			"policy": map[string]interface{}{
 				"id":                   fmt.Sprintf("policy-%d", time.Now().Unix()),
@@ -632,7 +632,7 @@ func (s *Server) handleUpdateAlertPolicy(ctx context.Context, params map[string]
 	}
 
 	// Check for mock mode
-	if s.nrClient == nil {
+	if s.getNRClient() == nil {
 		return map[string]interface{}{
 			"policy": map[string]interface{}{
 				"id":       policyID,
@@ -662,7 +662,7 @@ func (s *Server) handleDeleteAlertPolicy(ctx context.Context, params map[string]
 	}
 
 	// Check for mock mode
-	if s.nrClient == nil {
+	if s.getNRClient() == nil {
 		return map[string]interface{}{
 			"policy_id": policyID,
 			"message": "Alert policy deleted successfully (mock)",
@@ -726,7 +726,7 @@ func (s *Server) handleCreateAlertCondition(ctx context.Context, params map[stri
 	}
 
 	// Check for mock mode
-	if s.nrClient == nil {
+	if s.getNRClient() == nil {
 		return map[string]interface{}{
 			"condition": map[string]interface{}{
 				"id":                 fmt.Sprintf("condition-%d", time.Now().Unix()),
@@ -772,12 +772,12 @@ func (s *Server) handleCloseIncident(ctx context.Context, params map[string]inte
 	}
 	// In a real implementation, we would get this from config
 	// For now, just ensure we have something for mock mode
-	if accountID == "" && s.nrClient == nil {
+	if accountID == "" && s.getNRClient() == nil {
 		accountID = "123456" // Mock account ID
 	}
 
 	// Check for mock mode
-	if s.nrClient == nil {
+	if s.getNRClient() == nil {
 		return map[string]interface{}{
 			"incident_id": incidentID,
 			"status":      "closed",

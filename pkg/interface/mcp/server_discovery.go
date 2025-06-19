@@ -10,6 +10,7 @@ import (
 
 	"github.com/deepaucksharma/mcp-server-newrelic/pkg/discovery"
 	"github.com/deepaucksharma/mcp-server-newrelic/pkg/state"
+	"github.com/deepaucksharma/mcp-server-newrelic/pkg/validation"
 )
 
 // Server implements the Model Context Protocol server
@@ -35,15 +36,19 @@ type Server struct {
 	mu         sync.RWMutex
 	running    bool
 	shutdownCh chan struct{}
+	
+	// Validation
+	nrqlValidator *validation.NRQLValidator
 }
 
 // NewServer creates a new MCP server instance
 func NewServer(config ServerConfig) *Server {
 	s := &Server{
-		config:     config,
-		tools:      NewToolRegistry(),
-		sessions:   NewSessionManager(),
-		shutdownCh: make(chan struct{}),
+		config:        config,
+		tools:         NewToolRegistry(),
+		sessions:      NewSessionManager(),
+		shutdownCh:    make(chan struct{}),
+		nrqlValidator: validation.NewNRQLValidator(),
 	}
 	
 	s.protocol = &ProtocolHandler{
@@ -73,6 +78,13 @@ func (s *Server) SetNewRelicClient(client interface{}) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.nrClient = client
+}
+
+// getNRClient safely returns the New Relic client
+func (s *Server) getNRClient() interface{} {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.nrClient
 }
 
 // Start initializes and starts the MCP server

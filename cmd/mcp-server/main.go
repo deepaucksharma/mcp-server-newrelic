@@ -14,6 +14,7 @@ import (
 	"github.com/deepaucksharma/mcp-server-newrelic/pkg/logger"
 	"github.com/deepaucksharma/mcp-server-newrelic/pkg/newrelic"
 	"github.com/deepaucksharma/mcp-server-newrelic/pkg/state"
+	"github.com/deepaucksharma/mcp-server-newrelic/pkg/utils"
 	"github.com/joho/godotenv"
 )
 
@@ -165,11 +166,11 @@ func main() {
 	}
 
 	// Wait for shutdown signal
-	go func() {
+	utils.SafeGoWithContext("main.signalHandler", func() {
 		<-sigChan
 		logger.Info("Shutdown signal received")
 		cancel()
-	}()
+	})
 
 	// Wait for context cancellation
 	<-ctx.Done()

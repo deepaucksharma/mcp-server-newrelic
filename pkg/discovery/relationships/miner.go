@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/deepaucksharma/mcp-server-newrelic/pkg/discovery"
+	"github.com/deepaucksharma/mcp-server-newrelic/pkg/utils"
 )
 
 // Miner implements the RelationshipMiner interface
@@ -81,7 +82,7 @@ func (m *Miner) FindRelationships(ctx context.Context, schemas []discovery.Schem
 	// Start workers
 	for w := 0; w < numWorkers; w++ {
 		wg.Add(1)
-		go func() {
+		utils.SafeGoWithContext("Miner.analyzeWorker", func() {
 			defer wg.Done()
 			for p := range pairChan {
 				rels, err := m.findPairRelationships(ctx, schemas[p.schema1], schemas[p.schema2])
@@ -93,7 +94,7 @@ func (m *Miner) FindRelationships(ctx context.Context, schemas []discovery.Schem
 					results <- rel
 				}
 			}
-		}()
+		})
 	}
 	
 	// Send pairs to workers

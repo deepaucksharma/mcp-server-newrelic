@@ -7,6 +7,7 @@ import (
 	"time"
 	
 	"github.com/google/uuid"
+	"github.com/deepaucksharma/mcp-server-newrelic/pkg/utils"
 )
 
 // MemoryStore implements an in-memory session store
@@ -25,16 +26,21 @@ type MemoryStore struct {
 
 // NewMemoryStore creates a new in-memory session store
 func NewMemoryStore(defaultTTL time.Duration) *MemoryStore {
+	return NewMemoryStoreWithConfig(defaultTTL, 10000)
+}
+
+// NewMemoryStoreWithConfig creates a new in-memory session store with custom config
+func NewMemoryStoreWithConfig(defaultTTL time.Duration, maxSessions int) *MemoryStore {
 	ms := &MemoryStore{
 		sessions:        make(map[string]*Session),
 		defaultTTL:      defaultTTL,
-		maxSessions:     10000, // Default max sessions
+		maxSessions:     maxSessions,
 		cleanupInterval: 5 * time.Minute,
 		stopCleanup:     make(chan struct{}),
 	}
 	
-	// Start cleanup goroutine
-	go ms.cleanupLoop()
+	// Start cleanup goroutine with panic recovery
+	utils.SafeGoWithRestart("MemoryStore.cleanupLoop", ms.cleanupLoop, 3)
 	
 	return ms
 }
@@ -88,8 +94,19 @@ func (ms *MemoryStore) GetSession(ctx context.Context, sessionID string) (*Sessi
 	// Update last access time
 	session.LastAccess = time.Now()
 	
-	// Return a copy to prevent external modifications
+	// Return a deep copy to prevent external modifications
 	sessionCopy := *session
+	sessionCopy.Context = make(map[string]interface{})
+	for k, v := range session.Context {
+		sessionCopy.Context[k] = v
+	}
+	sessionCopy.Preferences = make(map[string]interface{})
+	for k, v := range session.Preferences {
+		sessionCopy.Preferences[k] = v
+	}
+	sessionCopy.DiscoveredSchemas = make([]string, len(session.DiscoveredSchemas))
+	copy(sessionCopy.DiscoveredSchemas, session.DiscoveredSchemas)
+	
 	return &sessionCopy, nil
 }
 
@@ -107,11 +124,24 @@ func (ms *MemoryStore) UpdateSession(ctx context.Context, session *Session) erro
 		return fmt.Errorf("session not found: %s", session.ID)
 	}
 	
-	// Preserve creation time and update last access
-	session.CreatedAt = existing.CreatedAt
-	session.LastAccess = time.Now()
+	// Create a deep copy of the session to avoid external modifications
+	sessionCopy := *session
+	sessionCopy.Context = make(map[string]interface{})
+	for k, v := range session.Context {
+		sessionCopy.Context[k] = v
+	}
+	sessionCopy.Preferences = make(map[string]interface{})
+	for k, v := range session.Preferences {
+		sessionCopy.Preferences[k] = v
+	}
+	sessionCopy.DiscoveredSchemas = make([]string, len(session.DiscoveredSchemas))
+	copy(sessionCopy.DiscoveredSchemas, session.DiscoveredSchemas)
 	
-	ms.sessions[session.ID] = session
+	// Preserve creation time and update last access
+	sessionCopy.CreatedAt = existing.CreatedAt
+	sessionCopy.LastAccess = time.Now()
+	
+	ms.sessions[session.ID] = &sessionCopy
 	
 	return nil
 }

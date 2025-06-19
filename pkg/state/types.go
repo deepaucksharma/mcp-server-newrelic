@@ -39,11 +39,12 @@ type Store interface {
 
 // CacheEntry represents a cached discovery result
 type CacheEntry struct {
-	Key        string
-	Value      interface{}
-	CreatedAt  time.Time
-	TTL        time.Duration
+	Key         string
+	Value       interface{}
+	CreatedAt   time.Time
+	TTL         time.Duration
 	AccessCount int64
+	Size        int64 // Memory size in bytes
 }
 
 // ResultCache defines the interface for caching discovery results

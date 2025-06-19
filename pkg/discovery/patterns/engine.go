@@ -13,12 +13,14 @@ import (
 type Engine struct {
 	detectors []discovery.PatternDetector
 	enableML  bool
+	maxMemory int64 // Maximum memory in bytes for pattern detection
 }
 
 // NewEngine creates a new pattern detection engine
 func NewEngine(enableML bool) *Engine {
 	engine := &Engine{
-		enableML: enableML,
+		enableML:  enableML,
+		maxMemory: 100 * 1024 * 1024, // 100MB default limit
 	}
 	
 	// Register default detectors
@@ -34,11 +36,14 @@ func NewEngine(enableML bool) *Engine {
 
 // DetectPatterns runs all registered detectors on the data
 func (e *Engine) DetectPatterns(data []interface{}, dataType discovery.DataType) []discovery.Pattern {
+	// Sample data if it's too large to prevent memory issues
+	sampledData := e.sampleData(data)
+	
 	patterns := []discovery.Pattern{}
 	
 	// Run each detector
 	for _, detector := range e.detectors {
-		detectedPatterns := detector.DetectPatterns(data, dataType)
+		detectedPatterns := detector.DetectPatterns(sampledData, dataType)
 		patterns = append(patterns, detectedPatterns...)
 	}
 	
@@ -48,6 +53,37 @@ func (e *Engine) DetectPatterns(data []interface{}, dataType discovery.DataType)
 	})
 	
 	return patterns
+}
+
+// sampleData samples the data if it's too large
+func (e *Engine) sampleData(data []interface{}) []interface{} {
+	// Estimate memory usage (rough: 64 bytes per item)
+	estimatedMemory := int64(len(data)) * 64
+	
+	// If data fits in memory limit, return as-is
+	if estimatedMemory <= e.maxMemory {
+		return data
+	}
+	
+	// Calculate sample size
+	maxItems := int(e.maxMemory / 64)
+	if maxItems > len(data) {
+		maxItems = len(data)
+	}
+	
+	// Use reservoir sampling for uniform distribution
+	sampled := make([]interface{}, maxItems)
+	copy(sampled, data[:maxItems])
+	
+	// Randomly replace items to ensure uniform sampling
+	for i := maxItems; i < len(data); i++ {
+		j := int(math.Floor(math.Mod(float64(i)*math.Phi, float64(maxItems))))
+		if j < maxItems {
+			sampled[j] = data[i]
+		}
+	}
+	
+	return sampled
 }
 
 // TimeSeriesDetector detects patterns in time series data
@@ -186,24 +222,46 @@ func (d *TimeSeriesDetector) detectAnomalies(values []float64) []discovery.Patte
 	patterns := []discovery.Pattern{}
 	
 	anomalyIndices := []int{}
+	maxAnomalies := 100 // Limit to prevent memory issues
+	
 	for i, v := range values {
 		zScore := math.Abs((v - mean) / stdDev)
 		if zScore > 3 { // 3 standard deviations
-			anomalyIndices = append(anomalyIndices, i)
+			if len(anomalyIndices) < maxAnomalies {
+				anomalyIndices = append(anomalyIndices, i)
+			}
 		}
 	}
 	
 	if len(anomalyIndices) > 0 {
+		// Count total anomalies even if we don't store all indices
+		totalAnomalies := len(anomalyIndices)
+		for i := len(anomalyIndices); i < len(values); i++ {
+			zScore := math.Abs((values[i] - mean) / stdDev)
+			if zScore > 3 {
+				totalAnomalies++
+			}
+		}
+		
+		params := map[string]interface{}{
+			"anomaly_count": totalAnomalies,
+			"total_count":   len(values),
+			"anomaly_ratio": float64(totalAnomalies) / float64(len(values)),
+		}
+		
+		// Only include indices if not truncated
+		if len(anomalyIndices) == totalAnomalies {
+			params["indices"] = anomalyIndices
+		} else {
+			params["sample_indices"] = anomalyIndices
+			params["truncated"] = true
+		}
+		
 		patterns = append(patterns, discovery.Pattern{
 			Type:        discovery.PatternTypeAnomaly,
 			Confidence:  0.95,
-			Description: fmt.Sprintf("Found %d anomalous values", len(anomalyIndices)),
-			Parameters: map[string]interface{}{
-				"indices":        anomalyIndices,
-				"anomaly_count":  len(anomalyIndices),
-				"total_count":    len(values),
-				"anomaly_ratio":  float64(len(anomalyIndices)) / float64(len(values)),
-			},
+			Description: fmt.Sprintf("Found %d anomalous values", totalAnomalies),
+			Parameters:  params,
 		})
 	}
 	
@@ -385,15 +443,21 @@ func (d *DistributionDetector) followsPowerLaw(values []float64) bool {
 		return false
 	}
 	
-	// Create frequency distribution
+	// Create frequency distribution with limit
 	freqMap := make(map[float64]int)
+	maxUniqueValues := 1000 // Limit to prevent unbounded growth
+	
 	for _, v := range positiveValues {
+		if len(freqMap) >= maxUniqueValues {
+			// If we have too many unique values, it's likely not a power law
+			return false
+		}
 		freqMap[v]++
 	}
 	
 	// Convert to log-log
-	logX := []float64{}
-	logY := []float64{}
+	logX := make([]float64, 0, len(freqMap))
+	logY := make([]float64, 0, len(freqMap))
 	for value, count := range freqMap {
 		logX = append(logX, math.Log(value))
 		logY = append(logY, math.Log(float64(count)))

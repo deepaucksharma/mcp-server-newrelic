@@ -55,6 +55,11 @@ type RedisManager struct {
 
 // NewRedisManager creates a new Redis-based state manager
 func NewRedisManager(redisConfig RedisConfig, managerConfig ManagerConfig) (*RedisManager, error) {
+	// Set MaxSessions from manager config if not set
+	if redisConfig.MaxSessions <= 0 {
+		redisConfig.MaxSessions = managerConfig.MaxSessions
+	}
+	
 	// Create Redis store
 	store, err := NewRedisStore(redisConfig)
 	if err != nil {

@@ -15,17 +15,19 @@ type RedisStore struct {
 	client *redis.Client
 	
 	// Configuration
-	defaultTTL time.Duration
-	keyPrefix  string
+	defaultTTL  time.Duration
+	keyPrefix   string
+	maxSessions int
 }
 
 // RedisConfig holds Redis connection configuration
 type RedisConfig struct {
-	URL        string
-	MaxRetries int
-	PoolSize   int
-	KeyPrefix  string
-	DefaultTTL time.Duration
+	URL         string
+	MaxRetries  int
+	PoolSize    int
+	KeyPrefix   string
+	DefaultTTL  time.Duration
+	MaxSessions int
 }
 
 // NewRedisStore creates a new Redis-based session store
@@ -51,15 +53,46 @@ func NewRedisStore(config RedisConfig) (*RedisStore, error) {
 		return nil, fmt.Errorf("connect to Redis: %w", err)
 	}
 	
+	// Set default max sessions if not specified
+	maxSessions := config.MaxSessions
+	if maxSessions <= 0 {
+		maxSessions = 10000
+	}
+	
 	return &RedisStore{
-		client:     client,
-		defaultTTL: config.DefaultTTL,
-		keyPrefix:  config.KeyPrefix,
+		client:      client,
+		defaultTTL:  config.DefaultTTL,
+		keyPrefix:   config.KeyPrefix,
+		maxSessions: maxSessions,
 	}, nil
 }
 
 // CreateSession creates a new session with the given goal
 func (rs *RedisStore) CreateSession(ctx context.Context, goal string) (*Session, error) {
+	// Check session count limit
+	pattern := fmt.Sprintf("%ssession:*", rs.keyPrefix)
+	keys, err := rs.client.Keys(ctx, pattern).Result()
+	if err != nil {
+		return nil, fmt.Errorf("count sessions: %w", err)
+	}
+	
+	if len(keys) >= rs.maxSessions {
+		// Try cleanup first
+		if err := rs.CleanupExpired(ctx); err != nil {
+			// Log error but continue
+		}
+		
+		// Recount after cleanup
+		keys, err = rs.client.Keys(ctx, pattern).Result()
+		if err != nil {
+			return nil, fmt.Errorf("recount sessions: %w", err)
+		}
+		
+		if len(keys) >= rs.maxSessions {
+			return nil, fmt.Errorf("session limit reached: %d", rs.maxSessions)
+		}
+	}
+	
 	session := &Session{
 		ID:                uuid.New().String(),
 		UserGoal:          goal,

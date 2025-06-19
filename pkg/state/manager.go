@@ -37,7 +37,7 @@ func DefaultManagerConfig() ManagerConfig {
 
 // NewManager creates a new state manager with in-memory storage
 func NewManager(config ManagerConfig) *Manager {
-	store := NewMemoryStore(config.SessionTTL)
+	store := NewMemoryStoreWithConfig(config.SessionTTL, config.MaxSessions)
 	cache := NewMemoryCache(config.MaxCacheEntries, config.MaxCacheMemory, config.CacheTTL)
 	
 	return &Manager{

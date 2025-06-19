@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/deepaucksharma/mcp-server-newrelic/pkg/utils"
 )
 
 // runBackgroundTasks runs periodic background tasks
@@ -56,10 +58,10 @@ func (e *Engine) runHealthCheckServer() {
 		Handler: mux,
 	}
 	
-	go func() {
+	utils.SafeGoWithContext("Engine.serverCleanup", func() {
 		<-e.ctx.Done()
 		server.Close()
-	}()
+	})
 	
 	if err := server.ListenAndServe(); err != http.ErrServerClosed {
 		log.Printf("Health check server error: %v", err)

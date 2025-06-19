@@ -25,6 +25,9 @@ type Server struct {
 	mu         sync.RWMutex
 	running    bool
 	shutdownCh chan struct{}
+	
+	// Validation  
+	nrqlValidator interface{} // Will be *validation.NRQLValidator when imported
 }
 
 // NewServer creates a new MCP server instance

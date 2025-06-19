@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/deepaucksharma/mcp-server-newrelic/pkg/utils"
 )
 
 // SSETransport implements MCP over Server-Sent Events
@@ -53,11 +55,11 @@ func (t *SSETransport) Start(ctx context.Context, handler MessageHandler) error 
 	
 	// Start server in goroutine
 	errChan := make(chan error, 1)
-	go func() {
+	utils.SafeGoWithContext("SSETransport.ListenAndServe", func() {
 		if err := t.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			errChan <- err
 		}
-	}()
+	})
 	
 	// Wait for context or error
 	select {

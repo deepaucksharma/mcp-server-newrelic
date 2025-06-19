@@ -5,6 +5,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/deepaucksharma/mcp-server-newrelic/pkg/utils"
 )
 
 // MemoryCache implements an in-memory result cache with TTL
@@ -39,8 +41,8 @@ func NewMemoryCache(maxEntries int, maxMemory int64, defaultTTL time.Duration) *
 		stopCleanup:     make(chan struct{}),
 	}
 	
-	// Start cleanup goroutine
-	go mc.cleanupLoop()
+	// Start cleanup goroutine with panic recovery
+	utils.SafeGoWithRestart("MemoryCache.cleanupLoop", mc.cleanupLoop, 3)
 	
 	return mc
 }
@@ -49,17 +51,24 @@ func NewMemoryCache(maxEntries int, maxMemory int64, defaultTTL time.Duration) *
 func (mc *MemoryCache) Get(ctx context.Context, key string) (interface{}, bool) {
 	mc.mu.RLock()
 	entry, exists := mc.entries[key]
-	mc.mu.RUnlock()
 	
 	if !exists {
+		mc.mu.RUnlock()
 		atomic.AddInt64(&mc.misses, 1)
 		return nil, false
 	}
 	
-	// Check if entry has expired
+	// Check if entry has expired while holding read lock
 	if mc.isExpired(entry) {
+		mc.mu.RUnlock()
+		
+		// Acquire write lock to delete expired entry
 		mc.mu.Lock()
-		delete(mc.entries, key)
+		// Double-check the entry still exists and is expired
+		if e, ok := mc.entries[key]; ok && mc.isExpired(e) {
+			delete(mc.entries, key)
+			atomic.AddInt64(&mc.currentMemory, -e.Size)
+		}
 		mc.mu.Unlock()
 		
 		atomic.AddInt64(&mc.misses, 1)
@@ -68,9 +77,11 @@ func (mc *MemoryCache) Get(ctx context.Context, key string) (interface{}, bool) 
 	
 	// Update access count and return value
 	atomic.AddInt64(&entry.AccessCount, 1)
-	atomic.AddInt64(&mc.hits, 1)
+	value := entry.Value
+	mc.mu.RUnlock()
 	
-	return entry.Value, true
+	atomic.AddInt64(&mc.hits, 1)
+	return value, true
 }
 
 // Set stores a value in the cache with TTL
@@ -79,12 +90,16 @@ func (mc *MemoryCache) Set(ctx context.Context, key string, value interface{}, t
 		ttl = mc.defaultTTL
 	}
 	
+	// Calculate size before creating entry
+	size := mc.estimateSize(value)
+	
 	entry := &CacheEntry{
 		Key:         key,
 		Value:       value,
 		CreatedAt:   time.Now(),
 		TTL:         ttl,
 		AccessCount: 0,
+		Size:        size,
 	}
 	
 	mc.mu.Lock()
@@ -98,14 +113,14 @@ func (mc *MemoryCache) Set(ctx context.Context, key string, value interface{}, t
 	// Add or update entry
 	if existing, exists := mc.entries[key]; exists {
 		// Update existing entry
-		mc.currentMemory -= mc.estimateSize(existing.Value)
+		atomic.AddInt64(&mc.currentMemory, -existing.Size)
 	}
 	
 	mc.entries[key] = entry
-	mc.currentMemory += mc.estimateSize(value)
+	atomic.AddInt64(&mc.currentMemory, entry.Size)
 	
 	// Check memory limit
-	for mc.currentMemory > mc.maxMemory && len(mc.entries) > 0 {
+	for atomic.LoadInt64(&mc.currentMemory) > mc.maxMemory && len(mc.entries) > 0 {
 		mc.evictLRU()
 	}
 	
@@ -118,7 +133,7 @@ func (mc *MemoryCache) Delete(ctx context.Context, key string) error {
 	defer mc.mu.Unlock()
 	
 	if entry, exists := mc.entries[key]; exists {
-		mc.currentMemory -= mc.estimateSize(entry.Value)
+		atomic.AddInt64(&mc.currentMemory, -entry.Size)
 		delete(mc.entries, key)
 	}
 	
@@ -131,7 +146,7 @@ func (mc *MemoryCache) Clear(ctx context.Context) error {
 	defer mc.mu.Unlock()
 	
 	mc.entries = make(map[string]*CacheEntry)
-	mc.currentMemory = 0
+	atomic.StoreInt64(&mc.currentMemory, 0)
 	
 	return nil
 }
@@ -143,7 +158,7 @@ func (mc *MemoryCache) Stats(ctx context.Context) (CacheStats, error) {
 	
 	return CacheStats{
 		TotalEntries: int64(len(mc.entries)),
-		MemoryUsage:  mc.currentMemory,
+		MemoryUsage:  atomic.LoadInt64(&mc.currentMemory),
 		HitCount:     atomic.LoadInt64(&mc.hits),
 		MissCount:    atomic.LoadInt64(&mc.misses),
 		EvictCount:   atomic.LoadInt64(&mc.evictions),
@@ -175,31 +190,85 @@ func (mc *MemoryCache) evictLRU() {
 	}
 	
 	if lruKey != "" {
-		mc.currentMemory -= mc.estimateSize(lruEntry.Value)
+		atomic.AddInt64(&mc.currentMemory, -lruEntry.Size)
 		delete(mc.entries, lruKey)
 		atomic.AddInt64(&mc.evictions, 1)
 	}
 }
 
-// estimateSize estimates the memory size of a value (simplified)
+// estimateSize estimates the memory size of a value more accurately
 func (mc *MemoryCache) estimateSize(value interface{}) int64 {
-	// This is a simplified estimation
-	// In production, you might want to use a more accurate method
+	return mc.calculateSize(value, make(map[uintptr]bool))
+}
+
+// calculateSize recursively calculates the size of a value
+func (mc *MemoryCache) calculateSize(value interface{}, visited map[uintptr]bool) int64 {
+	if value == nil {
+		return 0
+	}
+
+	var size int64 = 0
+
 	switch v := value.(type) {
 	case string:
-		return int64(len(v))
+		// String header is 16 bytes + string content
+		size = 16 + int64(len(v))
+	
 	case []byte:
-		return int64(len(v))
+		// Slice header is 24 bytes + byte content
+		size = 24 + int64(len(v))
+	
+	case int, int32, int64, uint, uint32, uint64:
+		size = 8
+	
+	case float32:
+		size = 4
+	
+	case float64:
+		size = 8
+	
+	case bool:
+		size = 1
+	
 	case map[string]interface{}:
-		// Rough estimate for maps
-		return int64(len(v) * 100)
+		// Map header is about 48 bytes
+		size = 48
+		for k, v := range v {
+			// Add key size
+			size += 16 + int64(len(k))
+			// Add value size recursively
+			size += mc.calculateSize(v, visited)
+		}
+	
 	case []interface{}:
-		// Rough estimate for slices
-		return int64(len(v) * 50)
+		// Slice header is 24 bytes
+		size = 24
+		for _, elem := range v {
+			size += mc.calculateSize(elem, visited)
+		}
+	
+	case map[string]string:
+		// Map header is about 48 bytes
+		size = 48
+		for k, v := range v {
+			// String key and value
+			size += 16 + int64(len(k)) + 16 + int64(len(v))
+		}
+	
+	case []string:
+		// Slice header is 24 bytes
+		size = 24
+		for _, s := range v {
+			size += 16 + int64(len(s))
+		}
+	
 	default:
-		// Default size for other types
-		return 64
+		// For unknown types, use a conservative estimate
+		// This includes struct overhead
+		size = 64
 	}
+
+	return size
 }
 
 // cleanupLoop runs periodic cleanup of expired entries
@@ -225,7 +294,7 @@ func (mc *MemoryCache) cleanupExpired() {
 	now := time.Now()
 	for key, entry := range mc.entries {
 		if now.Sub(entry.CreatedAt) > entry.TTL {
-			mc.currentMemory -= mc.estimateSize(entry.Value)
+			atomic.AddInt64(&mc.currentMemory, -entry.Size)
 			delete(mc.entries, key)
 			atomic.AddInt64(&mc.evictions, 1)
 		}

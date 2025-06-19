@@ -202,16 +202,40 @@ func (s *Server) handleQueryBuilder(ctx context.Context, params map[string]inter
 	if !ok || eventType == "" {
 		return nil, fmt.Errorf("event_type parameter is required")
 	}
+	
+	// Sanitize event type
+	eventType, err := s.nrqlValidator.SanitizeIdentifier(eventType)
+	if err != nil {
+		return nil, fmt.Errorf("invalid event_type: %w", err)
+	}
 
 	selectFields, ok := params["select"].([]interface{})
 	if !ok || len(selectFields) == 0 {
 		return nil, fmt.Errorf("select parameter is required")
 	}
 
-	// Build SELECT clause
+	// Build SELECT clause with sanitized fields
 	selectClauses := make([]string, len(selectFields))
 	for i, field := range selectFields {
-		selectClauses[i] = field.(string)
+		fieldStr, ok := field.(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid select field at index %d", i)
+		}
+		// Don't sanitize aggregate functions, just validate they're safe
+		if strings.Contains(fieldStr, "(") {
+			// Validate it's a known aggregate function
+			if !isValidAggregateFunction(fieldStr) {
+				return nil, fmt.Errorf("invalid aggregate function: %s", fieldStr)
+			}
+			selectClauses[i] = fieldStr
+		} else {
+			// Sanitize regular field names
+			sanitized, err := s.nrqlValidator.SanitizeIdentifier(fieldStr)
+			if err != nil {
+				return nil, fmt.Errorf("invalid select field '%s': %w", fieldStr, err)
+			}
+			selectClauses[i] = sanitized
+		}
 	}
 
 	// Start building query
@@ -231,13 +255,19 @@ func (s *Server) handleQueryBuilder(ctx context.Context, params map[string]inter
 		query += fmt.Sprintf(" FACET %s", strings.Join(facets, ", "))
 	}
 
-	// Add time range
+	// Add time range with validation
 	since := "1 hour ago"
-	if s, ok := params["since"].(string); ok {
-		since = s
+	if sinceParam, ok := params["since"].(string); ok && sinceParam != "" {
+		if err := s.nrqlValidator.ValidateTimeRange(sinceParam); err != nil {
+			return nil, fmt.Errorf("invalid since time: %w", err)
+		}
+		since = sinceParam
 	}
 	until := "now"
-	if u, ok := params["until"].(string); ok {
+	if u, ok := params["until"].(string); ok && u != "" {
+		if err := s.nrqlValidator.ValidateTimeRange(u); err != nil {
+			return nil, fmt.Errorf("invalid until time: %w", err)
+		}
 		until = u
 	}
 	query += fmt.Sprintf(" SINCE %s UNTIL %s", since, until)
@@ -269,56 +299,15 @@ func (s *Server) handleQueryBuilder(ctx context.Context, params map[string]inter
 // Helper functions for query operations
 
 func (s *Server) validateNRQLSafety(query string) error {
-	// Check for potentially dangerous operations
-	dangerousPatterns := []string{
-		"(?i)\\bDROP\\b",
-		"(?i)\\bDELETE\\b",
-		"(?i)\\bUPDATE\\b",
-		"(?i)\\bINSERT\\b",
-		"(?i)\\bCREATE\\b",
-		"(?i)\\bALTER\\b",
-	}
-
-	for _, pattern := range dangerousPatterns {
-		if matched, _ := regexp.MatchString(pattern, query); matched {
-			return fmt.Errorf("query contains potentially dangerous operation")
-		}
-	}
-
-	return nil
+	// Use the validator to sanitize and check the query
+	_, err := s.nrqlValidator.Sanitize(query)
+	return err
 }
 
 func (s *Server) validateNRQLSyntax(query string) error {
-	// Basic NRQL syntax validation
-	query = strings.TrimSpace(query)
-	
-	// Must start with SELECT
-	if !strings.HasPrefix(strings.ToUpper(query), "SELECT") {
-		return fmt.Errorf("NRQL query must start with SELECT")
-	}
-
-	// Must have FROM clause
-	if !regexp.MustCompile(`(?i)\bFROM\b`).MatchString(query) {
-		return fmt.Errorf("NRQL query must have a FROM clause")
-	}
-
-	// Check for balanced parentheses
-	parenCount := 0
-	for _, ch := range query {
-		if ch == '(' {
-			parenCount++
-		} else if ch == ')' {
-			parenCount--
-		}
-		if parenCount < 0 {
-			return fmt.Errorf("unbalanced parentheses in query")
-		}
-	}
-	if parenCount != 0 {
-		return fmt.Errorf("unbalanced parentheses in query")
-	}
-
-	return nil
+	// Use the validator for comprehensive syntax checking
+	_, err := s.nrqlValidator.Sanitize(query)
+	return err
 }
 
 func (s *Server) analyzeQueryComplexity(query string) map[string]interface{} {
@@ -493,7 +482,7 @@ func (s *Server) estimateQueryCost(query string) map[string]interface{} {
 // executeNRQLQuery executes the actual query using the New Relic client
 func (s *Server) executeNRQLQuery(ctx context.Context, query string, accountID interface{}) (interface{}, error) {
 	// Check if we have a New Relic client
-	if s.nrClient == nil {
+	if s.getNRClient() == nil {
 		// If no client, return mock response for development
 		return map[string]interface{}{
 			"results": []map[string]interface{}{
@@ -512,7 +501,8 @@ func (s *Server) executeNRQLQuery(ctx context.Context, query string, accountID i
 
 	// Use reflection to call QueryNRQL method
 	// This avoids circular imports while still allowing real execution
-	clientValue := reflect.ValueOf(s.nrClient)
+	client := s.getNRClient()
+	clientValue := reflect.ValueOf(client)
 	method := clientValue.MethodByName("QueryNRQL")
 	if !method.IsValid() {
 		return nil, fmt.Errorf("QueryNRQL method not found on client")
@@ -536,4 +526,38 @@ func (s *Server) executeNRQLQuery(ctx context.Context, query string, accountID i
 
 	// Return the NRQLResult
 	return results[0].Interface(), nil
+}
+
+// isValidAggregateFunction checks if a string is a valid NRQL aggregate function
+func isValidAggregateFunction(fn string) bool {
+	fn = strings.ToLower(strings.TrimSpace(fn))
+	
+	// List of valid NRQL aggregate functions
+	validFunctions := []string{
+		"average(", "avg(",
+		"count(",
+		"latest(",
+		"max(",
+		"median(",
+		"min(",
+		"percentage(",
+		"percentile(",
+		"rate(",
+		"stddev(",
+		"sum(",
+		"uniqueCount(", "uniques(",
+		"apdex(",
+		"histogram(",
+		"keyset(",
+		"eventType(",
+		"filter(",
+	}
+	
+	for _, valid := range validFunctions {
+		if strings.HasPrefix(fn, valid) {
+			return true
+		}
+	}
+	
+	return false
 }
