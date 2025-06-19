@@ -107,8 +107,12 @@ func (t *HTTPTransport) handleMCP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
+	// Create a context with a longer timeout for tool execution
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	
 	// Handle message
-	response, err := handler.HandleMessage(r.Context(), body)
+	response, err := handler.HandleMessage(ctx, body)
 	if err != nil {
 		handler.OnError(fmt.Errorf("handle message: %w", err))
 		http.Error(w, "Internal server error", http.StatusInternalServerError)

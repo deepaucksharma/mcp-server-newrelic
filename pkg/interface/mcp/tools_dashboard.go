@@ -5,8 +5,21 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
+
+	"github.com/deepaucksharma/mcp-server-newrelic/pkg/newrelic"
+)
+
+// Dashboard limits as per NerdGraph documentation
+const (
+	MaxPagesPerDashboard = 25
+	MaxWidgetsPerPage    = 150
+	MaxDashboardColumns  = 12
+	MaxWidgetHeight      = 32
+	MaxDashboardNameLen  = 255
+	MaxDashboardDescLen  = 1024
 )
 
 // registerDashboardTools registers dashboard-related tools
@@ -48,7 +61,7 @@ func (s *Server) registerDashboardTools() error {
 			Properties: map[string]Property{
 				"template": {
 					Type:        "string",
-					Description: "Template name: 'golden-signals', 'sli-slo', 'infrastructure', 'custom'",
+					Description: "Template name: 'golden-signals', 'sli-slo', 'infrastructure', 'custom', 'discovery-based'",
 				},
 				"name": {
 					Type:        "string",
@@ -69,6 +82,17 @@ func (s *Server) registerDashboardTools() error {
 				"custom_config": {
 					Type:        "object",
 					Description: "Custom dashboard configuration",
+				},
+				"domain": {
+					Type:        "string",
+					Description: "Domain for discovery-based template (e.g. 'kafka', 'redis', 'mysql')",
+				},
+				"account_ids": {
+					Type:        "array",
+					Description: "List of account IDs for cross-account dashboards",
+					Items: &Property{
+						Type: "integer",
+					},
 				},
 			},
 		},
@@ -121,6 +145,78 @@ func (s *Server) registerDashboardTools() error {
 			},
 		},
 		Handler: s.handleGetDashboard,
+	})
+
+	// Update dashboard
+	s.tools.Register(Tool{
+		Name:        "update_dashboard",
+		Description: "Update an existing dashboard",
+		Parameters: ToolParameters{
+			Type:     "object",
+			Required: []string{"dashboard_id", "updates"},
+			Properties: map[string]Property{
+				"dashboard_id": {
+					Type:        "string",
+					Description: "Dashboard GUID to update",
+				},
+				"updates": {
+					Type:        "object",
+					Description: "Dashboard updates (name, description, pages, permissions)",
+				},
+			},
+		},
+		Handler: s.handleUpdateDashboard,
+	})
+
+	// Delete dashboard
+	s.tools.Register(Tool{
+		Name:        "delete_dashboard",
+		Description: "Delete a dashboard",
+		Parameters: ToolParameters{
+			Type:     "object",
+			Required: []string{"dashboard_id"},
+			Properties: map[string]Property{
+				"dashboard_id": {
+					Type:        "string",
+					Description: "Dashboard GUID to delete",
+				},
+			},
+		},
+		Handler: s.handleDeleteDashboard,
+	})
+
+	// Undelete dashboard
+	s.tools.Register(Tool{
+		Name:        "undelete_dashboard",
+		Description: "Restore a previously deleted dashboard",
+		Parameters: ToolParameters{
+			Type:     "object",
+			Required: []string{"dashboard_id"},
+			Properties: map[string]Property{
+				"dashboard_id": {
+					Type:        "string",
+					Description: "Dashboard GUID to restore",
+				},
+			},
+		},
+		Handler: s.handleUndeleteDashboard,
+	})
+
+	// Create dashboard snapshot URL
+	s.tools.Register(Tool{
+		Name:        "create_dashboard_snapshot",
+		Description: "Create a public URL for a static dashboard snapshot",
+		Parameters: ToolParameters{
+			Type:     "object",
+			Required: []string{"dashboard_id"},
+			Properties: map[string]Property{
+				"dashboard_id": {
+					Type:        "string",
+					Description: "Dashboard GUID to create snapshot for",
+				},
+			},
+		},
+		Handler: s.handleCreateDashboardSnapshot,
 	})
 
 	return nil
@@ -216,6 +312,15 @@ func (s *Server) handleGenerateDashboard(ctx context.Context, params map[string]
 		}
 		dashboard, err = s.generateCustomDashboard(dashboardName, customConfig)
 
+	case "discovery-based":
+		// Discovery-based dashboard generation
+		request := map[string]interface{}{
+			"name":         dashboardName,
+			"domain":       params["domain"],
+			"service_name": params["service_name"],
+		}
+		dashboard, err = s.generateDiscoveryBasedDashboard(ctx, dashboardName, request)
+
 	default:
 		return nil, fmt.Errorf("unsupported template: %s", template)
 	}
@@ -224,7 +329,86 @@ func (s *Server) handleGenerateDashboard(ctx context.Context, params map[string]
 		return nil, fmt.Errorf("failed to generate dashboard: %w", err)
 	}
 
-	return dashboard, nil
+	// Actually create the dashboard in New Relic
+	nrClient := s.getNRClient()
+	if nrClient == nil {
+		// Return just the config if no NR client
+		return map[string]interface{}{
+			"dashboard": dashboard,
+			"created": false,
+			"message": "Dashboard configuration generated (no New Relic client configured)",
+		}, nil
+	}
+
+	client, ok := nrClient.(*newrelic.Client)
+	if !ok {
+		return nil, fmt.Errorf("invalid New Relic client type")
+	}
+
+	// Convert map to Dashboard struct for creation
+	dashboardData := newrelic.Dashboard{
+		Name:        dashboard["name"].(string),
+		Permissions: "PUBLIC_READ_WRITE", // Default permission
+		Pages:       []newrelic.DashboardPage{},
+	}
+	
+	if desc, ok := dashboard["description"].(string); ok {
+		dashboardData.Description = desc
+	}
+
+	// Convert pages
+	if pages, ok := dashboard["pages"].([]interface{}); ok {
+		for _, p := range pages {
+			pageMap := p.(map[string]interface{})
+			page := newrelic.DashboardPage{
+				Name:    pageMap["name"].(string),
+				Widgets: []newrelic.DashboardWidget{},
+			}
+			
+			// Convert widgets
+			if widgets, ok := pageMap["widgets"].([]interface{}); ok {
+				for _, w := range widgets {
+					widgetMap := w.(map[string]interface{})
+					widget := newrelic.DashboardWidget{
+						Title: widgetMap["title"].(string),
+						Type:  widgetMap["type"].(string),
+						Query: widgetMap["query"].(string),
+						Configuration: map[string]interface{}{
+							"row":    widgetMap["row"],
+							"column": widgetMap["column"],
+							"width":  widgetMap["width"],
+							"height": widgetMap["height"],
+						},
+					}
+					page.Widgets = append(page.Widgets, widget)
+				}
+			}
+			dashboardData.Pages = append(dashboardData.Pages, page)
+		}
+	}
+
+	// Create the dashboard
+	created, err := client.CreateDashboard(ctx, dashboardData)
+	if err != nil {
+		// Return the config even if creation fails
+		return map[string]interface{}{
+			"dashboard": dashboard,
+			"created": false,
+			"error": err.Error(),
+			"message": "Dashboard configuration generated but creation failed",
+		}, nil
+	}
+
+	// Generate the dashboard URL
+	dashboardURL := fmt.Sprintf("https://one.newrelic.com/dashboards/%s", created.ID)
+
+	return map[string]interface{}{
+		"dashboard": created,
+		"created": true,
+		"dashboard_id": created.ID,
+		"dashboard_url": dashboardURL,
+		"message": fmt.Sprintf("Dashboard '%s' created successfully", dashboardName),
+	}, nil
 }
 
 // handleListDashboards lists all dashboards
@@ -241,31 +425,48 @@ func (s *Server) handleListDashboards(ctx context.Context, params map[string]int
 
 	includeMetadata, _ := params["include_metadata"].(bool)
 
-	// TODO: Implement actual dashboard listing using New Relic API
-	// For now, return mock data
-	dashboards := []map[string]interface{}{
-		{
-			"id":          "dashboard-1",
-			"name":        "Application Performance",
-			"description": "Key metrics for application monitoring",
-			"created_at":  time.Now().Add(-7 * 24 * time.Hour),
-			"updated_at":  time.Now().Add(-2 * time.Hour),
-		},
+	// Get New Relic client
+	nrClient := s.getNRClient()
+	if nrClient == nil {
+		return nil, fmt.Errorf("New Relic client not configured")
 	}
 
-	// Apply filter
+	client, ok := nrClient.(*newrelic.Client)
+	if !ok {
+		return nil, fmt.Errorf("invalid New Relic client type")
+	}
+
+	// List dashboards
+	var dashboardList []newrelic.Dashboard
+	var err error
+
 	if filter != "" {
-		filtered := []map[string]interface{}{}
-		for _, d := range dashboards {
-			if strings.Contains(strings.ToLower(d["name"].(string)), strings.ToLower(filter)) {
-				filtered = append(filtered, d)
-			}
-		}
-		dashboards = filtered
+		// Use search if filter is provided
+		dashboardList, err = client.SearchDashboards(ctx, filter)
+	} else {
+		// Get all dashboards
+		dashboardList, err = client.ListDashboards(ctx)
 	}
 
-	// Limit results
-	if len(dashboards) > limit {
+	if err != nil {
+		return nil, fmt.Errorf("list dashboards: %w", err)
+	}
+
+	// Convert to response format
+	dashboards := make([]map[string]interface{}, 0, len(dashboardList))
+	for _, d := range dashboardList {
+		dashboard := map[string]interface{}{
+			"id":          d.ID,
+			"name":        d.Name,
+			"created_at":  d.CreatedAt,
+			"updated_at":  d.UpdatedAt,
+			"permissions": d.Permissions,
+		}
+		dashboards = append(dashboards, dashboard)
+	}
+
+	// Apply limit
+	if limit > 0 && len(dashboards) > limit {
 		dashboards = dashboards[:limit]
 	}
 
@@ -295,33 +496,65 @@ func (s *Server) handleGetDashboard(ctx context.Context, params map[string]inter
 
 	includeQueries, _ := params["include_queries"].(bool)
 
-	// TODO: Implement actual dashboard fetching using New Relic API
-	// For now, return mock data
-	dashboard := map[string]interface{}{
-		"id":          dashboardID,
-		"name":        "Sample Dashboard",
-		"description": "Dashboard description",
-		"pages": []map[string]interface{}{
-			{
-				"name": "Page 1",
-				"widgets": []map[string]interface{}{
-					{
-						"title": "Request Rate",
-						"type":  "line",
-						"query": "SELECT rate(count(*), 1 minute) FROM Transaction TIMESERIES",
-					},
-				},
-			},
-		},
+	// Get New Relic client
+	nrClient := s.getNRClient()
+	if nrClient == nil {
+		return nil, fmt.Errorf("New Relic client not configured")
 	}
 
-	if !includeQueries {
-		// Remove queries from widgets
-		for _, page := range dashboard["pages"].([]map[string]interface{}) {
-			for _, widget := range page["widgets"].([]map[string]interface{}) {
-				delete(widget, "query")
-			}
+	client, ok := nrClient.(*newrelic.Client)
+	if !ok {
+		return nil, fmt.Errorf("invalid New Relic client type")
+	}
+
+	// Get the dashboard
+	dash, err := client.GetDashboard(ctx, dashboardID)
+	if err != nil {
+		return nil, fmt.Errorf("get dashboard: %w", err)
+	}
+
+	// Convert to response format
+	dashboard := map[string]interface{}{
+		"id":          dash.ID,
+		"guid":        dash.GUID,
+		"name":        dash.Name,
+		"description": dash.Description,
+		"permissions": dash.Permissions,
+		"created_at":  dash.CreatedAt,
+		"updated_at":  dash.UpdatedAt,
+		"account_id":  dash.AccountID,
+		"pages":       []map[string]interface{}{},
+	}
+
+	// Add pages and widgets
+	for _, page := range dash.Pages {
+		pageData := map[string]interface{}{
+			"name":    page.Name,
+			"widgets": []map[string]interface{}{},
 		}
+
+		for _, widget := range page.Widgets {
+			widgetData := map[string]interface{}{
+				"title":         widget.Title,
+				"type":          widget.Type,
+				"configuration": widget.Configuration,
+			}
+
+			// Extract query from raw configuration if requested
+			if includeQueries {
+				if rawConfig, ok := widget.Configuration["rawConfiguration"].(map[string]interface{}); ok {
+					if nrqlQueries, ok := rawConfig["nrqlQueries"].([]interface{}); ok && len(nrqlQueries) > 0 {
+						if query, ok := nrqlQueries[0].(map[string]interface{}); ok {
+							widgetData["query"] = query["query"]
+						}
+					}
+				}
+			}
+
+			pageData["widgets"] = append(pageData["widgets"].([]map[string]interface{}), widgetData)
+		}
+
+		dashboard["pages"] = append(dashboard["pages"].([]map[string]interface{}), pageData)
 	}
 
 	return dashboard, nil
@@ -568,22 +801,431 @@ func (s *Server) generateCustomDashboard(name string, config map[string]interfac
 
 // Helper function to search dashboards
 func (s *Server) searchDashboards(ctx context.Context, searchTerm, searchType string) ([]map[string]interface{}, error) {
-	// TODO: Implement actual dashboard search using New Relic API
-	// For now, return mock data
-	mockDashboards := []map[string]interface{}{
-		{
-			"id":          "dash-1",
-			"name":        "Application Performance",
-			"match_count": 3,
-			"updated_at":  time.Now().Add(-24 * time.Hour),
-			"widgets": []map[string]interface{}{
-				{
-					"title": "Transaction Duration",
-					"query": "SELECT average(duration) FROM Transaction",
-				},
-			},
-		},
+	// Get New Relic client
+	nrClient := s.getNRClient()
+	if nrClient == nil {
+		return nil, fmt.Errorf("New Relic client not configured")
 	}
 
-	return mockDashboards, nil
+	client, ok := nrClient.(*newrelic.Client)
+	if !ok {
+		return nil, fmt.Errorf("invalid New Relic client type")
+	}
+
+	// Search dashboards by name
+	dashboards, err := client.SearchDashboards(ctx, searchTerm)
+	if err != nil {
+		return nil, fmt.Errorf("search dashboards: %w", err)
+	}
+
+	// For more detailed search (by metric/attribute), we need to fetch each dashboard
+	results := []map[string]interface{}{}
+	
+	for _, dash := range dashboards {
+		// For basic name search, just include the dashboard
+		if searchType == "dashboard_name" || strings.Contains(strings.ToLower(dash.Name), strings.ToLower(searchTerm)) {
+			results = append(results, map[string]interface{}{
+				"id":          dash.ID,
+				"name":        dash.Name,
+				"match_count": 1, // Name match
+				"updated_at":  dash.UpdatedAt,
+			})
+			continue
+		}
+
+		// For metric/attribute search, we need to fetch full dashboard details
+		if searchType == "metric" || searchType == "attribute" || searchType == "any" {
+			fullDash, err := client.GetDashboard(ctx, dash.ID)
+			if err != nil {
+				// Skip if we can't get details
+				continue
+			}
+
+			matchCount := 0
+			matchingWidgets := []map[string]interface{}{}
+
+			// Search through all widgets
+			for _, page := range fullDash.Pages {
+				for _, widget := range page.Widgets {
+					// Extract query from widget configuration
+					query := ""
+					if rawConfig, ok := widget.Configuration["rawConfiguration"].(map[string]interface{}); ok {
+						if nrqlQueries, ok := rawConfig["nrqlQueries"].([]interface{}); ok && len(nrqlQueries) > 0 {
+							if q, ok := nrqlQueries[0].(map[string]interface{}); ok {
+								query = q["query"].(string)
+							}
+						}
+					}
+
+					// Check if query contains search term
+					if query != "" && strings.Contains(strings.ToLower(query), strings.ToLower(searchTerm)) {
+						matchCount++
+						matchingWidgets = append(matchingWidgets, map[string]interface{}{
+							"title": widget.Title,
+							"query": query,
+						})
+					}
+				}
+			}
+
+			if matchCount > 0 {
+				result := map[string]interface{}{
+					"id":          dash.ID,
+					"name":        dash.Name,
+					"match_count": matchCount,
+					"updated_at":  dash.UpdatedAt,
+				}
+				if len(matchingWidgets) > 0 {
+					result["widgets"] = matchingWidgets
+				}
+				results = append(results, result)
+			}
+		}
+	}
+
+	// Sort by match count (descending)
+	sort.Slice(results, func(i, j int) bool {
+		return results[i]["match_count"].(int) > results[j]["match_count"].(int)
+	})
+
+	return results, nil
+}
+
+// handleUpdateDashboard updates an existing dashboard
+func (s *Server) handleUpdateDashboard(ctx context.Context, params map[string]interface{}) (interface{}, error) {
+	dashboardID, ok := params["dashboard_id"].(string)
+	if !ok || dashboardID == "" {
+		return nil, fmt.Errorf("dashboard_id parameter is required")
+	}
+
+	updates, ok := params["updates"].(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("updates parameter is required")
+	}
+
+	// Get New Relic client
+	nrClient := s.getNRClient()
+	if nrClient == nil {
+		return nil, fmt.Errorf("New Relic client not configured")
+	}
+
+	client, ok := nrClient.(*newrelic.Client)
+	if !ok {
+		return nil, fmt.Errorf("invalid New Relic client type")
+	}
+
+	// Get existing dashboard first
+	existing, err := client.GetDashboard(ctx, dashboardID)
+	if err != nil {
+		return nil, fmt.Errorf("get existing dashboard: %w", err)
+	}
+
+	// Apply updates
+	if name, ok := updates["name"].(string); ok {
+		if len(name) > MaxDashboardNameLen {
+			return nil, fmt.Errorf("dashboard name exceeds maximum length of %d characters", MaxDashboardNameLen)
+		}
+		existing.Name = name
+	}
+	
+	if desc, ok := updates["description"].(string); ok {
+		if len(desc) > MaxDashboardDescLen {
+			return nil, fmt.Errorf("dashboard description exceeds maximum length of %d characters", MaxDashboardDescLen)
+		}
+		existing.Description = desc
+	}
+	
+	if perm, ok := updates["permissions"].(string); ok {
+		existing.Permissions = perm
+	}
+
+	// If pages are provided, validate them
+	if pages, ok := updates["pages"].([]interface{}); ok {
+		if len(pages) > MaxPagesPerDashboard {
+			return nil, fmt.Errorf("dashboard cannot have more than %d pages", MaxPagesPerDashboard)
+		}
+		// Convert and validate pages
+		dashPages := make([]newrelic.DashboardPage, len(pages))
+		for i, p := range pages {
+			page, ok := p.(map[string]interface{})
+			if !ok {
+				return nil, fmt.Errorf("invalid page at index %d", i)
+			}
+			if err := validateDashboardPage(page); err != nil {
+				return nil, fmt.Errorf("page %d: %w", i, err)
+			}
+			// Convert page structure
+			dashPages[i] = convertToDashboardPage(page)
+		}
+		existing.Pages = dashPages
+	}
+
+	// Update the dashboard
+	updated, err := client.UpdateDashboard(ctx, dashboardID, *existing)
+	if err != nil {
+		return nil, fmt.Errorf("update dashboard: %w", err)
+	}
+
+	return map[string]interface{}{
+		"dashboard": map[string]interface{}{
+			"id":          updated.ID,
+			"name":        updated.Name,
+			"permissions": updated.Permissions,
+			"updated_at":  updated.UpdatedAt,
+		},
+		"message": "Dashboard updated successfully",
+	}, nil
+}
+
+// handleDeleteDashboard deletes a dashboard
+func (s *Server) handleDeleteDashboard(ctx context.Context, params map[string]interface{}) (interface{}, error) {
+	dashboardID, ok := params["dashboard_id"].(string)
+	if !ok || dashboardID == "" {
+		return nil, fmt.Errorf("dashboard_id parameter is required")
+	}
+
+	// Get New Relic client
+	nrClient := s.getNRClient()
+	if nrClient == nil {
+		return nil, fmt.Errorf("New Relic client not configured")
+	}
+
+	client, ok := nrClient.(*newrelic.Client)
+	if !ok {
+		return nil, fmt.Errorf("invalid New Relic client type")
+	}
+
+	// Delete the dashboard
+	if err := client.DeleteDashboard(ctx, dashboardID); err != nil {
+		return nil, fmt.Errorf("delete dashboard: %w", err)
+	}
+
+	return map[string]interface{}{
+		"dashboard_id": dashboardID,
+		"message":      "Dashboard deleted successfully",
+	}, nil
+}
+
+// handleUndeleteDashboard restores a deleted dashboard
+func (s *Server) handleUndeleteDashboard(ctx context.Context, params map[string]interface{}) (interface{}, error) {
+	dashboardID, ok := params["dashboard_id"].(string)
+	if !ok || dashboardID == "" {
+		return nil, fmt.Errorf("dashboard_id parameter is required")
+	}
+
+	// Get New Relic client
+	nrClient := s.getNRClient()
+	if nrClient == nil {
+		return nil, fmt.Errorf("New Relic client not configured")
+	}
+
+	client, ok := nrClient.(*newrelic.Client)
+	if !ok {
+		return nil, fmt.Errorf("invalid New Relic client type")
+	}
+
+	// Restore the dashboard
+	restored, err := client.UndeleteDashboard(ctx, dashboardID)
+	if err != nil {
+		return nil, fmt.Errorf("undelete dashboard: %w", err)
+	}
+
+	return map[string]interface{}{
+		"dashboard": map[string]interface{}{
+			"id":          restored.ID,
+			"name":        restored.Name,
+			"permissions": restored.Permissions,
+			"created_at":  restored.CreatedAt,
+			"updated_at":  restored.UpdatedAt,
+		},
+		"message": "Dashboard restored successfully",
+	}, nil
+}
+
+// handleCreateDashboardSnapshot creates a public snapshot URL
+func (s *Server) handleCreateDashboardSnapshot(ctx context.Context, params map[string]interface{}) (interface{}, error) {
+	dashboardID, ok := params["dashboard_id"].(string)
+	if !ok || dashboardID == "" {
+		return nil, fmt.Errorf("dashboard_id parameter is required")
+	}
+
+	// Get New Relic client
+	nrClient := s.getNRClient()
+	if nrClient == nil {
+		return nil, fmt.Errorf("New Relic client not configured")
+	}
+
+	client, ok := nrClient.(*newrelic.Client)
+	if !ok {
+		return nil, fmt.Errorf("invalid New Relic client type")
+	}
+
+	// Create snapshot URL
+	url, err := client.CreateDashboardSnapshotUrl(ctx, dashboardID)
+	if err != nil {
+		return nil, fmt.Errorf("create dashboard snapshot: %w", err)
+	}
+
+	return map[string]interface{}{
+		"dashboard_id": dashboardID,
+		"snapshot_url": url,
+		"message":      "Dashboard snapshot URL created successfully. This URL will expire in 3 months.",
+	}, nil
+}
+
+// validateDashboardPage validates a dashboard page configuration
+func validateDashboardPage(page map[string]interface{}) error {
+	name, ok := page["name"].(string)
+	if !ok || name == "" {
+		return fmt.Errorf("page name is required")
+	}
+	
+	if len(name) > MaxDashboardNameLen {
+		return fmt.Errorf("page name exceeds maximum length of %d characters", MaxDashboardNameLen)
+	}
+	
+	widgets, ok := page["widgets"].([]interface{})
+	if !ok {
+		return fmt.Errorf("page must have widgets array")
+	}
+	
+	if len(widgets) > MaxWidgetsPerPage {
+		return fmt.Errorf("page has %d widgets, maximum is %d", len(widgets), MaxWidgetsPerPage)
+	}
+	
+	// Validate each widget
+	for i, w := range widgets {
+		widget, ok := w.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("widget %d is invalid", i)
+		}
+		if err := validateWidget(widget); err != nil {
+			return fmt.Errorf("widget %d: %w", i, err)
+		}
+	}
+	
+	return nil
+}
+
+// validateWidget validates widget configuration against limits
+func validateWidget(widget map[string]interface{}) error {
+	// Validate title
+	title, ok := widget["title"].(string)
+	if !ok || title == "" {
+		return fmt.Errorf("widget title is required")
+	}
+	if len(title) > MaxDashboardNameLen {
+		return fmt.Errorf("widget title exceeds maximum length of %d characters", MaxDashboardNameLen)
+	}
+	
+	// Validate layout if present
+	if layout, ok := widget["layout"].(map[string]interface{}); ok {
+		col := getIntValue(layout["column"])
+		width := getIntValue(layout["width"])
+		height := getIntValue(layout["height"])
+		
+		if col < 1 || col > MaxDashboardColumns {
+			return fmt.Errorf("column must be between 1 and %d", MaxDashboardColumns)
+		}
+		if width < 1 || width > MaxDashboardColumns {
+			return fmt.Errorf("width must be between 1 and %d", MaxDashboardColumns)
+		}
+		if col + width - 1 > MaxDashboardColumns {
+			return fmt.Errorf("widget extends beyond dashboard width (column + width > %d)", MaxDashboardColumns)
+		}
+		if height < 1 || height > MaxWidgetHeight {
+			return fmt.Errorf("height must be between 1 and %d", MaxWidgetHeight)
+		}
+	}
+	
+	// Validate query is present
+	if _, ok := widget["query"].(string); !ok {
+		if config, ok := widget["configuration"].(map[string]interface{}); ok {
+			if nrqlQueries, ok := config["nrqlQueries"].([]interface{}); !ok || len(nrqlQueries) == 0 {
+				return fmt.Errorf("widget must have at least one query")
+			}
+		} else {
+			return fmt.Errorf("widget must have a query")
+		}
+	}
+	
+	return nil
+}
+
+// convertToDashboardPage converts a map to DashboardPage structure
+func convertToDashboardPage(page map[string]interface{}) newrelic.DashboardPage {
+	dashPage := newrelic.DashboardPage{
+		Name: page["name"].(string),
+	}
+	
+	// Note: DashboardPage doesn't have a description field in the New Relic API
+	
+	if widgets, ok := page["widgets"].([]interface{}); ok {
+		dashPage.Widgets = make([]newrelic.DashboardWidget, len(widgets))
+		for i, w := range widgets {
+			widget := w.(map[string]interface{})
+			dashPage.Widgets[i] = convertToDashboardWidget(widget)
+		}
+	}
+	
+	return dashPage
+}
+
+// convertToDashboardWidget converts a map to DashboardWidget structure
+func convertToDashboardWidget(widget map[string]interface{}) newrelic.DashboardWidget {
+	dashWidget := newrelic.DashboardWidget{
+		Title: widget["title"].(string),
+		Configuration: make(map[string]interface{}),
+	}
+	
+	// Set type
+	if vizType, ok := widget["type"].(string); ok {
+		dashWidget.Type = vizType
+	} else if vizType, ok := widget["visualization"].(string); ok {
+		dashWidget.Type = vizType
+	}
+	
+	// Handle configuration
+	if config, ok := widget["configuration"].(map[string]interface{}); ok {
+		dashWidget.Configuration = config
+	} else {
+		// Build configuration from simple format
+		if query, ok := widget["query"].(string); ok {
+			dashWidget.Configuration["nrqlQueries"] = []map[string]interface{}{
+				{
+					"accountId": 0, // Will be set by the API
+					"query":     query,
+				},
+			}
+		}
+		
+		// Add layout
+		if layout, ok := widget["layout"].(map[string]interface{}); ok {
+			dashWidget.Configuration["layout"] = layout
+		} else {
+			// Default layout from row/column/width/height
+			dashWidget.Configuration["layout"] = map[string]interface{}{
+				"row":    getIntValue(widget["row"]),
+				"column": getIntValue(widget["column"]),
+				"width":  getIntValue(widget["width"]),
+				"height": getIntValue(widget["height"]),
+			}
+		}
+	}
+	
+	return dashWidget
+}
+
+// getIntValue safely gets an integer value from interface{}
+func getIntValue(v interface{}) int {
+	switch val := v.(type) {
+	case int:
+		return val
+	case float64:
+		return int(val)
+	case int64:
+		return int(val)
+	default:
+		return 0
+	}
 }

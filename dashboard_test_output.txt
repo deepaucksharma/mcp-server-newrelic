@@ -1,0 +1,27 @@
+=== Simple Dashboard Creation Test ===
+Starting MCP server...
+2025/06/20 01:07:38 logger.go:96: [INFO]  Initializing MCP server...
+2025/06/20 01:07:38 logger.go:96: [INFO]  Initializing state management...
+2025/06/20 01:07:38 logger.go:96: [INFO]  Initializing discovery engine...
+2025/06/20 01:07:38 logger.go:96: [INFO]  Initializing New Relic client...
+2025/06/20 01:07:39 logger.go:96: [INFO]  Successfully connected to New Relic account 4430445
+2025/06/20 01:07:39 logger.go:96: [INFO]  Starting MCP server with http transport...
+
+Creating dashboard...
+Response:
+{
+    "jsonrpc": "2.0",
+    "result": {
+        "content": [
+            {
+                "text": "{\n  \"created\": false,\n  \"dashboard\": {\n    \"created_at\": \"2025-06-20T01:07:43.228693308+05:30\",\n    \"description\": \"Golden signals dashboard for TestService\",\n    \"name\": \"Test Golden Signals Dashboard\",\n    \"pages\": [\n      {\n        \"name\": \"Golden Signals\",\n        \"widgets\": [\n          {\n            \"column\": 1,\n            \"height\": 3,\n            \"query\": \"SELECT average(duration) as 'Average', percentile(duration, 95) as 'P95', percentile(duration, 99) as 'P99' FROM Transaction WHERE appName = 'TestService' TIMESERIES\",\n            \"row\": 1,\n            \"title\": \"Latency (Response Time)\",\n            \"type\": \"line\",\n            \"width\": 6\n          },\n          {\n            \"column\": 7,\n            \"height\": 3,\n            \"query\": \"SELECT rate(count(*), 1 minute) as 'Requests/min' FROM Transaction WHERE appName = 'TestService' TIMESERIES\",\n            \"row\": 1,\n            \"title\": \"Traffic (Request Rate)\",\n            \"type\": \"line\",\n            \"width\": 6\n          },\n          {\n            \"column\": 1,\n            \"height\": 3,\n            \"query\": \"SELECT count(*) as 'Total Errors', percentage(count(*), WHERE error IS true) as 'Error Rate' FROM Transaction WHERE appName = 'TestService' TIMESERIES\",\n            \"row\": 4,\n            \"title\": \"Errors\",\n            \"type\": \"line\",\n            \"width\": 6\n          },\n          {\n            \"column\": 7,\n            \"height\": 3,\n            \"query\": \"SELECT average(cpuPercent) FROM SystemSample WHERE apmApplicationNames LIKE '%TestService%' TIMESERIES\",\n            \"row\": 4,\n            \"title\": \"Saturation (CPU Usage)\",\n            \"type\": \"line\",\n            \"width\": 6\n          }\n        ]\n      }\n    ],\n    \"template\": \"golden-signals\"\n  },\n  \"error\": \"create dashboard: execute request: Post \\\"https://api.newrelic.com/graphql\\\": context deadline exceeded\",\n  \"message\": \"Dashboard configuration generated but creation failed\"\n}",
+                "type": "text"
+            }
+        ]
+    },
+    "id": 1
+}
+
+❌ No dashboard URL in response
+
+=== Test completed ===

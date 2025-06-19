@@ -5,7 +5,11 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
+
+	"github.com/deepaucksharma/mcp-server-newrelic/pkg/newrelic"
 )
 
 // registerAlertTools registers alert-related tools
@@ -319,29 +323,52 @@ func (s *Server) handleCreateAlert(ctx context.Context, params map[string]interf
 		}
 	}
 
-	// Create alert condition
-	alertCondition := map[string]interface{}{
-		"id":                   fmt.Sprintf("alert-%d", time.Now().Unix()),
-		"name":                 name,
-		"query":                query,
-		"comparison":           comparison,
-		"threshold":            threshold,
-		"threshold_duration":   thresholdDuration,
-		"sensitivity":          sensitivity,
-		"auto_baseline":        autoBaseline,
-		"created_at":           time.Now(),
-		"enabled":              true,
-	}
 
 	// Add to policy if specified
-	if policyID, ok := params["policy_id"].(string); ok && policyID != "" {
-		alertCondition["policy_id"] = policyID
+	policyID, _ := params["policy_id"].(string)
+	if policyID == "" {
+		return nil, fmt.Errorf("policy_id is required")
 	}
 
-	// TODO: Actually create the alert using New Relic API
-	// For now, return the mock alert condition
+	// Get New Relic client
+	nrClient := s.getNRClient()
+	if nrClient == nil {
+		return nil, fmt.Errorf("New Relic client not configured")
+	}
+
+	client, ok := nrClient.(*newrelic.Client)
+	if !ok {
+		return nil, fmt.Errorf("invalid New Relic client type")
+	}
+
+	// Create alert condition
+	condition := newrelic.AlertCondition{
+		Name:              name,
+		Query:             query,
+		Comparison:        comparison,
+		Threshold:         threshold,
+		ThresholdDuration: int(thresholdDuration),
+		PolicyID:          policyID,
+		Enabled:           true,
+	}
+
+	created, err := client.CreateAlertCondition(ctx, condition)
+	if err != nil {
+		return nil, fmt.Errorf("create alert condition: %w", err)
+	}
+
 	return map[string]interface{}{
-		"alert":     alertCondition,
+		"alert": map[string]interface{}{
+			"id":                 created.ID,
+			"name":               created.Name,
+			"query":              created.Query,
+			"comparison":         created.Comparison,
+			"threshold":          created.Threshold,
+			"threshold_duration": created.ThresholdDuration,
+			"enabled":            created.Enabled,
+			"policy_id":          created.PolicyID,
+			"created_at":         created.CreatedAt,
+		},
 		"message":   fmt.Sprintf("Alert condition '%s' created successfully", name),
 		"threshold": map[string]interface{}{
 			"value":            threshold,
@@ -359,33 +386,45 @@ func (s *Server) handleListAlerts(ctx context.Context, params map[string]interfa
 	enabledOnly, _ := params["enabled_only"].(bool)
 	includeIncidents, _ := params["include_incidents"].(bool)
 
-	// TODO: Implement actual alert listing using New Relic API
-	// For now, return mock data
-	alerts := []map[string]interface{}{
-		{
-			"id":                 "alert-1",
-			"name":               "High Error Rate",
-			"query":              "SELECT percentage(count(*), WHERE error IS true) FROM Transaction",
-			"comparison":         "above",
-			"threshold":          5.0,
-			"threshold_duration": 5,
-			"enabled":            true,
-			"policy_id":          "policy-1",
-			"created_at":         time.Now().Add(-30 * 24 * time.Hour),
-			"updated_at":         time.Now().Add(-2 * time.Hour),
-		},
-		{
-			"id":                 "alert-2",
-			"name":               "Low Apdex Score",
-			"query":              "SELECT apdex(duration, 0.5) FROM Transaction",
-			"comparison":         "below",
-			"threshold":          0.85,
-			"threshold_duration": 10,
-			"enabled":            false,
-			"policy_id":          "policy-1",
-			"created_at":         time.Now().Add(-15 * 24 * time.Hour),
-			"updated_at":         time.Now().Add(-5 * 24 * time.Hour),
-		},
+	// Get New Relic client
+	nrClient := s.getNRClient()
+	if nrClient == nil {
+		return nil, fmt.Errorf("New Relic client not configured")
+	}
+
+	client, ok := nrClient.(*newrelic.Client)
+	if !ok {
+		return nil, fmt.Errorf("invalid New Relic client type")
+	}
+
+	// List alert conditions
+	conditions, err := client.ListAlertConditions(ctx, policyID)
+	if err != nil {
+		return nil, fmt.Errorf("list alert conditions: %w", err)
+	}
+
+	// Convert to response format
+	alerts := make([]map[string]interface{}, 0, len(conditions))
+	for _, c := range conditions {
+		// Apply enabled filter if requested
+		if enabledOnly && !c.Enabled {
+			continue
+		}
+
+		alert := map[string]interface{}{
+			"id":                 c.ID,
+			"name":               c.Name,
+			"query":              c.Query,
+			"comparison":         c.Comparison,
+			"threshold":          c.Threshold,
+			"threshold_duration": c.ThresholdDuration,
+			"enabled":            c.Enabled,
+			"policy_id":          c.PolicyID,
+			"created_at":         c.CreatedAt,
+			"updated_at":         c.UpdatedAt,
+		}
+		
+		alerts = append(alerts, alert)
 	}
 
 	// Apply filters
@@ -433,45 +472,108 @@ func (s *Server) handleAnalyzeAlerts(ctx context.Context, params map[string]inte
 		timeRange = tr
 	}
 
-	// TODO: Implement actual alert analysis using New Relic API
-	// For now, return mock analysis
+	// Get New Relic client
+	nrClient := s.getNRClient()
+	if nrClient == nil {
+		return nil, fmt.Errorf("New Relic client not configured")
+	}
+
+	client, ok := nrClient.(*newrelic.Client)
+	if !ok {
+		return nil, fmt.Errorf("invalid New Relic client type")
+	}
+
+	// Ensure timeRange has "ago" suffix
+	if !strings.HasSuffix(timeRange, " ago") {
+		timeRange = timeRange + " ago"
+	}
+
+	// Get alert analytics
+	analytics, err := client.GetAlertAnalytics(ctx, alertID, timeRange)
+	if err != nil {
+		return nil, fmt.Errorf("get alert analytics: %w", err)
+	}
+
+	// Calculate effectiveness metrics
+	incidentCount := getFloatValue(analytics["incident_count"])
+	avgDuration := getFloatValue(analytics["avg_duration_minutes"])
+	medianDuration := getFloatValue(analytics["median_duration_minutes"])
+	minDuration := getFloatValue(analytics["min_duration_minutes"])
+	maxDuration := getFloatValue(analytics["max_duration_minutes"])
+	
+	// Estimate false positive rate based on short duration incidents
+	falsePositives := 0
+	if medianDuration < 5 {
+		falsePositives = int(incidentCount * 0.15) // Estimate 15% false positives for very short incidents
+	}
+	
+	// Calculate noise ratio and effectiveness
+	noiseRatio := 0.0
+	if incidentCount > 0 {
+		noiseRatio = float64(falsePositives) / incidentCount
+	}
+	effectivenessScore := 1.0 - noiseRatio
+	
+	// Determine rating
+	rating := "Good"
+	if effectivenessScore < 0.7 {
+		rating = "Poor"
+	} else if effectivenessScore < 0.85 {
+		rating = "Fair"
+	} else if effectivenessScore > 0.95 {
+		rating = "Excellent"
+	}
+	
+	// Generate recommendations
+	recommendations := []map[string]interface{}{}
+	
+	if noiseRatio > 0.2 {
+		recommendations = append(recommendations, map[string]interface{}{
+			"type":        "threshold_adjustment",
+			"priority":    "high",
+			"description": "Consider increasing the alert threshold to reduce false positives",
+			"impact":      fmt.Sprintf("Could reduce incidents by ~%.0f%% with minimal risk", noiseRatio*100),
+		})
+	}
+	
+	if avgDuration < 10 && incidentCount > 10 {
+		recommendations = append(recommendations, map[string]interface{}{
+			"type":        "duration_adjustment",
+			"priority":    "medium",
+			"description": "Increase threshold duration to reduce alert flapping",
+			"impact":      "Would reduce noise by filtering transient spikes",
+		})
+	}
+	
+	if maxDuration > avgDuration*3 && incidentCount > 5 {
+		recommendations = append(recommendations, map[string]interface{}{
+			"type":        "multi_condition",
+			"priority":    "low",
+			"description": "Consider splitting into multiple conditions for different severity levels",
+			"impact":      "Better incident prioritization and response",
+		})
+	}
+
 	analysis := map[string]interface{}{
 		"alert_id":    alertID,
 		"time_range":  timeRange,
 		"summary": map[string]interface{}{
-			"total_incidents":      12,
-			"false_positives":      2,
-			"mean_time_to_resolve": "45 minutes",
-			"noise_ratio":          0.17,
+			"total_incidents":      int(incidentCount),
+			"false_positives":      falsePositives,
+			"mean_time_to_resolve": fmt.Sprintf("%.0f minutes", avgDuration),
+			"noise_ratio":          fmt.Sprintf("%.2f", noiseRatio),
 		},
 		"effectiveness": map[string]interface{}{
-			"score":       0.85,
-			"rating":      "Good",
-			"confidence":  "High",
+			"score":       fmt.Sprintf("%.2f", effectivenessScore),
+			"rating":      rating,
+			"confidence":  determineConfidence(incidentCount),
 		},
-		"recommendations": []map[string]interface{}{
-			{
-				"type":        "threshold_adjustment",
-				"priority":    "medium",
-				"description": "Consider increasing threshold from 5.0 to 6.5 to reduce false positives",
-				"impact":      "Would reduce incidents by ~25% with minimal risk",
-			},
-			{
-				"type":        "duration_adjustment",
-				"priority":    "low",
-				"description": "Increase threshold duration from 5 to 7 minutes for more stability",
-				"impact":      "Would reduce noise by ~15%",
-			},
-		},
-		"incident_patterns": map[string]interface{}{
-			"time_of_day": map[string]interface{}{
-				"peak_hours":      "14:00-16:00",
-				"quiet_hours":     "02:00-06:00",
-			},
-			"day_of_week": map[string]interface{}{
-				"highest": "Monday",
-				"lowest":  "Sunday",
-			},
+		"recommendations": recommendations,
+		"incident_metrics": map[string]interface{}{
+			"avg_duration_minutes":    avgDuration,
+			"median_duration_minutes": medianDuration,
+			"min_duration_minutes":    minDuration,
+			"max_duration_minutes":    maxDuration,
 		},
 	}
 
@@ -504,6 +606,17 @@ func (s *Server) handleBulkUpdateAlerts(ctx context.Context, params map[string]i
 		"results":       []map[string]interface{}{},
 	}
 
+	// Get New Relic client
+	nrClient := s.getNRClient()
+	if nrClient == nil {
+		return nil, fmt.Errorf("New Relic client not configured")
+	}
+
+	client, ok := nrClient.(*newrelic.Client)
+	if !ok {
+		return nil, fmt.Errorf("invalid New Relic client type")
+	}
+
 	// Process each alert
 	for _, alertID := range ids {
 		result := map[string]interface{}{
@@ -511,42 +624,88 @@ func (s *Server) handleBulkUpdateAlerts(ctx context.Context, params map[string]i
 			"status":   "success",
 		}
 
+		var err error
 		switch operation {
 		case "enable":
-			// TODO: Enable alert via API
-			result["message"] = "Alert enabled"
+			err = client.EnableAlertCondition(ctx, alertID)
+			if err == nil {
+				result["message"] = "Alert enabled"
+			}
 
 		case "disable":
-			// TODO: Disable alert via API
-			result["message"] = "Alert disabled"
+			err = client.DisableAlertCondition(ctx, alertID)
+			if err == nil {
+				result["message"] = "Alert disabled"
+			}
 
 		case "update_threshold":
 			if newThreshold, ok := params["new_threshold"].(float64); ok {
-				// TODO: Update with new threshold
-				result["message"] = fmt.Sprintf("Threshold updated to %.2f", newThreshold)
+				// Update with absolute threshold
+				updates := map[string]interface{}{
+					"terms": []map[string]interface{}{
+						{
+							"threshold": newThreshold,
+							"priority":  "CRITICAL",
+						},
+					},
+				}
+				_, err = client.UpdateAlertCondition(ctx, alertID, updates)
+				if err == nil {
+					result["message"] = fmt.Sprintf("Threshold updated to %.2f", newThreshold)
+				}
 			} else if multiplier, ok := params["threshold_multiplier"].(float64); ok {
-				// TODO: Get current threshold and multiply
-				currentThreshold := 5.0 // Mock current threshold
-				newThreshold := currentThreshold * multiplier
-				result["message"] = fmt.Sprintf("Threshold updated from %.2f to %.2f", currentThreshold, newThreshold)
+				// Get current condition and multiply threshold
+				conditions, getErr := client.ListAlertConditions(ctx, "")
+				if getErr != nil {
+					err = getErr
+				} else {
+					found := false
+					for _, cond := range conditions {
+						if cond.ID == alertID {
+							newThreshold := cond.Threshold * multiplier
+							updates := map[string]interface{}{
+								"terms": []map[string]interface{}{
+									{
+										"threshold":         newThreshold,
+										"thresholdDuration": cond.ThresholdDuration,
+										"operator":          cond.Comparison,
+										"priority":          "CRITICAL",
+									},
+								},
+							}
+							_, err = client.UpdateAlertCondition(ctx, alertID, updates)
+							if err == nil {
+								result["message"] = fmt.Sprintf("Threshold updated from %.2f to %.2f (multiplier: %.2f)", 
+									cond.Threshold, newThreshold, multiplier)
+							}
+							found = true
+							break
+						}
+					}
+					if !found {
+						err = fmt.Errorf("alert condition not found")
+					}
+				}
 			} else {
-				result["status"] = "failed"
-				result["error"] = "update_threshold requires new_threshold or threshold_multiplier"
+				err = fmt.Errorf("update_threshold requires new_threshold or threshold_multiplier")
 			}
 
 		case "delete":
-			// TODO: Delete alert via API
-			result["message"] = "Alert deleted"
+			err = client.DeleteAlertCondition(ctx, alertID)
+			if err == nil {
+				result["message"] = "Alert deleted"
+			}
 
 		default:
-			result["status"] = "failed"
-			result["error"] = fmt.Sprintf("Unknown operation: %s", operation)
+			err = fmt.Errorf("unknown operation: %s", operation)
 		}
 
-		if result["status"] == "success" {
-			results["successful"] = results["successful"].(int) + 1
-		} else {
+		if err != nil {
+			result["status"] = "failed"
+			result["error"] = err.Error()
 			results["failed"] = results["failed"].(int) + 1
+		} else {
+			results["successful"] = results["successful"].(int) + 1
 		}
 
 		results["results"] = append(results["results"].([]map[string]interface{}), result)
@@ -577,29 +736,37 @@ func (s *Server) handleCreateAlertPolicy(ctx context.Context, params map[string]
 		return nil, fmt.Errorf("invalid incident_preference: %s", incidentPref)
 	}
 
-	// Check for mock mode
-	if s.getNRClient() == nil {
-		return map[string]interface{}{
-			"policy": map[string]interface{}{
-				"id":                   fmt.Sprintf("policy-%d", time.Now().Unix()),
-				"name":                 name,
-				"incident_preference":  incidentPref,
-				"created_at":          time.Now(),
-			},
-			"message": "Alert policy created successfully (mock)",
-		}, nil
+	// Get New Relic client
+	nrClient := s.getNRClient()
+	if nrClient == nil {
+		return nil, fmt.Errorf("New Relic client not configured")
 	}
 
-	// TODO: Implement actual policy creation using New Relic API
-	// For now, return mock response
+	client, ok := nrClient.(*newrelic.Client)
+	if !ok {
+		return nil, fmt.Errorf("invalid New Relic client type")
+	}
+
+	// Create the policy
+	policy := newrelic.AlertPolicy{
+		Name:               name,
+		IncidentPreference: incidentPref,
+	}
+
+	created, err := client.CreateAlertPolicy(ctx, policy)
+	if err != nil {
+		return nil, fmt.Errorf("create alert policy: %w", err)
+	}
+
 	return map[string]interface{}{
 		"policy": map[string]interface{}{
-			"id":                   fmt.Sprintf("policy-%d", time.Now().Unix()),
-			"name":                 name,
-			"incident_preference":  incidentPref,
-			"created_at":          time.Now(),
+			"id":                   created.ID,
+			"name":                 created.Name,
+			"incident_preference":  created.IncidentPreference,
+			"created_at":          created.CreatedAt,
+			"updated_at":          created.UpdatedAt,
 		},
-		"message": "Alert policy created successfully",
+		"message": fmt.Sprintf("Alert policy '%s' created successfully", name),
 	}, nil
 }
 
@@ -631,24 +798,29 @@ func (s *Server) handleUpdateAlertPolicy(ctx context.Context, params map[string]
 		return nil, fmt.Errorf("at least one field to update must be provided")
 	}
 
-	// Check for mock mode
-	if s.getNRClient() == nil {
-		return map[string]interface{}{
-			"policy": map[string]interface{}{
-				"id":       policyID,
-				"updates":  updates,
-				"updated_at": time.Now(),
-			},
-			"message": "Alert policy updated successfully (mock)",
-		}, nil
+	// Get New Relic client
+	nrClient := s.getNRClient()
+	if nrClient == nil {
+		return nil, fmt.Errorf("New Relic client not configured")
 	}
 
-	// TODO: Implement actual policy update using New Relic API
+	client, ok := nrClient.(*newrelic.Client)
+	if !ok {
+		return nil, fmt.Errorf("invalid New Relic client type")
+	}
+
+	// Update the policy
+	updated, err := client.UpdateAlertPolicy(ctx, policyID, updates)
+	if err != nil {
+		return nil, fmt.Errorf("update alert policy: %w", err)
+	}
+
 	return map[string]interface{}{
 		"policy": map[string]interface{}{
-			"id":       policyID,
-			"updates":  updates,
-			"updated_at": time.Now(),
+			"id":                   updated.ID,
+			"name":                 updated.Name,
+			"incident_preference":  updated.IncidentPreference,
+			"updated_at":          updated.UpdatedAt,
 		},
 		"message": "Alert policy updated successfully",
 	}, nil
@@ -661,15 +833,22 @@ func (s *Server) handleDeleteAlertPolicy(ctx context.Context, params map[string]
 		return nil, fmt.Errorf("policy_id parameter is required")
 	}
 
-	// Check for mock mode
-	if s.getNRClient() == nil {
-		return map[string]interface{}{
-			"policy_id": policyID,
-			"message": "Alert policy deleted successfully (mock)",
-		}, nil
+	// Get New Relic client
+	nrClient := s.getNRClient()
+	if nrClient == nil {
+		return nil, fmt.Errorf("New Relic client not configured")
 	}
 
-	// TODO: Implement actual policy deletion using New Relic API
+	client, ok := nrClient.(*newrelic.Client)
+	if !ok {
+		return nil, fmt.Errorf("invalid New Relic client type")
+	}
+
+	// Delete the policy
+	if err := client.DeleteAlertPolicy(ctx, policyID); err != nil {
+		return nil, fmt.Errorf("delete alert policy: %w", err)
+	}
+
 	return map[string]interface{}{
 		"policy_id": policyID,
 		"message": "Alert policy deleted successfully",
@@ -725,36 +904,47 @@ func (s *Server) handleCreateAlertCondition(ctx context.Context, params map[stri
 		return nil, fmt.Errorf("invalid comparison: %s", comparison)
 	}
 
-	// Check for mock mode
-	if s.getNRClient() == nil {
-		return map[string]interface{}{
-			"condition": map[string]interface{}{
-				"id":                 fmt.Sprintf("condition-%d", time.Now().Unix()),
-				"policy_id":          policyID,
-				"name":               name,
-				"query":              query,
-				"threshold":          threshold,
-				"threshold_duration": thresholdDuration,
-				"comparison":         comparison,
-				"created_at":         time.Now(),
-			},
-			"message": "Alert condition created successfully (mock)",
-		}, nil
+	// Get New Relic client
+	nrClient := s.getNRClient()
+	if nrClient == nil {
+		return nil, fmt.Errorf("New Relic client not configured")
 	}
 
-	// TODO: Implement actual condition creation using New Relic API
+	client, ok := nrClient.(*newrelic.Client)
+	if !ok {
+		return nil, fmt.Errorf("invalid New Relic client type")
+	}
+
+	// Create the condition
+	condition := newrelic.AlertCondition{
+		Name:              name,
+		Query:             query,
+		Threshold:         threshold,
+		ThresholdDuration: thresholdDuration,
+		Comparison:        comparison,
+		PolicyID:          policyID,
+		Enabled:           true,
+	}
+
+	created, err := client.CreateAlertCondition(ctx, condition)
+	if err != nil {
+		return nil, fmt.Errorf("create alert condition: %w", err)
+	}
+
 	return map[string]interface{}{
 		"condition": map[string]interface{}{
-			"id":                 fmt.Sprintf("condition-%d", time.Now().Unix()),
-			"policy_id":          policyID,
-			"name":               name,
-			"query":              query,
-			"threshold":          threshold,
-			"threshold_duration": thresholdDuration,
-			"comparison":         comparison,
-			"created_at":         time.Now(),
+			"id":                 created.ID,
+			"policy_id":          created.PolicyID,
+			"name":               created.Name,
+			"query":              created.Query,
+			"threshold":          created.Threshold,
+			"threshold_duration": created.ThresholdDuration,
+			"comparison":         created.Comparison,
+			"enabled":            created.Enabled,
+			"created_at":         created.CreatedAt,
+			"updated_at":         created.UpdatedAt,
 		},
-		"message": "Alert condition created successfully",
+		"message": fmt.Sprintf("Alert condition '%s' created successfully", name),
 	}, nil
 }
 
@@ -776,17 +966,22 @@ func (s *Server) handleCloseIncident(ctx context.Context, params map[string]inte
 		accountID = "123456" // Mock account ID
 	}
 
-	// Check for mock mode
-	if s.getNRClient() == nil {
-		return map[string]interface{}{
-			"incident_id": incidentID,
-			"status":      "closed",
-			"closed_at":   time.Now(),
-			"message":     "Incident closed successfully (mock)",
-		}, nil
+	// Get New Relic client
+	nrClient := s.getNRClient()
+	if nrClient == nil {
+		return nil, fmt.Errorf("New Relic client not configured")
 	}
 
-	// TODO: Implement actual incident closure using New Relic API
+	client, ok := nrClient.(*newrelic.Client)
+	if !ok {
+		return nil, fmt.Errorf("invalid New Relic client type")
+	}
+
+	// Close the incident
+	if err := client.CloseIncident(ctx, incidentID); err != nil {
+		return nil, fmt.Errorf("close incident: %w", err)
+	}
+
 	return map[string]interface{}{
 		"incident_id": incidentID,
 		"status":      "closed",
@@ -797,17 +992,111 @@ func (s *Server) handleCloseIncident(ctx context.Context, params map[string]inte
 
 // Helper function to calculate baseline threshold
 func (s *Server) calculateBaseline(ctx context.Context, query string, sensitivity string) (float64, error) {
-	// TODO: Execute query to get historical data and calculate baseline
-	// For now, return mock baseline based on sensitivity
-	baselines := map[string]float64{
-		"low":    10.0,  // 3 standard deviations
-		"medium": 7.5,   // 2.5 standard deviations
-		"high":   5.0,   // 2 standard deviations
+	// Get New Relic client
+	nrClient := s.getNRClient()
+	if nrClient == nil {
+		return 0, fmt.Errorf("New Relic client not configured")
 	}
 
-	if baseline, ok := baselines[sensitivity]; ok {
-		return baseline, nil
+	client, ok := nrClient.(*newrelic.Client)
+	if !ok {
+		return 0, fmt.Errorf("invalid New Relic client type")
 	}
 
-	return baselines["medium"], nil
+	// Modify query to get statistics over past 7 days
+	statsQuery := fmt.Sprintf(`
+		SELECT 
+			average(value) as avg,
+			stddev(value) as stddev,
+			max(value) as max,
+			min(value) as min
+		FROM (
+			%s
+		) SINCE 7 days ago
+	`, query)
+
+	// Execute query
+	result, err := client.QueryNRQL(ctx, statsQuery)
+	if err != nil {
+		return 0, fmt.Errorf("calculate baseline: %w", err)
+	}
+
+	// Extract statistics from result
+	if len(result.Results) == 0 {
+		return 0, fmt.Errorf("no data available for baseline calculation")
+	}
+
+	stats := result.Results[0]
+	avg, _ := stats["avg"].(float64)
+	stddev, _ := stats["stddev"].(float64)
+
+	// Calculate threshold based on sensitivity
+	multipliers := map[string]float64{
+		"low":    3.0,  // 3 standard deviations
+		"medium": 2.5,  // 2.5 standard deviations  
+		"high":   2.0,  // 2 standard deviations
+	}
+
+	multiplier, ok := multipliers[sensitivity]
+	if !ok {
+		multiplier = 2.5 // default to medium
+	}
+
+	// Calculate baseline threshold
+	baseline := avg + (stddev * multiplier)
+	
+	// Ensure baseline is reasonable
+	if baseline <= 0 {
+		return avg * 1.5, nil // fallback to 150% of average
+	}
+
+	return baseline, nil
+}
+
+// Helper function to get float value from interface{}
+func getFloatValue(v interface{}) float64 {
+	switch val := v.(type) {
+	case float64:
+		return val
+	case int:
+		return float64(val)
+	case int64:
+		return float64(val)
+	case string:
+		if f, err := strconv.ParseFloat(val, 64); err == nil {
+			return f
+		}
+	}
+	return 0
+}
+
+// Helper function to determine confidence level based on sample size
+func determineConfidence(incidentCount float64) string {
+	if incidentCount < 5 {
+		return "Low"
+	} else if incidentCount < 20 {
+		return "Medium"
+	}
+	return "High"
+}
+
+// Helper function to generate alert recommendation
+func generateAlertRecommendation(incidentCount, avgDuration, noiseRatio float64) string {
+	if incidentCount == 0 {
+		return "No incidents recorded. Consider reviewing if the alert threshold is too high."
+	}
+	
+	if noiseRatio > 0.3 {
+		return "High noise ratio detected. Consider increasing the threshold or duration to reduce false positives."
+	}
+	
+	if avgDuration < 5 {
+		return "Very short incident durations suggest possible flapping. Consider increasing the threshold duration."
+	}
+	
+	if noiseRatio < 0.1 && incidentCount > 10 {
+		return "Alert is performing well with low noise ratio and good incident detection."
+	}
+	
+	return "Alert performance is acceptable. Monitor for patterns and adjust if needed."
 }

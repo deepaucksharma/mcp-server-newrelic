@@ -6,6 +6,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/deepaucksharma/mcp-server-newrelic/pkg/newrelic"
 )
 
 // registerBulkTools registers bulk operation tools
@@ -203,17 +205,90 @@ func (s *Server) handleBulkTagEntities(ctx context.Context, params map[string]in
 		}, nil
 	}
 
-	// TODO: Implement actual bulk tagging using New Relic API
-	// This would use the tagging mutation in NerdGraph
+	// Get New Relic client
+	nrClient := s.getNRClient()
+	if nrClient == nil {
+		return nil, fmt.Errorf("New Relic client not configured")
+	}
+
+	client, ok := nrClient.(*newrelic.Client)
+	if !ok {
+		return nil, fmt.Errorf("invalid New Relic client type")
+	}
+
+	// Prepare tags for mutation
+	tagInput := make([]map[string]interface{}, 0, len(tags))
+	for k, v := range tags {
+		tagInput = append(tagInput, map[string]interface{}{
+			"key":    k,
+			"values": []string{fmt.Sprintf("%v", v)},
+		})
+	}
+
+	successCount := 0
+	failedCount := 0
+	errors := []string{}
+
+	// Process entities in batches
+	batchSize := 50
+	for i := 0; i < len(guids); i += batchSize {
+		end := i + batchSize
+		if end > len(guids) {
+			end = len(guids)
+		}
+		batch := guids[i:end]
+
+		mutation := `
+			mutation($guids: [EntityGuid!]!, $tags: [TaggingTagInput!]!) {
+				taggingAddTagsToEntity(guid: $guids, tags: $tags) {
+					errors {
+						message
+					}
+				}
+			}
+		`
+
+		variables := map[string]interface{}{
+			"guids": batch,
+			"tags":  tagInput,
+		}
+
+		result, err := client.QueryGraphQL(ctx, mutation, variables)
+		if err != nil {
+			failedCount += len(batch)
+			errors = append(errors, fmt.Sprintf("batch %d: %v", i/batchSize, err))
+			continue
+		}
+
+		// Check for errors in the mutation result
+		if taggingResult, ok := result["taggingAddTagsToEntity"].(map[string]interface{}); ok {
+			if errList, ok := taggingResult["errors"].([]interface{}); ok && len(errList) > 0 {
+				failedCount += len(batch)
+				for _, e := range errList {
+					if errMap, ok := e.(map[string]interface{}); ok {
+						if msg, ok := errMap["message"].(string); ok {
+							errors = append(errors, msg)
+						}
+					}
+				}
+			} else {
+				successCount += len(batch)
+			}
+		} else {
+			successCount += len(batch)
+		}
+	}
+
 	return map[string]interface{}{
 		"summary": map[string]interface{}{
 			"total_entities": len(guids),
 			"total_tags":     len(tags),
 			"operation":      operation,
-			"success":        len(guids),
-			"failed":         0,
+			"success":        successCount,
+			"failed":         failedCount,
 		},
-		"message": "Tags applied successfully",
+		"errors":  errors,
+		"message": fmt.Sprintf("Tags applied: %d succeeded, %d failed", successCount, failedCount),
 	}, nil
 }
 
@@ -277,25 +352,70 @@ func (s *Server) handleBulkCreateMonitors(ctx context.Context, params map[string
 			continue
 		}
 
-		// Check for mock mode
-		if s.getNRClient() == nil {
+		// Get optional parameters
+		frequency := 5 // default 5 minutes
+		if freq, ok := monitor["frequency"].(float64); ok {
+			frequency = int(freq)
+		}
+		
+		locations := []string{"US_EAST_1"} // default location
+		if locs, ok := monitor["locations"].([]interface{}); ok {
+			locations = make([]string, len(locs))
+			for j, loc := range locs {
+				locations[j] = loc.(string)
+			}
+		}
+
+		// Get New Relic client
+		nrClient := s.getNRClient()
+		if nrClient == nil {
 			results = append(results, map[string]interface{}{
-				"index":      i,
-				"name":       name,
-				"status":     "success",
-				"monitor_id": fmt.Sprintf("monitor-%d-%d", time.Now().Unix(), i),
-				"url":        url,
-				"message":    "Monitor created successfully (mock)",
+				"index":  i,
+				"name":   name,
+				"status": "failed",
+				"error":  "New Relic client not configured",
 			})
-			successCount++
+			failureCount++
+			continue
+		}
+
+		client, ok := nrClient.(*newrelic.Client)
+		if !ok {
+			results = append(results, map[string]interface{}{
+				"index":  i,
+				"name":   name,
+				"status": "failed",
+				"error":  "invalid New Relic client type",
+			})
+			failureCount++
+			continue
+		}
+
+		// Create the monitor
+		mon := newrelic.SyntheticMonitor{
+			Name:      name,
+			URL:       url,
+			Frequency: frequency,
+			Locations: locations,
+		}
+
+		created, err := client.CreateSyntheticMonitor(ctx, mon)
+		if err != nil {
+			results = append(results, map[string]interface{}{
+				"index":  i,
+				"name":   name,
+				"status": "failed",
+				"error":  err.Error(),
+			})
+			failureCount++
 		} else {
-			// TODO: Implement actual monitor creation
 			results = append(results, map[string]interface{}{
 				"index":      i,
 				"name":       name,
 				"status":     "success",
-				"monitor_id": fmt.Sprintf("monitor-%d-%d", time.Now().Unix(), i),
-				"url":        url,
+				"monitor_id": created.ID,
+				"url":        created.URL,
+				"message":    "Monitor created successfully",
 			})
 			successCount++
 		}
@@ -333,34 +453,70 @@ func (s *Server) handleBulkUpdateDashboards(ctx context.Context, params map[stri
 		dashboardIDs[i] = dashboardID
 	}
 
-	// Check for mock mode
-	if s.getNRClient() == nil {
-		results := []map[string]interface{}{}
-		for _, id := range dashboardIDs {
+	// Get New Relic client
+	nrClient := s.getNRClient()
+	if nrClient == nil {
+		return nil, fmt.Errorf("New Relic client not configured")
+	}
+
+	client, ok := nrClient.(*newrelic.Client)
+	if !ok {
+		return nil, fmt.Errorf("invalid New Relic client type")
+	}
+
+	results := []map[string]interface{}{}
+	successCount := 0
+	failureCount := 0
+
+	for _, id := range dashboardIDs {
+		// Get current dashboard
+		dash, err := client.GetDashboard(ctx, id)
+		if err != nil {
+			results = append(results, map[string]interface{}{
+				"dashboard_id": id,
+				"status":       "failed",
+				"error":        fmt.Sprintf("failed to get dashboard: %v", err),
+			})
+			failureCount++
+			continue
+		}
+
+		// Apply updates
+		if name, ok := updates["name"].(string); ok {
+			dash.Name = name
+		}
+		if desc, ok := updates["description"].(string); ok {
+			dash.Description = desc
+		}
+		if perm, ok := updates["permissions"].(string); ok {
+			dash.Permissions = perm
+		}
+
+		// Update the dashboard
+		updated, err := client.UpdateDashboard(ctx, id, *dash)
+		if err != nil {
+			results = append(results, map[string]interface{}{
+				"dashboard_id": id,
+				"status":       "failed",
+				"error":        err.Error(),
+			})
+			failureCount++
+		} else {
 			results = append(results, map[string]interface{}{
 				"dashboard_id": id,
 				"status":       "success",
 				"updates":      updates,
+				"updated_at":   updated.UpdatedAt,
 			})
+			successCount++
 		}
-
-		return map[string]interface{}{
-			"summary": map[string]interface{}{
-				"total":   len(dashboardIDs),
-				"success": len(dashboardIDs),
-				"failed":  0,
-			},
-			"results": results,
-			"message": "Dashboards updated successfully (mock)",
-		}, nil
 	}
 
-	// TODO: Implement actual bulk dashboard updates
 	return map[string]interface{}{
 		"summary": map[string]interface{}{
 			"total":   len(dashboardIDs),
-			"success": len(dashboardIDs),
-			"failed":  0,
+			"success": successCount,
+			"failed":  failureCount,
 		},
 		"message": "Dashboards updated successfully",
 	}, nil
@@ -405,38 +561,63 @@ func (s *Server) handleBulkDeleteEntities(ctx context.Context, params map[string
 		return nil, fmt.Errorf("attempting to delete %d entities; set force=true to confirm", len(entityIDs))
 	}
 
-	// Check for mock mode
-	if s.getNRClient() == nil {
-		results := []map[string]interface{}{}
-		for _, id := range entityIDs {
+	// Get New Relic client
+	nrClient := s.getNRClient()
+	if nrClient == nil {
+		return nil, fmt.Errorf("New Relic client not configured")
+	}
+
+	client, ok := nrClient.(*newrelic.Client)
+	if !ok {
+		return nil, fmt.Errorf("invalid New Relic client type")
+	}
+
+	results := []map[string]interface{}{}
+	deletedCount := 0
+	failedCount := 0
+
+	for _, id := range entityIDs {
+		var err error
+		
+		// Handle different entity types
+		switch entityType {
+		case "dashboard", "monitor":
+			// Use generic entity delete
+			err = client.DeleteEntity(ctx, id)
+		case "alert_condition":
+			// Use specific alert condition delete
+			err = client.DeleteAlertCondition(ctx, id)
+		default:
+			err = fmt.Errorf("unsupported entity type: %s", entityType)
+		}
+
+		if err != nil {
+			results = append(results, map[string]interface{}{
+				"entity_id":   id,
+				"entity_type": entityType,
+				"status":      "failed",
+				"error":       err.Error(),
+			})
+			failedCount++
+		} else {
 			results = append(results, map[string]interface{}{
 				"entity_id":   id,
 				"entity_type": entityType,
 				"status":      "deleted",
 			})
+			deletedCount++
 		}
-
-		return map[string]interface{}{
-			"summary": map[string]interface{}{
-				"entity_type": entityType,
-				"total":       len(entityIDs),
-				"deleted":     len(entityIDs),
-				"failed":      0,
-			},
-			"results": results,
-			"message": "Entities deleted successfully (mock)",
-		}, nil
 	}
 
-	// TODO: Implement actual bulk deletion
 	return map[string]interface{}{
 		"summary": map[string]interface{}{
 			"entity_type": entityType,
 			"total":       len(entityIDs),
-			"deleted":     len(entityIDs),
-			"failed":      0,
+			"deleted":     deletedCount,
+			"failed":      failedCount,
 		},
-		"message": "Entities deleted successfully",
+		"results": results,
+		"message": fmt.Sprintf("%d entities deleted, %d failed", deletedCount, failedCount),
 	}, nil
 }
 
@@ -463,84 +644,132 @@ func (s *Server) handleBulkExecuteQueries(ctx context.Context, params map[string
 	// Create a timeout context for query execution
 	queryCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
 	defer cancel()
-	_ = queryCtx // Will be used when implementing actual parallel query execution
 
-	// Process each query
-	for i, qRaw := range queriesRaw {
-		query, ok := qRaw.(map[string]interface{})
-		if !ok {
-			results = append(results, map[string]interface{}{
-				"index":  i,
-				"status": "failed",
-				"error":  "invalid query configuration",
-			})
-			continue
+	if parallel && len(queriesRaw) > 1 {
+		// Parallel execution
+		type queryJob struct {
+			index  int
+			query  map[string]interface{}
+			result chan map[string]interface{}
 		}
 
-		name, _ := query["name"].(string)
-		if name == "" {
-			name = fmt.Sprintf("query_%d", i)
+		jobs := make([]queryJob, len(queriesRaw))
+		
+		// Create jobs
+		for i, qRaw := range queriesRaw {
+			query, _ := qRaw.(map[string]interface{})
+			jobs[i] = queryJob{
+				index:  i,
+				query:  query,
+				result: make(chan map[string]interface{}, 1),
+			}
 		}
 
-		nrql, ok := query["query"].(string)
-		if !ok || nrql == "" {
-			results = append(results, map[string]interface{}{
-				"index":  i,
-				"name":   name,
-				"status": "failed",
-				"error":  "query string is required",
-			})
-			continue
+		// Execute queries in parallel
+		for _, job := range jobs {
+			go func(j queryJob) {
+				result := s.executeSingleQuery(queryCtx, j.index, j.query)
+				j.result <- result
+			}(job)
 		}
 
-		// Validate NRQL
-		if err := s.validateNRQLSyntax(nrql); err != nil {
-			results = append(results, map[string]interface{}{
-				"index":  i,
-				"name":   name,
-				"status": "failed",
-				"error":  fmt.Sprintf("invalid NRQL: %v", err),
-			})
-			continue
+		// Collect results
+		for _, job := range jobs {
+			select {
+			case result := <-job.result:
+				results = append(results, result)
+			case <-queryCtx.Done():
+				results = append(results, map[string]interface{}{
+					"index":  job.index,
+					"status": "failed",
+					"error":  "query timeout",
+				})
+			}
 		}
+	} else {
+		// Sequential execution
+		for i, qRaw := range queriesRaw {
+			query, ok := qRaw.(map[string]interface{})
+			if !ok {
+				results = append(results, map[string]interface{}{
+					"index":  i,
+					"status": "failed",
+					"error":  "invalid query configuration",
+				})
+				continue
+			}
+			result := s.executeSingleQuery(queryCtx, i, query)
+			results = append(results, result)
+		}
+	}
 
-		// Check for mock mode
-		if s.getNRClient() == nil {
-			results = append(results, map[string]interface{}{
-				"index":  i,
-				"name":   name,
-				"status": "success",
-				"query":  nrql,
-				"results": []map[string]interface{}{
-					{"count": 42, "name": "mock_result"},
-				},
-				"execution_time": 100,
-			})
+	// Count successes and failures
+	successCount := 0
+	failedCount := 0
+	for _, r := range results {
+		if r["status"] == "success" {
+			successCount++
 		} else {
-			// TODO: Implement actual query execution with queryCtx
-			// In parallel mode, would use goroutines
-			// Each query would respect the timeout via queryCtx
-			results = append(results, map[string]interface{}{
-				"index":  i,
-				"name":   name,
-				"status": "success",
-				"query":  nrql,
-				"results": []map[string]interface{}{
-					{"count": 42},
-				},
-				"execution_time": 100,
-			})
+			failedCount++
 		}
 	}
 
 	return map[string]interface{}{
 		"summary": map[string]interface{}{
 			"total":           len(queriesRaw),
-			"success":         len(results),
-			"failed":          0,
+			"success":         successCount,
+			"failed":          failedCount,
 			"parallel":        parallel,
 			"total_time_ms":   time.Since(startTime).Milliseconds(),
 		},
 		"results": results,
 	}, nil
+}
+
+// Helper function to execute a single query
+func (s *Server) executeSingleQuery(ctx context.Context, index int, query map[string]interface{}) map[string]interface{} {
+	name, _ := query["name"].(string)
+	if name == "" {
+		name = fmt.Sprintf("query_%d", index)
+	}
+
+	nrql, ok := query["query"].(string)
+	if !ok || nrql == "" {
+		return map[string]interface{}{
+			"index":  index,
+			"name":   name,
+			"status": "failed",
+			"error":  "query string is required",
+		}
+	}
+
+	// Validate NRQL
+	if err := s.validateNRQLSyntax(nrql); err != nil {
+		return map[string]interface{}{
+			"index":  index,
+			"name":   name,
+			"status": "failed",
+			"error":  fmt.Sprintf("invalid NRQL: %v", err),
+		}
+	}
+
+	// Execute query
+	queryStart := time.Now()
+	queryResult := map[string]interface{}{
+		"index":  index,
+		"name":   name,
+		"query":  nrql,
+	}
+
+	// Execute the query
+	if result, err := s.executeNRQLQuery(ctx, nrql, nil); err != nil {
+		queryResult["status"] = "failed"
+		queryResult["error"] = err.Error()
+	} else {
+		queryResult["status"] = "success"
+		queryResult["results"] = result
+		queryResult["execution_time"] = time.Since(queryStart).Milliseconds()
+	}
+
+	return queryResult
 }
