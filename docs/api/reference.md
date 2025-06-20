@@ -1,6 +1,6 @@
-# New Relic MCP Server - Complete API Reference
+# New Relic MCP Server API Reference
 
-This comprehensive reference documents all 120+ tools available in the New Relic MCP Server, organized by category and purpose. This is the definitive guide for developers and AI assistants.
+This comprehensive reference documents all tools available in the New Relic MCP Server, organized by category and purpose.
 
 ## Table of Contents
 
@@ -17,12 +17,11 @@ This comprehensive reference documents all 120+ tools available in the New Relic
 11. [Bulk Operations](#bulk-operations)
 12. [Error Handling](#error-handling)
 13. [Performance Guidelines](#performance-guidelines)
-14. [Caching Strategy](#caching-strategy)
-15. [Troubleshooting](#troubleshooting)
+14. [Troubleshooting](#troubleshooting)
 
 ## Overview
 
-The New Relic MCP Server provides AI assistants with intelligent access to New Relic observability data through 120+ specialized tools. Each tool is designed to be atomic, composable, and safe.
+The New Relic MCP Server provides AI assistants with intelligent access to New Relic observability data through specialized tools. Each tool is designed to be atomic, composable, and safe.
 
 ### Design Principles
 
@@ -96,19 +95,6 @@ eventSource.onmessage = (event) => {
   const result = JSON.parse(event.data);
   console.log('Received:', result);
 };
-
-// Call tool with streaming
-fetch('http://localhost:8080/v1/tools/call', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    tool: 'analysis.monitor_sli',
-    params: { 
-      entity_guid: 'ABC123',
-      stream: true 
-    }
-  })
-});
 ```
 
 ## Tool Categories
@@ -219,19 +205,6 @@ Discover attributes for a specific event type.
 | sample_size | integer | No | Events to sample | 1000 |
 | show_coverage | boolean | No | Calculate null percentages | true |
 | show_examples | boolean | No | Show example values | true |
-
-#### Example
-
-```json
-{
-  "tool": "discovery.explore_attributes",
-  "params": {
-    "event_type": "Transaction",
-    "sample_size": 5000,
-    "show_coverage": true
-  }
-}
-```
 
 ### discovery.profile_data_completeness
 
@@ -382,17 +355,6 @@ Build SELECT clause programmatically.
 | attributes | array | No | Raw attributes | [] |
 | aliases | object | No | Attribute aliases | {} |
 
-#### Aggregation Specification
-
-```json
-{
-  "function": "percentile",
-  "attribute": "duration",
-  "percentile": 95,
-  "alias": "p95_duration"
-}
-```
-
 ### nrql.build_where
 
 Build WHERE clause with proper escaping.
@@ -408,32 +370,6 @@ Build WHERE clause with proper escaping.
 | conditions | array | Yes | Condition specs | - |
 | operator | string | No | AND or OR | "AND" |
 | nest_groups | boolean | No | Add parentheses | false |
-
-#### Condition Specification
-
-```json
-{
-  "attribute": "appName",
-  "operator": "IN",
-  "value": ["checkout", "payment", "inventory"]
-}
-```
-
-### nrql.build_facet
-
-Build FACET clause with cases.
-
-**Category**: Utility  
-**Safety**: Safe  
-**Performance**: 10ms
-
-#### Parameters
-
-| Name | Type | Required | Description | Default |
-|------|------|----------|-------------|---------|
-| attributes | array | No | Attributes to facet | [] |
-| cases | array | No | CASES expressions | [] |
-| limit | integer | No | Result limit | 10 |
 
 ## Analysis Tools
 
@@ -520,23 +456,6 @@ Predict future values based on historical data.
 | include_confidence | boolean | No | Confidence intervals | true |
 | seasonality | string | No | Expected pattern | "auto" |
 
-### analysis.segment_comparison
-
-Compare metrics across different segments.
-
-**Category**: Analysis  
-**Safety**: Safe  
-**Performance**: 2s typical
-
-#### Parameters
-
-| Name | Type | Required | Description | Default |
-|------|------|----------|-------------|---------|
-| base_query | string | Yes | Query without FACET | - |
-| segment_attribute | string | Yes | Attribute to segment | - |
-| comparison_type | string | No | Type of comparison | "statistical" |
-| highlight_outliers | boolean | No | Flag outliers | true |
-
 ## Action Tools
 
 Action tools create, update, or delete New Relic resources.
@@ -558,22 +477,6 @@ Add tags to entities.
 | entity_guid | string | Yes | Entity to tag | - |
 | tags | object | Yes | Key-value pairs | - |
 | replace_existing | boolean | No | Replace vs merge | false |
-| dry_run | boolean | No | Preview only | false |
-
-#### entity.update_golden_metrics
-
-Configure golden signals for an entity.
-
-**Category**: Mutation  
-**Safety**: Caution  
-**Dry Run**: Supported
-
-##### Parameters
-
-| Name | Type | Required | Description | Default |
-|------|------|----------|-------------|---------|
-| entity_guid | string | Yes | Target entity | - |
-| metrics | object | Yes | Golden metric config | - |
 | dry_run | boolean | No | Preview only | false |
 
 ### Dashboard Management
@@ -616,23 +519,6 @@ Create a new dashboard.
   ]
 }
 ```
-
-#### dashboard.create_widget
-
-Add widget to existing dashboard.
-
-**Category**: Mutation  
-**Safety**: Caution  
-**Dry Run**: Supported
-
-##### Parameters
-
-| Name | Type | Required | Description | Default |
-|------|------|----------|-------------|---------|
-| dashboard_guid | string | Yes | Target dashboard | - |
-| page_guid | string | Yes | Target page | - |
-| widget | object | Yes | Widget definition | - |
-| dry_run | boolean | No | Preview only | false |
 
 #### dashboard.apply_template
 
@@ -690,37 +576,6 @@ Create alert condition.
 }
 ```
 
-#### alert.update_condition
-
-Modify existing alert.
-
-**Category**: Mutation  
-**Safety**: Caution  
-**Dry Run**: Supported
-
-##### Parameters
-
-| Name | Type | Required | Description | Default |
-|------|------|----------|-------------|---------|
-| condition_id | string | Yes | Condition to update | - |
-| updates | object | Yes | Fields to change | - |
-| dry_run | boolean | No | Preview only | false |
-
-#### alert.mute_condition
-
-Temporarily disable alerts.
-
-**Category**: Mutation  
-**Safety**: Caution
-
-##### Parameters
-
-| Name | Type | Required | Description | Default |
-|------|------|----------|-------------|---------|
-| condition_id | string | Yes | Condition to mute | - |
-| duration_minutes | integer | Yes | Mute duration | - |
-| reason | string | Yes | Mute reason | - |
-
 ## Governance Tools
 
 Governance tools help manage platform usage and adoption.
@@ -762,13 +617,6 @@ Get data ingest breakdown.
       "percentage": 30,
       "trend": "-5%"
     }
-  ],
-  "topContributors": [
-    {
-      "name": "otel-collector-prod",
-      "bytes": 2000000000000,
-      "percentage": 18.2
-    }
   ]
 }
 ```
@@ -789,21 +637,6 @@ Analyze OpenTelemetry collector volumes.
 | sort_by | string | No | Sort metric | "bytes" |
 | limit | integer | No | Result limit | 50 |
 
-#### usage.agent_ingest
-
-Compare agent vs OTLP ingest.
-
-**Category**: Governance  
-**Safety**: Safe  
-**Performance**: 2s
-
-##### Parameters
-
-| Name | Type | Required | Description | Default |
-|------|------|----------|-------------|---------|
-| period | string | No | Time window | "30d" |
-| include_projections | boolean | No | Future estimates | false |
-
 ### Dashboard Governance
 
 #### dashboard.list_widgets
@@ -821,64 +654,6 @@ Inventory all dashboard widgets.
 | cursor | string | No | Pagination cursor | null |
 | account_id | integer | No | Filter account | Current |
 | include_config | boolean | No | Full configs | false |
-
-#### dashboard.classify_widgets
-
-Analyze widget types and data sources.
-
-**Category**: Governance  
-**Safety**: Safe  
-**Performance**: 500ms per dashboard
-
-##### Parameters
-
-| Name | Type | Required | Description | Default |
-|------|------|----------|-------------|---------|
-| dashboard_guid | string | Yes | Dashboard to analyze | - |
-| include_recommendations | boolean | No | Migration tips | true |
-
-##### Response
-
-```json
-{
-  "dashboardGuid": "ABC123",
-  "totalWidgets": 46,
-  "classification": {
-    "metricWidgets": 12,
-    "eventWidgets": 34,
-    "percentMetrics": 26.1,
-    "percentEvents": 73.9
-  },
-  "metrics": [
-    "http.server.duration",
-    "cpu.usage"
-  ],
-  "eventTypes": [
-    "Transaction",
-    "PageView"
-  ],
-  "recommendations": [
-    "12 widgets could use dimensional metrics",
-    "Consider migrating Transaction queries to metrics"
-  ]
-}
-```
-
-#### metric.widget_usage_rank
-
-Rank metrics by dashboard usage.
-
-**Category**: Governance  
-**Safety**: Safe  
-**Performance**: 2s
-
-##### Parameters
-
-| Name | Type | Required | Description | Default |
-|------|------|----------|-------------|---------|
-| limit | integer | No | Top N metrics | 50 |
-| time_range | string | No | Analysis window | "30 days" |
-| include_details | boolean | No | Usage details | false |
 
 ## Utility Tools
 
@@ -901,19 +676,6 @@ Properly escape strings for NRQL.
 | value | string | Yes | String to escape | - |
 | context | string | Yes | WHERE, SELECT, FACET | - |
 
-##### Example
-
-```json
-{
-  "tool": "utility.escape_nrql_string",
-  "params": {
-    "value": "app's \"name\"",
-    "context": "WHERE"
-  }
-}
-// Returns: "app\\'s \\\"name\\\""
-```
-
 ### Query Generation
 
 #### utility.generate_golden_signal_queries
@@ -932,53 +694,6 @@ Generate standard observability queries.
 | entity_name | string | No | Specific entity | null |
 | time_range | string | No | Query time range | "1 hour" |
 | custom_attributes | array | No | Extra attributes | [] |
-
-##### Response
-
-```json
-{
-  "queries": {
-    "latency": "SELECT percentile(duration, 50, 95, 99) FROM Transaction WHERE appName = 'checkout' SINCE 1 hour ago",
-    "traffic": "SELECT rate(count(*), 1 minute) FROM Transaction WHERE appName = 'checkout' SINCE 1 hour ago",
-    "errors": "SELECT percentage(count(*), WHERE error IS true) FROM Transaction WHERE appName = 'checkout' SINCE 1 hour ago",
-    "saturation": "SELECT average(cpu.usage) FROM SystemSample WHERE appName = 'checkout' SINCE 1 hour ago"
-  }
-}
-```
-
-### Time Utilities
-
-#### utility.parse_time_range
-
-Parse time range strings to timestamps.
-
-**Category**: Utility  
-**Safety**: Safe  
-**Performance**: 1ms
-
-##### Parameters
-
-| Name | Type | Required | Description | Default |
-|------|------|----------|-------------|---------|
-| time_range | string | Yes | Range to parse | - |
-| reference_time | string | No | Base time | "now" |
-
-##### Example
-
-```json
-{
-  "tool": "utility.parse_time_range",
-  "params": {
-    "time_range": "7 days"
-  }
-}
-// Returns:
-{
-  "start": "2024-01-13T14:00:00Z",
-  "end": "2024-01-20T14:00:00Z",
-  "durationMs": 604800000
-}
-```
 
 ## Workflow Tools
 
@@ -1010,38 +725,6 @@ Initialize a new workflow execution.
 - `slo_management`: SLO workflows
 - `optimization`: Performance tuning
 
-#### workflow.execute_step
-
-Execute next workflow step.
-
-**Category**: Workflow  
-**Safety**: Depends on step  
-**Performance**: Varies
-
-##### Parameters
-
-| Name | Type | Required | Description | Default |
-|------|------|----------|-------------|---------|
-| workflow_id | string | Yes | Workflow ID | - |
-| step_id | string | No | Specific step | Next |
-| params | object | No | Step parameters | {} |
-| skip_validation | boolean | No | Skip checks | false |
-
-#### workflow.get_context
-
-Retrieve workflow state and context.
-
-**Category**: Workflow  
-**Safety**: Safe  
-**Performance**: 10ms
-
-##### Parameters
-
-| Name | Type | Required | Description | Default |
-|------|------|----------|-------------|---------|
-| workflow_id | string | Yes | Workflow ID | - |
-| include_history | boolean | No | Include steps | true |
-
 ### Investigation Workflows
 
 #### investigation.start_latency
@@ -1060,49 +743,6 @@ Begin latency investigation workflow.
 | baseline_window | string | No | Normal period | "7 days" |
 | comparison_window | string | No | Problem period | "1 hour" |
 | auto_execute | boolean | No | Run all steps | false |
-
-##### Workflow Steps
-1. Collect baseline metrics
-2. Identify anomalous patterns
-3. Check related entities
-4. Analyze contributing factors
-5. Generate recommendations
-
-#### investigation.start_error_spike
-
-Investigate error rate increases.
-
-**Category**: Workflow  
-**Safety**: Safe  
-**Performance**: 100ms to start
-
-##### Parameters
-
-| Name | Type | Required | Description | Default |
-|------|------|----------|-------------|---------|
-| entity_guid | string | Yes | Entity with errors | - |
-| error_threshold | float | No | Spike threshold | 2.0 |
-| include_logs | boolean | No | Analyze logs | true |
-| check_dependencies | boolean | No | Check upstream | true |
-
-### Incident Response
-
-#### incident.create_runbook
-
-Generate incident response runbook.
-
-**Category**: Workflow  
-**Safety**: Safe  
-**Performance**: 500ms
-
-##### Parameters
-
-| Name | Type | Required | Description | Default |
-|------|------|----------|-------------|---------|
-| alert_id | string | Yes | Triggering alert | - |
-| runbook_type | string | No | Type of runbook | "auto" |
-| include_diagnostics | boolean | No | Add queries | true |
-| team_specific | boolean | No | Team context | false |
 
 ## Bulk Operations
 
@@ -1126,53 +766,6 @@ Run multiple queries in parallel.
 | max_concurrent | integer | No | Parallelism limit | 5 |
 | stop_on_error | boolean | No | Fail fast | false |
 | timeout_per_query | integer | No | Individual timeout | 30 |
-
-##### Query Specification
-
-```json
-{
-  "id": "query-1",
-  "query": "SELECT count(*) FROM Transaction",
-  "account_id": 12345
-}
-```
-
-### Bulk Mutations
-
-#### bulk.add_tags
-
-Tag multiple entities at once.
-
-**Category**: Bulk  
-**Safety**: Caution  
-**Dry Run**: Supported
-
-##### Parameters
-
-| Name | Type | Required | Description | Default |
-|------|------|----------|-------------|---------|
-| entity_guids | array | Yes | Entities to tag | - |
-| tags | object | Yes | Tags to apply | - |
-| skip_on_error | boolean | No | Continue on fail | true |
-| batch_size | integer | No | Batch size | 50 |
-| dry_run | boolean | No | Preview only | false |
-
-#### bulk.update_alerts
-
-Modify multiple alert conditions.
-
-**Category**: Bulk  
-**Safety**: Destructive  
-**Dry Run**: Supported
-
-##### Parameters
-
-| Name | Type | Required | Description | Default |
-|------|------|----------|-------------|---------|
-| condition_ids | array | Yes | Conditions to update | - |
-| updates | object | Yes | Changes to apply | - |
-| validation_mode | string | No | Validation level | "strict" |
-| dry_run | boolean | No | Preview only | false |
 
 ## Error Handling
 
@@ -1214,7 +807,6 @@ All tools return consistent error structures for proper handling.
 
 1. **Always validate inputs first**
    ```json
-   // Validate before executing
    {
      "tool": "nrql.validate",
      "params": { "query": "..." }
@@ -1291,54 +883,13 @@ All tools return consistent error structures for proper handling.
    SELECT * FROM Transaction
    ```
 
-## Caching Strategy
-
-### Cache Headers
-
-All responses include cache control headers:
-
-```http
-Cache-Control: max-age=300, stale-while-revalidate=60
-X-Cache-Status: HIT|MISS|STALE
-X-Cache-Key: tool:params:hash
-```
-
-### Cache Levels
-
-1. **Client Cache** (Application level)
-   - LRU with 1000 entry limit
-   - TTL based on tool metadata
-   - Key: tool + params hash
-
-2. **Redis Cache** (Shared)
-   - Distributed caching
-   - Longer TTLs
-   - Cross-session sharing
-
-3. **Query Cache** (New Relic)
-   - NRQL result caching
-   - Automatic for identical queries
-   - 5 minute default TTL
-
-### Cache Invalidation
-
-```json
-{
-  "tool": "cache.invalidate",
-  "params": {
-    "pattern": "nrql.execute:*",
-    "scope": "session"
-  }
-}
-```
-
 ## Troubleshooting
 
 ### Common Issues
 
 #### 1. Empty Query Results
 
-**Symptoms**: Query returns no data
+**Symptoms**: Query returns no data  
 **Diagnosis Steps**:
 1. Check time range includes recent data
 2. Verify event type exists: `discovery.explore_event_types`
@@ -1347,7 +898,6 @@ X-Cache-Key: tool:params:hash
 
 **Solution**:
 ```json
-// Start broad, then narrow
 {
   "tool": "nrql.execute",
   "params": {
@@ -1358,7 +908,7 @@ X-Cache-Key: tool:params:hash
 
 #### 2. Timeout Errors
 
-**Symptoms**: Query times out
+**Symptoms**: Query times out  
 **Diagnosis Steps**:
 1. Check query complexity
 2. Reduce time range
@@ -1378,7 +928,7 @@ X-Cache-Key: tool:params:hash
 
 #### 3. Permission Errors
 
-**Symptoms**: Access denied errors
+**Symptoms**: Access denied errors  
 **Diagnosis Steps**:
 1. Verify API key permissions
 2. Check account access
@@ -1392,12 +942,7 @@ X-Cache-Key: tool:params:hash
 
 #### 4. Rate Limiting
 
-**Symptoms**: 429 errors
-**Diagnosis Steps**:
-1. Check rate limit headers
-2. Monitor request frequency
-3. Implement backoff
-
+**Symptoms**: 429 errors  
 **Headers to monitor**:
 ```http
 X-RateLimit-Limit: 1000
@@ -1413,46 +958,6 @@ Enable debug logging:
 export MCP_DEBUG=true
 export LOG_LEVEL=DEBUG
 ./bin/mcp-server
-```
-
-Debug information includes:
-- Full request/response payloads
-- Timing information
-- Cache hit/miss details
-- Error stack traces
-
-### Health Checks
-
-#### System Health
-```json
-{
-  "tool": "system.health",
-  "params": {}
-}
-```
-
-Returns:
-```json
-{
-  "status": "healthy",
-  "checks": {
-    "nerdgraph": "ok",
-    "redis": "ok",
-    "memory": "ok"
-  },
-  "version": "1.0.0",
-  "uptime": 3600
-}
-```
-
-#### Connection Test
-```json
-{
-  "tool": "system.test_connection",
-  "params": {
-    "test_query": true
-  }
-}
 ```
 
 ### Getting Help
@@ -1473,16 +978,6 @@ Returns:
      "tool": "system.list_tools",
      "params": {
        "category": "query"
-     }
-   }
-   ```
-
-3. **View examples**
-   ```json
-   {
-     "tool": "system.get_examples",
-     "params": {
-       "workflow": "investigate_latency"
      }
    }
    ```

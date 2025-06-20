@@ -396,10 +396,18 @@ Based on the roadmap:
 
 ## Important Files
 
+### Core Implementation
 - `cmd/mcp-server/main.go` - Entry point
 - `pkg/interface/mcp/server.go` - Core MCP server
 - `pkg/config/config.go` - Configuration
 - `Makefile` - All build commands
 - `.env.example` - Required environment vars
 
-Remember: This is a production-grade server. Quality, testing, and security are paramount.
+### Documentation (Consolidated Structure)
+- `/docs/README.md` - Documentation index
+- `/docs/api/reference.md` - Complete API reference for all 120+ tools
+- `/docs/architecture/overview.md` - System architecture
+- `/docs/architecture/discovery-first.md` - Discovery philosophy and implementation
+- `/docs/guides/deployment.md` - Production deployment guide
+
+Remember: This is a production-grade server. Quality, testing, and security are paramount. The documentation has been consolidated for easier navigation while maintaining comprehensive coverage.

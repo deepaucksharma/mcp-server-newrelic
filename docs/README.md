@@ -1,76 +1,96 @@
-# New Relic MCP Server Documentation
+# Documentation Index
 
-This directory contains the comprehensive documentation for the New Relic Model Context Protocol (MCP) Server, featuring a revolutionary **Discovery-First Architecture**.
+Welcome to the New Relic MCP Server documentation. This index provides quick access to all documentation organized by topic.
 
-## 🌟 Discovery-First Approach
+## 🚀 Getting Started
 
-The New Relic MCP Server breaks new ground by putting data discovery at the center of all operations. Instead of assuming what data exists, it explores, understands, and adapts to your actual NRDB landscape.
+- **[Quick Start Guide](../README.md#-quick-start)** - Get up and running in 5 minutes
+- **[Development Setup](./guides/development.md)** - Set up your development environment
+- **[Configuration Guide](../README.md#configuration)** - Configure the server
+- **[Discovery Ecosystem Overview](./architecture/ecosystem-overview.md)** - Understanding the complete system
 
-**Key Documentation:**
-- **[DISCOVERY_PHILOSOPHY.md](./DISCOVERY_PHILOSOPHY.md)** - The philosophical foundations of our approach
-- **[NO_ASSUMPTIONS_MANIFESTO.md](./NO_ASSUMPTIONS_MANIFESTO.md)** - Our radical commitment to zero assumptions
-- **[DISCOVERY_FIRST_ARCHITECTURE.md](./DISCOVERY_FIRST_ARCHITECTURE.md)** - Complete architectural vision
-- **[DISCOVERY_FIRST_WORKFLOWS.md](./DISCOVERY_FIRST_WORKFLOWS.md)** - First-principles workflow design
-- **[ZERO_ASSUMPTIONS_EXAMPLES.md](./ZERO_ASSUMPTIONS_EXAMPLES.md)** - Real code showing zero assumptions
-- **[DATA_OBSERVABILITY_TOOLKIT.md](./DATA_OBSERVABILITY_TOOLKIT.md)** - Platform governance and cost optimization
-- **[DISCOVERY_DRIVEN_INVESTIGATION_EXAMPLES.md](./DISCOVERY_DRIVEN_INVESTIGATION_EXAMPLES.md)** - Real-world scenarios
-- **[DISCOVERY_FIRST_CODE_EXAMPLE.md](./DISCOVERY_FIRST_CODE_EXAMPLE.md)** - Implementation patterns
-- **[../DISCOVERY_FIRST_SUMMARY.md](../DISCOVERY_FIRST_SUMMARY.md)** - Executive summary
+## 🏗️ Architecture
 
-## Documentation Structure
+- **[Architecture Overview](./architecture/overview.md)** - System design, components, and patterns
+- **[Discovery-First Architecture](./architecture/discovery-first.md)** - Technical implementation of discovery-first
+- **[Complete Architecture Reference](./architecture/complete-reference.md)** - Comprehensive system architecture
+- **[State Management](./architecture/state-management.md)** - Session and caching architecture
+- **[Data Observability Toolkit](./architecture/data-observability.md)** - Tool ecosystem
+- **[Cross-Account Support](./architecture/cross-account.md)** - Multi-account features
 
-### 📋 Core Documentation
+## 📖 API Reference
 
-1. **[QUICKSTART.md](./QUICKSTART.md)** - Get started in 5 minutes
-2. **[ARCHITECTURE.md](./ARCHITECTURE.md)** - System design and components (now discovery-first)
-3. **[API_REFERENCE_V2.md](./API_REFERENCE_V2.md)** - Complete granular tool reference
-4. **[DEPLOYMENT.md](./DEPLOYMENT.md)** - Production deployment guide
+- **[Complete API Reference](./api/reference.md)** - All 120+ tools documented
+- **[Tool Categories](./api/reference.md#tool-categories)** - Understanding tool organization
+- **[Error Handling](./api/reference.md#error-handling)** - Error codes and recovery
 
-### 🔧 Development Guides
+## 📚 Guides
 
-5. **[DEVELOPMENT.md](./DEVELOPMENT.md)** - Developer setup and workflow
-6. **[REFACTORING_GUIDE.md](./REFACTORING_GUIDE.md)** - Step-by-step guide to implement discovery-first architecture
-7. **[TOOL_GRANULARITY_ENHANCEMENT.md](./TOOL_GRANULARITY_ENHANCEMENT.md)** - Enhanced granular tool architecture
-8. **[WORKFLOW_PATTERNS_GUIDE.md](./WORKFLOW_PATTERNS_GUIDE.md)** - How to compose tools into workflows
-9. **[FUNCTIONAL_WORKFLOWS_ANALYSIS.md](./FUNCTIONAL_WORKFLOWS_ANALYSIS.md)** - Analysis of all functional scenarios
-10. **[STATE_MANAGEMENT.md](./STATE_MANAGEMENT.md)** - Session and state handling
-11. **[MIGRATION_GUIDE.md](./MIGRATION_GUIDE.md)** - Migrating from assumption-based to discovery-first
+### User Guides
+- **[Deployment Guide](./guides/deployment.md)** - Production deployment instructions
+- **[Integration Guide](./guides/integration.md)** - Integrating with other tools
+- **[LLM Integration Guide](./guides/llm-integration.md)** - Integrating with AI assistants
+- **[Migration Guide](./guides/migration.md)** - Moving from assumption-based to discovery-first
 
-### 🚀 Implementation Status
+### Development Guides
+- **[Contributing Guide](./guides/development.md#contributing)** - How to contribute
+- **[Testing Guide](./guides/testing.md)** - Writing and running tests
+- **[Refactoring Guide](./guides/refactoring.md)** - Modernizing the codebase
 
-12. **[IMPLEMENTATION_STATUS.md](./IMPLEMENTATION_STATUS.md)** - Current feature status
-13. **[ROADMAP.md](./ROADMAP.md)** - Future development plans
-14. **[CROSS_ACCOUNT_IMPLEMENTATION.md](./CROSS_ACCOUNT_IMPLEMENTATION.md)** - Cross-account dashboard support
+## 🎯 Examples & Tutorials
 
-### 📚 Reference Materials
+- **[Discovery-Driven Investigations](./examples/DISCOVERY_DRIVEN_INVESTIGATION_EXAMPLES.md)** - Real-world scenarios
+- **[Workflow Examples](./examples/DISCOVERY_FIRST_WORKFLOWS.md)** - Common workflow patterns
+- **[Workflow Patterns](./examples/workflow-patterns.md)** - Composing tools into workflows
+- **[Code Examples](./examples/DISCOVERY_FIRST_CODE_EXAMPLE.md)** - Implementation examples
+- **[Functional Workflows Analysis](./examples/functional-workflows.md)** - Breaking down monolithic approaches
 
-15. **[TECHNICAL_SPEC.md](./TECHNICAL_SPEC.md)** - Detailed technical specifications
-16. **[ARCHITECTURE_INTEGRATION.md](./ARCHITECTURE_INTEGRATION.md)** - Integrating discovery-first principles
-17. **[integration-guide.md](./integration-guide.md)** - Integration with AI assistants
+## 🔧 Technical Specifications
 
-## Quick Links
+- **[Technical Platform Spec](./technical/platform-spec.md)** - Unified build-ready blueprint
+- **[Technical Spec](./technical/specification.md)** - Detailed technical specifications
+- **[Documentation Structure](./architecture/documentation-structure.md)** - Documentation organization
 
-- **Getting Started**: Start with [QUICKSTART.md](./QUICKSTART.md)
-- **Discovery-First Approach**: Learn the philosophy via [DISCOVERY_FIRST_ARCHITECTURE.md](./DISCOVERY_FIRST_ARCHITECTURE.md)
-- **API Reference**: See [API_REFERENCE_V2.md](./API_REFERENCE_V2.md) for all granular tools
-- **Workflows**: Learn patterns from [WORKFLOW_PATTERNS_GUIDE.md](./WORKFLOW_PATTERNS_GUIDE.md)
-- **Contributing**: Check [DEVELOPMENT.md](./DEVELOPMENT.md)
-- **Architecture**: Understand the system via [ARCHITECTURE.md](./ARCHITECTURE.md)
+## 📊 Project Information
 
-## Documentation Standards
+- **[Roadmap](../ROADMAP_2025.md)** - Future development plans
+- **[Architecture Decisions](./architecture/complete-reference.md#architectural-decisions)** - Key design choices
 
-All documentation follows these principles:
-- **Discovery-first examples** - Show exploration before action
-- **No assumptions** - Always verify data existence
-- **Practical scenarios** - Real-world use cases
-- **Progressive learning** - Build understanding incrementally
-- **Tested code samples** - All examples are verified
-- **Clear, concise writing** - Get to the point quickly
+## 🔍 Philosophy & Principles
 
-## Deprecated Documentation
+- **[No Assumptions Manifesto](./philosophy/NO_ASSUMPTIONS_MANIFESTO.md)** - Our commitment to discovery
+- **[Zero Assumptions Examples](./philosophy/ZERO_ASSUMPTIONS_EXAMPLES.md)** - Practical applications
 
-The following documents are kept for historical reference but are no longer maintained:
-- track1-discovery-core.md (merged into ARCHITECTURE.md)
-- track2-interface-layer.md (merged into ARCHITECTURE.md)
-- track3-intelligence-engine.md (superseded by TOOL_GRANULARITY_ENHANCEMENT.md)
-- track4-platform-foundation.md (merged into DEPLOYMENT.md)
+## 🌟 Additional Resources
+
+- **[Troubleshooting Guide](./guides/troubleshooting.md)** - Common issues and solutions
+- **[Security Guidelines](../README.md#security)** - Security best practices
+- **[Support](../README.md#support)** - Getting help
+
+## 🎨 User Experience
+
+- **[Wow Experience Design](./ux/WOW_EXPERIENCE_DESIGN.md)** - Creating magical experiences
+- **[Visual Discovery Design](./ux/VISUAL_DISCOVERY_DESIGN.md)** - Beautiful discovery visualizations
+- **[Interactive Discovery Experiences](./ux/INTERACTIVE_DISCOVERY_EXPERIENCES.md)** - Learn by doing
+- **[Discovery Magic Moments](./ux/DISCOVERY_MAGIC_MOMENTS.md)** - Specific delight scenarios
+- **[Wow Experience Summary](./ux/WOW_EXPERIENCE_SUMMARY.md)** - Complete UX strategy
+
+---
+
+### Quick Navigation
+
+**Most Popular:**
+1. [Quick Start](../README.md#-quick-start)
+2. [API Reference](./api/reference.md)
+3. [Architecture Overview](./architecture/overview.md)
+4. [Deployment Guide](./guides/deployment.md)
+
+**For Developers:**
+1. [Development Setup](./guides/development.md)
+2. [Contributing Guide](./guides/development.md#contributing)
+3. [Testing Guide](./guides/testing.md)
+
+**For Users:**
+1. [Workflow Examples](./examples/DISCOVERY_FIRST_WORKFLOWS.md)
+2. [Migration Guide](./guides/migration.md)
+3. [Troubleshooting](./guides/troubleshooting.md)

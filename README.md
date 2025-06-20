@@ -1,23 +1,40 @@
 # New Relic MCP Server
 
-## Overview
+A **Discovery-First** Model Context Protocol (MCP) server that provides AI assistants with intelligent access to New Relic observability data. Unlike traditional tools that assume data schemas, this server explores, understands, and adapts to your actual NRDB landscape.
 
-A revolutionary **Discovery-First** Model Context Protocol (MCP) server that provides AI assistants with intelligent access to New Relic observability data. Unlike traditional tools that assume data schemas, this server explores, understands, and adapts to your actual NRDB landscape.
-
-Built in Go with full MCP DRAFT-2025 compliance, this server enables AI-powered observability workflows through a comprehensive suite of 120+ granular tools that compose into sophisticated workflows.
-
-**→ [Read the Discovery-First Architecture Summary](./DISCOVERY_FIRST_SUMMARY.md)**  
-**→ [Explore our Zero Assumptions Philosophy](./NO_ASSUMPTIONS_SUMMARY.md)**
+**Key Features:**
+- 🔍 **Discovery-First**: Never assumes data structures, always explores first
+- 🧩 **120+ Granular Tools**: Atomic operations that compose into workflows
+- 🚀 **Production-Ready**: Built in Go with resilience, caching, and monitoring
+- 🤖 **AI-Optimized**: Rich metadata guides intelligent tool usage
+- 🔄 **Multi-Transport**: STDIO, HTTP, and SSE support
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Go 1.21+
+- Go 1.21+ or Docker
 - New Relic API Key and Account ID
-- Docker (optional)
 
-### Installation
+### 5-Minute Setup
 
+#### Option 1: Using Docker (Recommended)
+```bash
+# Clone and configure
+git clone https://github.com/deepaucksharma/mcp-server-newrelic.git
+cd mcp-server-newrelic
+
+# Set up credentials
+cp .env.example .env
+# Edit .env with your New Relic API key and account ID
+
+# Start services
+docker-compose up -d
+
+# Verify installation
+curl http://localhost:8080/health
+```
+
+#### Option 2: Build from Source
 ```bash
 # Clone the repository
 git clone https://github.com/deepaucksharma/mcp-server-newrelic.git
@@ -50,6 +67,26 @@ make run-mock
 docker-compose up
 ```
 
+### Claude Desktop Configuration
+Add to `claude_desktop_config.json`:
+```json
+{
+  "mcpServers": {
+    "newrelic": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "--env-file", ".env", "uds-mcp:latest"]
+    }
+  }
+}
+```
+
+### Common Use Cases
+
+1. **Troubleshooting Performance**: "Find the slowest transactions in the last 24 hours and show me their error rates"
+2. **Infrastructure Monitoring**: "List all hosts with CPU usage over 80% and their associated applications"
+3. **Alert Management**: "Show me all critical alerts that fired in the last week"
+4. **Data Exploration**: "What custom attributes are we sending with our Transaction events?"
+
 ## 🚀 Key Features
 
 ### Discovery-First Architecture
@@ -68,128 +105,40 @@ docker-compose up
 - **Mock Mode**: Development mode with realistic responses without New Relic connection
 - **Cross-Account Support**: Query and manage resources across multiple New Relic accounts
 
-## 🎯 Discovery-First Approach
+## 🎯 Why Discovery-First?
 
-Traditional observability tools fail when they assume data structures. Our discovery-first approach:
+Traditional tools fail when they assume data structures exist. Our discovery-first approach:
 
-```yaml
-# Traditional (Fails Often)
-query: "SELECT error FROM Transaction"  # Assumes 'error' exists
+1. **Discovers** what data actually exists
+2. **Adapts** queries to match reality
+3. **Succeeds** where hardcoded queries fail
 
-# Discovery-First (Always Works)
-1. Discover what exists  → Found: error.class, httpResponseCode
-2. Build adaptive query  → "SELECT count(*) WHERE httpResponseCode >= 400"
-3. Execute with confidence → Success!
-```
+**Result**: Works across different teams, handles schema changes, and uncovers insights you didn't know to look for.
 
-This approach provides:
-- ✅ **90% fewer schema-related failures**
-- ✅ **Works across different teams' instrumentation**
-- ✅ **Adapts to schema evolution**
-- ✅ **Discovers insights you didn't know to look for**
+## 🛠️ Tool Categories
 
-## 🛠️ Available MCP Tools
+The server provides 120+ granular tools:
 
-The server provides 120+ granular tools organized into five categories:
+- **Discovery Tools**: Explore schemas, find patterns, assess data quality
+- **Query Tools**: Execute NRQL with validation, build queries dynamically
+- **Analysis Tools**: Detect anomalies, find correlations, forecast trends
+- **Action Tools**: Create dashboards, manage alerts, configure entities
+- **Governance Tools**: Analyze usage, optimize costs, audit resources
 
-### Discovery Tools (Foundation)
+Example discovery-first workflow:
 ```json
-{
-  "tool": "discovery.explore_event_types",
-  "params": {
-    "time_range": "24 hours",
-    "min_volume": 1000
-  }
-}
+// 1. Discover what exists
+{"tool": "discovery.explore_event_types"}
+
+// 2. Build query from discovery
+{"tool": "nrql.build_from_discovery", "params": {"intent": "error_rate"}}
+
+// 3. Create monitoring based on findings
+{"tool": "dashboard.create_from_discovery"}
 ```
 
-### Query Tools (Adaptive)
-```json
-{
-  "tool": "nrql.execute",
-  "params": {
-    "query": "SELECT count(*) FROM Transaction",
-    "validate_schema": true,
-    "adapt_to_missing": true
-  }
-}
-```
+See the [API Reference](./docs/api/reference.md) for complete tool documentation.
 
-### Analysis Tools (Intelligence)
-```json
-{
-  "tool": "analysis.find_anomalies",
-  "params": {
-    "metric_query": "SELECT average(duration) FROM Transaction",
-    "sensitivity": 0.8,
-    "compare_to_baseline": true
-  }
-}
-```
-
-### Action Tools (Evidence-Based)
-```json
-{
-  "tool": "alert.create_from_baseline",
-  "params": {
-    "name": "Adaptive Error Rate Alert",
-    "discover_error_indicators": true,
-    "auto_baseline": true,
-    "sensitivity": "medium"
-  }
-}
-```
-
-### Platform Governance Tools (Cost Optimization)
-```json
-{
-  "tool": "dashboard.classify_widgets",
-  "params": {
-    "dashboard_guid": "MXxEQVNIQk9BUkR8MTIz",
-    "show_migration_opportunities": true
-  }
-}
-```
-
-See [API Reference V2](./docs/API_REFERENCE_V2.md) for all 120+ tools.
-
-## 🏗️ Architecture
-
-```
-┌─────────────────────────────────────────────────┐
-│            MCP Client (AI Assistant)             │
-└────────────────────┬────────────────────────────┘
-                     │ MCP Protocol (JSON-RPC)
-┌────────────────────▼────────────────────────────┐
-│              Go MCP Server                       │
-├─────────────────────────────────────────────────┤
-│         Workflow Orchestration Layer             │
-│  • Sequential, Parallel, Conditional Patterns   │
-│  • Context Management & Finding Accumulation     │
-├─────────────────────────────────────────────────┤
-│            Granular Tool Registry                │
-│  • Discovery Tools (Schema Exploration)         │
-│  • Query Tools (Adaptive Query Building)        │
-│  • Analysis Tools (Pattern Detection)           │
-│  • Action Tools (Evidence-Based Changes)        │
-├─────────────────────────────────────────────────┤
-│              Core Components                     │
-│  • Discovery Engine (What exists?)              │
-│  • Query Adapter (How to query it?)            │
-│  • State Manager (Remember discoveries)         │
-│  • New Relic Client (GraphQL/NerdGraph)        │
-├─────────────────────────────────────────────────┤
-│  • Resilience Layer (circuit breaker, retry)    │
-│  • Observability (APM, logging, metrics)        │
-└────────────────────┬────────────────────────────┘
-                     │ HTTPS/GraphQL
-                     ▼
-            ┌─────────────────┐
-            │  New Relic API  │
-            └─────────────────┘
-```
-
-**Key Principle**: Every operation starts with discovery, not assumptions.
 
 ## 🔧 Configuration
 
@@ -236,26 +185,16 @@ make test-benchmarks
 
 ## 📚 Documentation
 
-### Discovery-First Architecture
-- **[Discovery-First Summary](./DISCOVERY_FIRST_SUMMARY.md)** - Executive overview
-- **[Architecture Vision](./docs/DISCOVERY_FIRST_ARCHITECTURE.md)** - Complete architectural design
-- **[Refactoring Guide](./docs/REFACTORING_GUIDE.md)** - Implementation roadmap
-- **[Code Examples](./docs/DISCOVERY_FIRST_CODE_EXAMPLE.md)** - Concrete implementations
-
 ### Core Documentation
-- **[Architecture Overview](./docs/ARCHITECTURE.md)** - System design and components
-- **[API Reference V2](./docs/API_REFERENCE_V2.md)** - 100+ granular tools
-- **[Workflow Patterns](./docs/WORKFLOW_PATTERNS_GUIDE.md)** - Composing tools into workflows
-- **[Development Guide](./docs/DEVELOPMENT.md)** - Setup and contribution guidelines
-- **[Deployment Guide](./docs/DEPLOYMENT.md)** - Production deployment
+- **[Architecture Overview](./docs/architecture/overview.md)** - System design and components
+- **[Discovery-First Philosophy](./docs/architecture/discovery-first.md)** - Our approach explained
+- **[API Reference](./docs/api/reference.md)** - Complete tool documentation
+- **[Deployment Guide](./docs/guides/deployment.md)** - Production deployment
 
-### Examples & Guides
-- **[Discovery Examples](./docs/DISCOVERY_DRIVEN_INVESTIGATION_EXAMPLES.md)** - Real-world scenarios
-- **[Migration Guide](./docs/MIGRATION_GUIDE.md)** - Moving to discovery-first
-- **[Functional Workflows](./docs/FUNCTIONAL_WORKFLOWS_ANALYSIS.md)** - All use cases
-
-### All Documentation
+### Quick Links
 - **[Documentation Index](./docs/README.md)** - Complete documentation listing
+- **[Development Guide](./docs/DEVELOPMENT.md)** - Contributing guidelines
+- **[Roadmap 2025](./ROADMAP_2025.md)** - Development roadmap
 
 ## 🚀 Deployment
 

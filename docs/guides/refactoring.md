@@ -10,9 +10,9 @@ The discovery-first architecture represents a fundamental shift in how we approa
 
 Use these documents in order:
 
-1. **[DISCOVERY_FIRST_ARCHITECTURE.md](./DISCOVERY_FIRST_ARCHITECTURE.md)** - Understand the complete vision
-2. **[ARCHITECTURE.md](./ARCHITECTURE.md)** - See how it integrates with existing architecture
-3. **[API_REFERENCE_V2.md](./API_REFERENCE_V2.md)** - Reference for all granular tools
+1. **[Discovery-First Architecture](./architecture/discovery-first.md)** - Understand the complete vision
+2. **[Architecture Overview](./architecture/overview.md)** - See how it integrates with existing architecture
+3. **[API Reference](./api/reference.md)** - Reference for all granular tools
 4. **[WORKFLOW_PATTERNS_GUIDE.md](./WORKFLOW_PATTERNS_GUIDE.md)** - Learn workflow composition
 5. **[MIGRATION_GUIDE.md](./MIGRATION_GUIDE.md)** - Specific migration patterns
 
