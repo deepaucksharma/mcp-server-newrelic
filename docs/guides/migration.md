@@ -405,7 +405,7 @@ migration_phases:
 ## Getting Help
 
 - Review [DISCOVERY_FIRST_ARCHITECTURE.md](./DISCOVERY_FIRST_ARCHITECTURE.md) for principles
-- See [API_REFERENCE_V2.md](./API_REFERENCE_V2.md) for tool details
+- See [API Reference](../api/reference.md) for tool details
 - Check [WORKFLOW_PATTERNS_GUIDE.md](./WORKFLOW_PATTERNS_GUIDE.md) for examples
 - Use mock mode to test migrations safely
 

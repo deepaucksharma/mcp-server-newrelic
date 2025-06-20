@@ -313,6 +313,6 @@ Track these metrics to measure refactoring success:
 - **Architecture**: [DISCOVERY_FIRST_ARCHITECTURE.md](./DISCOVERY_FIRST_ARCHITECTURE.md)
 - **Examples**: [DISCOVERY_DRIVEN_INVESTIGATION_EXAMPLES.md](./DISCOVERY_DRIVEN_INVESTIGATION_EXAMPLES.md)
 - **Patterns**: [WORKFLOW_PATTERNS_GUIDE.md](./WORKFLOW_PATTERNS_GUIDE.md)
-- **API Spec**: [API_REFERENCE_V2.md](./API_REFERENCE_V2.md)
+- **API Spec**: [API Reference](../api/reference.md)
 
 Remember: The goal is to create a system that discovers and adapts, rather than assumes and fails.

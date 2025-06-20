@@ -4,7 +4,7 @@ Welcome to the New Relic MCP Server documentation. This index provides quick acc
 
 ## 🚀 Getting Started
 
-- **[Quick Start Guide](../README.md#-quick-start)** - Get up and running in 5 minutes
+- **[Quick Start Guide](./QUICKSTART.md)** - Get up and running in 5 minutes
 - **[Development Setup](./guides/development.md)** - Set up your development environment
 - **[Configuration Guide](../README.md#configuration)** - Configure the server
 - **[Discovery Ecosystem Overview](./architecture/ecosystem-overview.md)** - Understanding the complete system
