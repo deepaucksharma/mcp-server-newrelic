@@ -43,6 +43,7 @@ Welcome to the New Relic MCP Server documentation. This index provides quick acc
 ### Development Guides
 - **[Contributing Guide](./guides/development.md#contributing)** - How to contribute
 - **[Testing Guide](./guides/testing.md)** - Writing and running tests
+- **[Comprehensive Testing Strategy](./guides/comprehensive-testing-strategy.md)** - Multi-layered test plan
 - **[Refactoring Guide](./guides/refactoring.md)** - Modernizing the codebase
 
 ## 🎯 Examples & Tutorials
