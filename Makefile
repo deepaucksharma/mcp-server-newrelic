@@ -36,7 +36,16 @@ test-benchmark:
 	@./test.sh benchmark
 
 test-coverage:
-	@./test.sh coverage
+       @./test.sh coverage
+
+integration:
+       @tests/integration/run.sh
+
+ai:
+       @tests/ai-harness/run.sh
+
+perf:
+       @tests/perf/run.sh
 
 # Run the application
 run: run-mcp
@@ -79,8 +88,9 @@ docker-run:
 
 # Code quality
 lint:
-	@echo "Running linter..."
-	@golangci-lint run
+       @echo "Running linter..."
+       @golangci-lint run
+       @scripts/assumption_scan.sh
 
 format:
 	@echo "Formatting code..."
@@ -109,9 +119,12 @@ help:
 	@echo "  test           - Run all tests"
 	@echo "  test-unit      - Run unit tests"
 	@echo "  test-integration - Run integration tests"
-	@echo "  test-benchmark - Run benchmarks"
-	@echo "  test-coverage  - Generate coverage report"
-	@echo "  lint           - Run linter"
+       @echo "  test-benchmark - Run benchmarks"
+       @echo "  test-coverage  - Generate coverage report"
+       @echo "  integration    - Run integration tests"
+       @echo "  ai             - Run AI harness"
+       @echo "  perf           - Run performance benchmarks"
+       @echo "  lint           - Run linter"
 	@echo "  format         - Format code"
 	@echo "  clean          - Clean build artifacts"
 	@echo ""

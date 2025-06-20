@@ -225,20 +225,16 @@ See [.env.example](./.env.example) for complete configuration options.
 ## 🧪 Testing
 
 ```bash
-# Run all tests
-make test
+# Fast feedback
+make lint test
 
-# Run specific test suites
-make test-unit         # Unit tests
-make test-integration  # Integration tests
-make test-mcp         # MCP protocol tests
-
-# Generate coverage report
-make test-coverage
-
-# Run benchmarks
-make test-benchmarks
+# Additional suites
+make integration   # Integration tests
+make ai            # AI harness
+make perf          # Load tests
 ```
+
+See [TESTING_STRATEGY](./docs/TESTING_STRATEGY.md) for details.
 
 ## 📚 Documentation
 
