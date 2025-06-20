@@ -97,6 +97,42 @@ eventSource.onmessage = (event) => {
 };
 ```
 
+## Multi-Account Support
+
+Many tools support querying across multiple New Relic accounts without reconfiguration. Simply add the `account_id` parameter to any supporting tool:
+
+```json
+{
+  "tool": "nrql.execute",
+  "params": {
+    "query": "SELECT count(*) FROM Transaction",
+    "account_id": "2345678"  // Different from default account
+  }
+}
+```
+
+### Account ID Parameter
+
+- **Type**: string
+- **Required**: No (uses default account if not specified)
+- **Format**: New Relic account ID as string
+- **Supported Tools**: All query, dashboard, alert, and discovery tools
+
+### Cross-Account Dashboards
+
+For dashboards that aggregate data from multiple accounts:
+
+```json
+{
+  "tool": "dashboard.create",
+  "params": {
+    "name": "Multi-Account Overview",
+    "account_ids": ["123456", "234567", "345678"],
+    "template": "cross-account-summary"
+  }
+}
+```
+
 ## Tool Categories
 
 ### Query (Read-Only Operations)
@@ -274,7 +310,7 @@ Execute a NRQL query with full control.
 | Name | Type | Required | Description | Default |
 |------|------|----------|-------------|---------|
 | query | string | Yes | NRQL query to execute | - |
-| account_id | integer | No | Target account | Default |
+| account_id | string | No | Target account ID | Default account |
 | timeout | integer | No | Timeout in seconds (1-300) | 30 |
 | include_metadata | boolean | No | Include performance data | false |
 

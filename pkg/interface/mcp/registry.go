@@ -32,6 +32,9 @@ func (r *toolRegistry) Register(tool Tool) error {
 		return fmt.Errorf("invalid tool %s: %w", tool.Name, err)
 	}
 	
+	// Enhance tool metadata for better AI guidance
+	EnhanceToolMetadata(&tool)
+	
 	r.tools[tool.Name] = &tool
 	return nil
 }
@@ -68,6 +71,50 @@ func (r *toolRegistry) Unregister(name string) error {
 	
 	delete(r.tools, name)
 	return nil
+}
+
+// ListEnhanced returns all tools with enhanced metadata
+func (r *toolRegistry) ListEnhanced() []Tool {
+	// For now, same as List until we have enhanced tools
+	return r.List()
+}
+
+// ListNames returns all registered tool names
+func (r *toolRegistry) ListNames() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	
+	names := make([]string, 0, len(r.tools))
+	for name := range r.tools {
+		names = append(names, name)
+	}
+	return names
+}
+
+// GetCategories returns all unique tool categories
+func (r *toolRegistry) GetCategories() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	
+	categories := make(map[string]bool)
+	for _, tool := range r.tools {
+		// Extract category from tool name prefix
+		// e.g., "discovery.explore" -> "discovery"
+		if len(tool.Name) > 0 {
+			for i, ch := range tool.Name {
+				if ch == '.' {
+					categories[tool.Name[:i]] = true
+					break
+				}
+			}
+		}
+	}
+	
+	result := make([]string, 0, len(categories))
+	for cat := range categories {
+		result = append(result, cat)
+	}
+	return result
 }
 
 // validateTool ensures a tool is properly configured

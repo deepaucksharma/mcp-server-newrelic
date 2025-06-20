@@ -151,31 +151,51 @@ formula: bytes = metricCount * avgMetricSizeBytes (8)
 
 ### Widget Classification Logic
 
-```python
-def _is_metric_widget(raw_cfg: dict) -> bool:
-    """NR1 Data Explorer uses metricName"""
-    return ('metricName' in raw_cfg 
-            or any('metricName' in m for m in raw_cfg.get('metrics', [])))
-
-def classify_dashboard_widgets(widgets):
-    metric_cnt, event_cnt = 0, 0
-    m_names, evt_types = set(), set()
-    
-    for w in widgets:
-        cfg = json.loads(w['rawConfiguration'])
-        if _is_metric_widget(cfg):
-            metric_cnt += 1
-            m_names.update(extract_metric_names(cfg))
-        else:
-            event_cnt += 1
-            evt_types.update(extract_event_types(cfg))
-    
-    return {
-        'metricWidgets': metric_cnt,
-        'eventWidgets': event_cnt,
-        'metricNames': list(m_names),
-        'eventTypes': list(evt_types)
+```go
+// Example implementation in Go
+func isMetricWidget(rawCfg map[string]interface{}) bool {
+    // NR1 Data Explorer uses metricName
+    if _, ok := rawCfg["metricName"]; ok {
+        return true
     }
+    
+    if metrics, ok := rawCfg["metrics"].([]interface{}); ok {
+        for _, m := range metrics {
+            if metric, ok := m.(map[string]interface{}); ok {
+                if _, hasName := metric["metricName"]; hasName {
+                    return true
+                }
+            }
+        }
+    }
+    return false
+}
+
+func classifyDashboardWidgets(widgets []Widget) map[string]interface{} {
+    metricCount, eventCount := 0, 0
+    metricNames := make(map[string]bool)
+    eventTypes := make(map[string]bool)
+    
+    for _, w := range widgets {
+        var cfg map[string]interface{}
+        json.Unmarshal([]byte(w.RawConfiguration), &cfg)
+        
+        if isMetricWidget(cfg) {
+            metricCount++
+            extractMetricNames(cfg, metricNames)
+        } else {
+            eventCount++
+            extractEventTypes(cfg, eventTypes)
+        }
+    }
+    
+    return map[string]interface{}{
+        "metricWidgets": metricCount,
+        "eventWidgets":  eventCount,
+        "metricNames":   keys(metricNames),
+        "eventTypes":    keys(eventTypes),
+    }
+}
 ```
 
 ### IngestUsage NerdGraph Query
@@ -198,47 +218,52 @@ query($account: Int!, $since: EpochMillis!, $until: EpochMillis!) {
 
 ## Enhanced Tool Metadata
 
-```python
-@mcp.tool(
-  description="""
-  Classify every widget in a dashboard as dimensional-metric-based
-  or event-NRQL-based.
+```go
+// Tool registration in Go
+func (s *Server) registerDashboardClassifyWidgets() {
+    s.tools.Register(Tool{
+        Name: "dashboard.classify_widgets",
+        Description: `Classify every widget in a dashboard as dimensional-metric-based
+or event-NRQL-based.
 
-  **Returns**
-    {
-      "dashboardGuid": "<GUID>",
-      "metricWidgets": 12,
-      "eventWidgets": 34,
-      "metricNames": ["aws.lambda.Duration", "http.server.duration", ...],
-      "eventTypes": ["Transaction", "PageView", ...]
-    }
+**Returns**
+{
+  "dashboardGuid": "<GUID>",
+  "metricWidgets": 12,
+  "eventWidgets": 34,
+  "metricNames": ["aws.lambda.Duration", "http.server.duration", ...],
+  "eventTypes": ["Transaction", "PageView", ...]
+}
 
-  **Use it when**
-  • You need adoption stats of Metrics API
-  • Before recommending NRQL-to-Metrics migration
-  • Analyzing dashboard composition
-  • Cost optimization planning
+**Use it when**
+• You need adoption stats of Metrics API
+• Before recommending NRQL-to-Metrics migration
+• Analyzing dashboard composition
+• Cost optimization planning
 
-  **Discovery-first approach**
-  • No assumptions about widget structure
-  • Handles varied dashboard configurations
-  • Adapts to new widget types
-  """,
-  readOnlyHint=True,
-  cacheable=True,
-  performance={
-    "expectedLatencyMs": 500,
-    "scalesWithInput": "linear"
-  },
-  input_schema={
-    "type": "object",
-    "properties": {
-      "dashboardGuid": {"type": "string"}
-    },
-    "required": ["dashboardGuid"]
-  }
-)
-def dashboard_classify_widgets(dashboardGuid: str): ...
+**Discovery-first approach**
+• No assumptions about widget structure
+• Handles varied dashboard configurations
+• Adapts to new widget types`,
+        ReadOnly: true,
+        Cacheable: true,
+        Performance: PerformanceHints{
+            ExpectedLatencyMs: 500,
+            ScalesWithInput: "linear",
+        },
+        Parameters: ToolParameters{
+            Type: "object",
+            Properties: map[string]Property{
+                "dashboardGuid": {
+                    Type: "string",
+                    Description: "GUID of the dashboard to classify",
+                },
+            },
+            Required: []string{"dashboardGuid"},
+        },
+        Handler: s.handleDashboardClassifyWidgets,
+    })
+}
 ```
 
 ## Workflow Example: Platform Governance Analysis

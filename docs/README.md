@@ -2,6 +2,14 @@
 
 Welcome to the New Relic MCP Server documentation. This index provides quick access to all documentation organized by topic.
 
+⚠️ **Important**: While documentation describes 120+ tools and advanced features, the current implementation includes only ~10-15 basic tools. See [Implementation Gaps Analysis](./IMPLEMENTATION_GAPS_ANALYSIS.md) for a detailed assessment of what's actually available vs. documented.
+
+## ⚠️ Implementation Status
+
+- **[Implementation Gaps Analysis](./IMPLEMENTATION_GAPS_ANALYSIS.md)** - What's actually implemented vs documented
+- **[Current Capabilities](./CURRENT_CAPABILITIES.md)** - What works today
+- **[Roadmap to Completion](../ROADMAP_2025.md)** - Timeline for missing features
+
 ## 🚀 Getting Started
 
 - **[Quick Start Guide](./QUICKSTART.md)** - Get up and running in 5 minutes
@@ -47,8 +55,9 @@ Welcome to the New Relic MCP Server documentation. This index provides quick acc
 
 ## 🔧 Technical Specifications
 
-- **[Technical Platform Spec](./technical/platform-spec.md)** - Unified build-ready blueprint
-- **[Technical Spec](./technical/specification.md)** - Detailed technical specifications
+- **[Technical Platform Spec](./technical/platform-spec.md)** - Future architecture vision and blueprint
+- **[Technical Specification](./technical/specification.md)** - Current implementation reference
+- **[Specification Reconciliation](./technical/SPECIFICATION_RECONCILIATION.md)** - How the specs relate
 - **[Documentation Structure](./architecture/documentation-structure.md)** - Documentation organization
 
 ## 📊 Project Information
@@ -60,6 +69,17 @@ Welcome to the New Relic MCP Server documentation. This index provides quick acc
 
 - **[No Assumptions Manifesto](./philosophy/NO_ASSUMPTIONS_MANIFESTO.md)** - Our commitment to discovery
 - **[Zero Assumptions Examples](./philosophy/ZERO_ASSUMPTIONS_EXAMPLES.md)** - Practical applications
+
+## 🤖 AI Assistant Guidelines
+
+### Golden Rules for AI Assistants
+1. **Always Start with Discovery** - Never assume data structures exist
+2. **Validate Before Execute** - Check queries before running them
+3. **Explain Your Process** - Share what you're discovering and why
+4. **Build Progressively** - Start simple, refine based on findings
+5. **Maintain Context** - Remember discoveries within the session
+
+For detailed guidance, see the [LLM Integration Guide](./guides/llm-integration.md)
 
 ## 🌟 Additional Resources
 

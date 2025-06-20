@@ -5,6 +5,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -119,6 +120,10 @@ func (s *Server) registerDashboardTools() error {
 					Type:        "integer",
 					Description: "Maximum number of dashboards to return",
 					Default:     50,
+				},
+				"account_id": {
+					Type:        "string",
+					Description: "Optional account ID to query (uses default if not provided)",
 				},
 			},
 		},
@@ -441,43 +446,76 @@ func (s *Server) handleListDashboards(ctx context.Context, params map[string]int
 	}
 
 	includeMetadata, _ := params["include_metadata"].(bool)
+	accountID, _ := params["account_id"].(string)
 
-	// Get New Relic client
-	nrClient := s.getNRClient()
-	if nrClient == nil {
-		return nil, fmt.Errorf("New Relic client not configured")
-	}
-
-	client, ok := nrClient.(*newrelic.Client)
-	if !ok {
-		return nil, fmt.Errorf("invalid New Relic client type")
-	}
-
-	// List dashboards
-	var dashboardList []newrelic.Dashboard
-	var err error
-
-	if filter != "" {
-		// Use search if filter is provided
-		dashboardList, err = client.SearchDashboards(ctx, filter)
-	} else {
-		// Get all dashboards
-		dashboardList, err = client.ListDashboards(ctx)
-	}
-
+	// Get New Relic client with account support
+	nrClient, err := s.getNRClientWithAccount(accountID)
 	if err != nil {
-		return nil, fmt.Errorf("list dashboards: %w", err)
+		return nil, err
+	}
+
+	// Use reflection to call ListDashboards method
+	clientValue := reflect.ValueOf(nrClient)
+	var method reflect.Value
+	if filter != "" {
+		method = clientValue.MethodByName("SearchDashboards")
+	} else {
+		method = clientValue.MethodByName("ListDashboards")
+	}
+
+	if !method.IsValid() {
+		return nil, fmt.Errorf("dashboard method not found on client")
+	}
+
+	// Call the method
+	var results []reflect.Value
+	if filter != "" {
+		args := []reflect.Value{
+			reflect.ValueOf(ctx),
+			reflect.ValueOf(filter),
+		}
+		results = method.Call(args)
+	} else {
+		args := []reflect.Value{
+			reflect.ValueOf(ctx),
+		}
+		results = method.Call(args)
+	}
+
+	if len(results) != 2 {
+		return nil, fmt.Errorf("unexpected return values from dashboard method")
+	}
+
+	// Extract error
+	if !results[1].IsNil() {
+		return nil, results[1].Interface().(error)
+	}
+
+	// Extract dashboard list from results
+	dashboardListValue := results[0]
+	if dashboardListValue.Kind() != reflect.Slice {
+		return nil, fmt.Errorf("expected slice of dashboards, got %v", dashboardListValue.Kind())
 	}
 
 	// Convert to response format
-	dashboards := make([]map[string]interface{}, 0, len(dashboardList))
-	for _, d := range dashboardList {
+	dashboards := make([]map[string]interface{}, 0, dashboardListValue.Len())
+	for i := 0; i < dashboardListValue.Len(); i++ {
+		d := dashboardListValue.Index(i)
+		// Use reflection to extract fields
+		getField := func(name string) interface{} {
+			f := d.FieldByName(name)
+			if f.IsValid() {
+				return f.Interface()
+			}
+			return nil
+		}
+
 		dashboard := map[string]interface{}{
-			"id":          d.ID,
-			"name":        d.Name,
-			"created_at":  d.CreatedAt,
-			"updated_at":  d.UpdatedAt,
-			"permissions": d.Permissions,
+			"id":          getField("ID"),
+			"name":        getField("Name"),
+			"created_at":  getField("CreatedAt"),
+			"updated_at":  getField("UpdatedAt"),
+			"permissions": getField("Permissions"),
 		}
 		dashboards = append(dashboards, dashboard)
 	}

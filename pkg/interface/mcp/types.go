@@ -47,12 +47,22 @@ const (
 
 // Tool definitions
 type Tool struct {
-	Name         string
-	Description  string
-	Parameters   ToolParameters
-	Handler      ToolHandler
-	Streaming    bool
+	Name          string
+	Description   string
+	Parameters    ToolParameters
+	Handler       ToolHandler
+	Streaming     bool
 	StreamHandler StreamingToolHandler
+	Metadata      *ToolMetadata // Enhanced metadata for AI guidance
+}
+
+// EnhancedTool extends Tool with additional metadata
+type EnhancedTool struct {
+	Tool
+	Category    string                 `json:"category"`
+	Safety      string                 `json:"safety"`
+	Performance map[string]interface{} `json:"performance"`
+	Examples    []string               `json:"examples"`
 }
 
 type ToolParameters struct {
@@ -77,12 +87,14 @@ type ToolCallParams struct {
 	Name      string                 `json:"name"`
 	Arguments map[string]interface{} `json:"arguments"`
 	Stream    bool                   `json:"stream,omitempty"`
+	NoCache   bool                   `json:"noCache,omitempty"`
 }
 
 type ExecutionContext struct {
 	RequestID interface{}
 	Tool      *Tool
 	StartTime time.Time
+	Metadata  map[string]interface{}
 }
 
 // Streaming types
@@ -118,6 +130,8 @@ type ServerConfig struct {
 	AuthEnabled      bool
 	HTTPPort         int
 	HTTPHost         string
+	RateLimit        int
+	EnhancedProtocol bool
 }
 
 // Tool registry interface
@@ -125,6 +139,9 @@ type ToolRegistry interface {
 	Register(tool Tool) error
 	Get(name string) (*Tool, bool)
 	List() []Tool
+	ListEnhanced() []Tool
+	ListNames() []string
+	GetCategories() []string
 	Unregister(name string) error
 }
 
@@ -142,4 +159,23 @@ type SessionManager interface {
 	Update(session *Session) error
 	Delete(id string) error
 	Cleanup() error
+	List() []Session
+	End(id string)
+	StoreClientInfo(id string, info interface{})
+	GetClientInfo(id string) interface{}
+}
+
+// Cache interface for caching tool results
+type Cache interface {
+	Get(key string) (interface{}, bool)
+	Set(key string, value interface{}, ttl time.Duration)
+	Delete(key string)
+	Clear()
+}
+
+// Metrics interface for tracking performance
+type Metrics interface {
+	RecordToolExecution(toolName string, duration time.Duration, success bool)
+	RecordRequest(method string, duration time.Duration)
+	GetStats() map[string]interface{}
 }

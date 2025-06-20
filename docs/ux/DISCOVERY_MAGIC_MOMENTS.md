@@ -1,5 +1,7 @@
 # Discovery Magic Moments: Engineering Delight Through Zero Assumptions
 
+> **Note**: This document presents conceptual design visions and aspirational user experiences for future development. These "magic moments" represent the potential of discovery-first architecture but are not yet implemented features.
+
 This document catalogs specific "magic moments" where our discovery-first approach creates extraordinary user experiences that traditional tools cannot match.
 
 ## Table of Contents

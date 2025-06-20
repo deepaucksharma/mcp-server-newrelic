@@ -1,5 +1,7 @@
 # Visual Discovery Design: Making Zero Assumptions Beautiful
 
+> **Note**: This document presents conceptual visual design ideas and aesthetic principles for potential future UI/UX implementations. These designs are aspirational concepts to illustrate how discovery-first principles could be visually represented, not current features.
+
 This document details the visual language, animations, and aesthetic principles that make our discovery-first approach not just powerful, but beautiful and delightful to use.
 
 ## Table of Contents

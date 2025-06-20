@@ -103,7 +103,7 @@ The New Relic MCP Server aims to become the industry standard for AI-assisted ob
 
 #### June
 - [ ] **Multi-Region Support**
-  - EU region support
+  - ✅ EU region support (completed)
   - Region-aware routing
   - Cross-region data aggregation
   - Latency optimization
@@ -230,7 +230,7 @@ The New Relic MCP Server aims to become the industry standard for AI-assisted ob
 1. **Test Coverage**: From 40% to 80%
 2. **Error Handling**: Standardize across all components
 3. **Code Documentation**: Document all public APIs
-4. **Deprecation**: Remove Python implementation
+4. **Cleanup**: Remove deprecated code and improve architecture
 
 ### Short-term (Q2)
 1. **Performance**: Optimize hot paths

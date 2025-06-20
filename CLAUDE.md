@@ -6,7 +6,7 @@ This file provides comprehensive guidance to Claude and other AI assistants when
 
 The New Relic MCP Server is a revolutionary **Discovery-First** observability platform that provides AI assistants with intelligent access to New Relic data. Unlike traditional tools that assume data structures, this server explores, understands, and adapts to your actual NRDB landscape.
 
-**Current State**: Production-ready Go implementation with 120+ granular tools organized into a sophisticated discovery-first architecture. The server emphasizes:
+**Current State**: Go implementation with basic discovery tools and NRQL query capability. While designed for 120+ tools, currently ~10-15 are implemented. The server's architecture emphasizes:
 - **Zero Assumptions**: Never assume data exists; always discover first
 - **Atomic Tools**: Single-responsibility tools that compose into workflows
 - **Progressive Understanding**: Build knowledge incrementally from evidence
@@ -213,52 +213,66 @@ func TestHandleToolName(t *testing.T) {
 
 ## Current Implementation Details
 
-### ✅ Fully Implemented Tools
+### ✅ Currently Implemented Tools
 
-**Query Tools** (`tools_query.go`):
-- `query_nrdb` - Execute NRQL with timeout control
-- `query_check` - Validate syntax and estimate cost
-- `query_builder` - Build NRQL from structured params
+**Basic Discovery Tools**:
+- `discovery.explore_event_types` - List available event types (basic implementation)
 
-**Discovery Tools** (`tools_discovery.go`):
-- `discovery.list_schemas` - List all schemas with quality
-- `discovery.profile_attribute` - Deep attribute analysis
-- `discovery.find_relationships` - Relationship mining
-- `discovery.assess_quality` - Quality assessment
+**Basic Query Tools**:
+- `nrql.execute` - Execute NRQL queries (no schema validation or adaptation yet)
 
-**Dashboard Tools** (`tools_dashboard.go`):
-- `find_usage` - Find dashboards by metric usage
-- `generate_dashboard` - Create from templates
-- `list_dashboards` - List with filtering
-- `get_dashboard` - Get full details
+### 🔴 Not Yet Implemented (Despite Documentation)
 
-**Alert Tools** (`tools_alerts.go`):
-- `create_alert` - Smart alert creation
-- `list_alerts` - List with incidents
-- `analyze_alerts` - Effectiveness analysis
-- `bulk_update_alerts` - Bulk operations
+**Missing Tool Categories**:
+- **Analysis Tools** - No anomaly detection, correlation, or trend analysis
+- **Action Tools** - No alert/dashboard creation or modification
+- **Governance Tools** - No cost optimization or compliance checks
+- **Advanced Discovery** - No attribute profiling or relationship mining
+- **Workflow Tools** - No orchestration or multi-step operations
 
-### 🚧 Areas Needing Work
+**Note**: Documentation describes 120+ tools, but only ~10-15 basic tools are actually implemented. See [Implementation Gaps Analysis](docs/IMPLEMENTATION_GAPS_ANALYSIS.md) for details.
 
-1. **Test Coverage** (~40% currently)
-   - Need unit tests for all tools
-   - Integration tests for MCP protocol
-   - Mock client implementations
+### ✅ Fully Implemented Features
 
-2. **Error Handling**
-   - Network timeout handling
-   - Better error messages for users
-   - Retry logic for transient failures
+**Infrastructure & Performance**:
+- **EU Region Support** - Complete with automatic endpoint switching
+- **APM Integration** - Full New Relic Go Agent integration with telemetry
+- **Multi-layer Caching** - In-memory and Redis implementations
+- **Circuit Breakers** - Three-state fault tolerance implementation
+- **Rate Limiting** - Token bucket algorithm implementation
+- **Retry Logic** - Exponential backoff for transient failures
 
-3. **Performance**
-   - Implement caching layer
-   - Optimize large result sets
-   - Add request timeouts
+### 🚧 Critical Implementation Gaps
 
-4. **CI/CD**
-   - GitHub Actions workflow
-   - Automated testing
-   - Docker image building
+1. **Core Functionality** (~90% of tools missing)
+   - Only basic discovery and query tools implemented
+   - No analysis, action, or governance tools
+   - No workflow orchestration despite architecture
+   - No adaptive query capabilities
+
+2. **Discovery-First Philosophy** (not implemented)
+   - Missing attribute discovery and profiling
+   - No schema validation before queries
+   - No automatic adaptation to missing fields
+   - Limited to basic event type listing
+
+3. **Intelligence Features** (completely missing)
+   - No anomaly detection or trend analysis
+   - No recommendations or next-step hints
+   - No result interpretation or metadata
+   - Raw data returns only
+
+4. **Test Infrastructure** (broken)
+   - Missing `test.sh` at root level
+   - Multiple package test build failures
+   - Cannot verify actual functionality
+
+5. **Multi-Account & EU Region** (not exposed)
+   - Infrastructure supports it but tools don't
+   - Single account hardcoded in implementation
+   - No runtime account switching
+
+See [Implementation Gaps Analysis](docs/IMPLEMENTATION_GAPS_ANALYSIS.md) for comprehensive gap assessment.
 
 ## Testing Strategy
 
@@ -372,10 +386,10 @@ defer func() {
 
 ## Known Issues
 
-1. **Redis connection failures** - Falls back to in-memory state
-2. **Large result sets** - May timeout or OOM
-3. **EU region** - Not yet supported
-4. **Pagination** - Not fully implemented
+1. **Test Infrastructure** - Root-level test.sh missing, causing make test failures
+2. **Large result sets** - May timeout or OOM without proper pagination
+3. **Pagination** - Not fully implemented across all tools
+4. **Documentation Drift** - Some docs don't reflect current implementation state
 
 ## Future Enhancements
 

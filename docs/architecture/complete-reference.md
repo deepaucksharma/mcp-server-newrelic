@@ -79,23 +79,25 @@ The New Relic MCP Server is a production-grade implementation of the Model Conte
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## Dual Implementation Architecture
+## Implementation Architecture
 
-### Current State: Hybrid Architecture
+### Current State: Go Implementation
 
-The repository contains two parallel implementations that represent different stages of evolution:
+The repository contains a production-grade Go implementation of the MCP server:
 
 ```
 mcp-server-newrelic/
-├── Go Implementation (Primary)
+├── Go Implementation (Core MCP Server)
 │   ├── cmd/              # Go entry points
 │   ├── pkg/              # Go packages
 │   └── internal/         # Go internal packages
 │
-├── Python Implementation (Legacy)
-│   ├── clients/python/   # Python SDK
-│   ├── clients/typescript/ # TypeScript SDK
-│   └── intelligence/     # Python-specific logic
+├── Client Libraries
+│   ├── clients/python/   # Python client SDK for the MCP server
+│   └── clients/typescript/ # TypeScript client SDK
+│
+├── Optional Services
+│   └── intelligence/     # Optional Python microservice for ML features
 │
 └── Shared Resources
     ├── docs/            # Unified documentation
@@ -103,42 +105,43 @@ mcp-server-newrelic/
     └── docker-compose.yml # Container orchestration
 ```
 
-### Architecture Evolution
+### Architecture Components
 
 ```
-Phase 1: Python Prototype (Legacy)
-├── Rapid prototyping
-├── MCP protocol validation
-└── Feature exploration
+Core Server: Go Implementation
+├── Production-grade MCP server
+├── High performance and type safety
+└── Full MCP protocol support
 
-Phase 2: Go Implementation (Current)
-├── Production-grade rewrite
-├── Performance optimization
-└── Full feature parity
+Client SDKs: Multi-language Support
+├── Python SDK for Python applications
+├── TypeScript SDK for JavaScript/Node.js
+└── Additional SDKs planned (Java, .NET)
 
-Phase 3: Unified Platform (Future)
-├── Go server as core
-├── Python/TS SDKs for clients
-└── Deprecated Python server
+Optional Services: Microservice Extensions
+├── Intelligence service (Python) for ML features
+├── Deployed separately when advanced AI needed
+└── Communicates with core server via gRPC
 ```
-
-### Migration Strategy
-
-1. **Current State**: Both implementations exist, Go is primary
-2. **Transition Period**: Python marked deprecated, Go actively developed
-3. **End State**: Single Go implementation with multi-language SDKs
 
 ### Architectural Rationale
 
-**Why Two Implementations?**
-- Python enabled rapid prototyping and protocol validation
-- Go provides production performance and type safety
-- Gradual migration reduces risk
+**Why Go for the MCP Server?**
+- Production performance with compiled binaries
+- Strong type safety and error handling
+- Excellent concurrency support
+- Easy deployment (single binary)
+- Aligns with New Relic engineering standards
 
-**Why Keep Both?**
-- Client SDKs in Python/TypeScript leverage existing code
-- Documentation references both for historical context
-- Smooth transition for existing users
+**Why Multiple Client SDKs?**
+- Different teams use different languages
+- Native language support improves developer experience
+- SDKs provide idiomatic interfaces for each language
+
+**Why Optional Python Microservice?**
+- Advanced ML/AI features benefit from Python ecosystem
+- Keeps core server lightweight and focused
+- Optional deployment for teams needing ML capabilities
 
 ## Component Architecture
 
@@ -301,7 +304,7 @@ Tool Registry (120+ Tools)
 │
 ├── Discovery Tools (30+)
 │   ├── Schema Discovery
-│   │   ├── discovery.list_event_types
+│   │   ├── discovery.explore_event_types
 │   │   ├── discovery.explore_attributes
 │   │   └── discovery.profile_coverage
 │   │
@@ -748,66 +751,60 @@ Defense in Depth
 - Positive: Flexible deployment options
 - Negative: Additional complexity in state synchronization
 
-## Migration Architecture
+## Deployment Architecture
 
-### Python to Go Migration
-
-```
-Migration Phases
-│
-├─→ Phase 1: Parallel Development
-│   ├─ Python server continues running
-│   ├─ Go server developed in parallel
-│   ├─ Feature parity tracking
-│   └─ Shared documentation
-│
-├─→ Phase 2: Testing & Validation
-│   ├─ Side-by-side testing
-│   ├─ Performance comparison
-│   ├─ Output validation
-│   └─ Client compatibility
-│
-├─→ Phase 3: Gradual Rollout
-│   ├─ Canary deployment (5%)
-│   ├─ Progressive rollout
-│   ├─ Rollback capability
-│   └─ Monitoring
-│
-├─→ Phase 4: Complete Migration
-│   ├─ Full production traffic
-│   ├─ Python deprecation
-│   ├─ Client SDK updates
-│   └─ Documentation update
-│
-└─→ Phase 5: Cleanup
-    ├─ Remove Python code
-    ├─ Archive for reference
-    ├─ Update CI/CD
-    └─ Final documentation
-```
-
-### Client Migration Support
+### Standard Deployment
 
 ```
-Client Migration
+Deployment Options
 │
-├─→ Compatibility Layer
-│   ├─ Protocol version detection
-│   ├─ Legacy endpoint support
-│   ├─ Response adaptation
-│   └─ Deprecation warnings
+├─→ Standalone Binary
+│   ├─ Single Go binary
+│   ├─ No dependencies
+│   ├─ Minimal resource usage
+│   └─ Easy containerization
 │
-├─→ SDK Evolution
-│   ├─ Python SDK wraps Go server
-│   ├─ TypeScript SDK updates
-│   ├─ Version management
-│   └─ Breaking change tracking
+├─→ With Redis Cache
+│   ├─ MCP server + Redis
+│   ├─ Persistent discovery cache
+│   ├─ Shared state across instances
+│   └─ Horizontal scaling support
 │
-└─→ Migration Tools
-    ├─ Compatibility checker
-    ├─ Migration guide
-    ├─ Code examples
-    └─ Support channels
+├─→ With Intelligence Service
+│   ├─ MCP server + Intelligence microservice
+│   ├─ Advanced ML capabilities
+│   ├─ Anomaly detection
+│   └─ Pattern mining
+│
+└─→ Full Platform
+    ├─ MCP server cluster
+    ├─ Redis cluster
+    ├─ Intelligence service
+    └─ Load balancer
+```
+
+### Client SDK Architecture
+
+```
+Client SDKs
+│
+├─→ Python SDK (clients/python/)
+│   ├─ MCP protocol client
+│   ├─ Async/sync support
+│   ├─ Type hints
+│   └─ Pythonic API
+│
+├─→ TypeScript SDK (clients/typescript/)
+│   ├─ MCP protocol client
+│   ├─ Promise-based API
+│   ├─ Full TypeScript types
+│   └─ Node.js and browser support
+│
+└─→ SDK Features
+    ├─ Auto-reconnection
+    ├─ Request batching
+    ├─ Response caching
+    └─ Error handling
 ```
 
 ## Future Architecture

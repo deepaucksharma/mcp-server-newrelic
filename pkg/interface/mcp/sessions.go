@@ -16,14 +16,16 @@ const (
 
 // sessionManager implements the SessionManager interface
 type sessionManager struct {
-	mu       sync.RWMutex
-	sessions map[string]*Session
+	mu          sync.RWMutex
+	sessions    map[string]*Session
+	clientInfo  map[string]interface{} // Store client info by request ID
 }
 
 // NewSessionManager creates a new session manager
 func NewSessionManager() SessionManager {
 	return &sessionManager{
-		sessions: make(map[string]*Session),
+		sessions:   make(map[string]*Session),
+		clientInfo: make(map[string]interface{}),
 	}
 }
 
@@ -115,4 +117,40 @@ func generateSessionID() string {
 		return fmt.Sprintf("%d", time.Now().UnixNano())
 	}
 	return hex.EncodeToString(bytes)
+}
+
+// List returns all active sessions
+func (m *sessionManager) List() []Session {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	
+	sessions := make([]Session, 0, len(m.sessions))
+	for _, session := range m.sessions {
+		sessions = append(sessions, *session)
+	}
+	return sessions
+}
+
+// End terminates a session
+func (m *sessionManager) End(id string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	
+	delete(m.sessions, id)
+}
+
+// StoreClientInfo stores client information by request ID
+func (m *sessionManager) StoreClientInfo(id string, info interface{}) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	
+	m.clientInfo[id] = info
+}
+
+// GetClientInfo retrieves client information by request ID
+func (m *sessionManager) GetClientInfo(id string) interface{} {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	
+	return m.clientInfo[id]
 }

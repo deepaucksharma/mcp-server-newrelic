@@ -15,7 +15,7 @@
 
 ## Overview
 
-The New Relic MCP Server is a Model Context Protocol compliant server that provides AI assistants with programmatic access to New Relic observability data. Built in Go, it offers a comprehensive suite of tools for querying, analyzing, and managing New Relic resources.
+The New Relic MCP Server is a Model Context Protocol compliant server that provides AI assistants with programmatic access to New Relic observability data. Built in Go, it offers a comprehensive suite of tools for querying, analyzing, and managing New Relic resources.\n\n⚠️ **Implementation Status**: This specification describes the intended full functionality. Currently only ~10-15 basic tools are implemented out of the planned 120+. See [Implementation Gaps Analysis](../IMPLEMENTATION_GAPS_ANALYSIS.md) for details on what's actually available.
 
 ### Design Principles
 

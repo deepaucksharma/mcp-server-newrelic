@@ -37,7 +37,21 @@ func (s *Server) registerTools() error {
 		return fmt.Errorf("failed to register bulk tools: %w", err)
 	}
 	
-	// TODO: Register pattern analysis tools (Track 3)
+	// Analysis tools
+	if err := s.RegisterAnalysisTools(); err != nil {
+		return fmt.Errorf("failed to register analysis tools: %w", err)
+	}
+	
+	// Granular discovery tools (enhanced discovery)
+	if err := s.registerGranularDiscoveryTools(); err != nil {
+		return fmt.Errorf("failed to register granular discovery tools: %w", err)
+	}
+	
+	// Governance tools
+	if err := s.RegisterGovernanceTools(); err != nil {
+		return fmt.Errorf("failed to register governance tools: %w", err)
+	}
+	
 	// TODO: Register infrastructure tools
 	// TODO: Register log tools
 	

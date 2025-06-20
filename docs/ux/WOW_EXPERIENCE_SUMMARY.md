@@ -1,5 +1,7 @@
 # The Complete Discovery-First Wow Experience
 
+> **Note**: This document represents a vision for creating exceptional user experiences based on discovery-first principles. The features, interfaces, and experiences described are conceptual designs for future consideration, not currently implemented functionality.
+
 This document summarizes all aspects of creating magical user experiences through our zero-assumption, discovery-first approach.
 
 ## Executive Summary

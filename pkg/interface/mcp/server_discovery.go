@@ -5,6 +5,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sync"
 	"time"
 
@@ -85,6 +86,35 @@ func (s *Server) getNRClient() interface{} {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.nrClient
+}
+
+// getNRClientWithAccount returns a New Relic client for the specified account
+// If accountID is empty, returns the primary client
+func (s *Server) getNRClientWithAccount(accountID string) (interface{}, error) {
+	client := s.getNRClient()
+	if client == nil {
+		return nil, fmt.Errorf("New Relic client not configured")
+	}
+	
+	// Check if this is a MultiAccountClient using reflection
+	clientValue := reflect.ValueOf(client)
+	method := clientValue.MethodByName("WithAccount")
+	if method.IsValid() {
+		// This is a MultiAccountClient
+		args := []reflect.Value{reflect.ValueOf(accountID)}
+		results := method.Call(args)
+		if len(results) != 2 {
+			return nil, fmt.Errorf("unexpected return values from WithAccount")
+		}
+		// Extract client and error
+		if !results[1].IsNil() {
+			return nil, results[1].Interface().(error)
+		}
+		return results[0].Interface(), nil
+	}
+	
+	// Not a MultiAccountClient, return the client as-is
+	return client, nil
 }
 
 // Start initializes and starts the MCP server
@@ -184,5 +214,34 @@ func (s *Server) GetInfo() map[string]interface{} {
 		"version":     "2.0.0",
 		"description": "AI-powered New Relic dashboard creation",
 		"tools":       s.tools.List(),
+	}
+}
+
+// getCache returns the cache if available
+func (s *Server) getCache() (Cache, bool) {
+	// Cache is optional - implement when needed
+	return nil, false
+}
+
+// getMetrics returns the metrics collector if available
+func (s *Server) getMetrics() (Metrics, bool) {
+	// Metrics are optional - implement when needed
+	return nil, false
+}
+
+// Shutdown gracefully shuts down the server
+func (s *Server) Shutdown() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	
+	if !s.running {
+		return
+	}
+	
+	s.running = false
+	close(s.shutdownCh)
+	
+	if s.transport != nil {
+		s.transport.Close()
 	}
 }

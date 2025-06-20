@@ -291,4 +291,4 @@ uds dashboard create dashboard.yaml
 
 ## Contributing
 
-See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development setup and guidelines.
+See [Development Guide](../../docs/guides/development.md) for development setup and guidelines.

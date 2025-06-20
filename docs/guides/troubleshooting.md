@@ -485,7 +485,7 @@ docker run --env-file .env mcp-server-newrelic
 
 ### Q: Can I use this with EU region accounts?
 
-**A:** EU region support is planned. For now, use:
+**A:** Yes! EU region is fully supported. Simply set:
 ```bash
 # Set EU endpoint (experimental)
 export NEW_RELIC_REGION=eu

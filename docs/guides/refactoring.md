@@ -85,7 +85,7 @@ func (s *Server) handleDiscoveryExploreEventTypes(ctx context.Context, params ma
 ```
 
 **Tools to Implement:**
-- `discovery.list_event_types`
+- `discovery.explore_event_types`
 - `discovery.explore_attributes`
 - `discovery.profile_data_completeness`
 - `discovery.find_natural_groupings`

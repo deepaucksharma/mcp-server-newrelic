@@ -1,5 +1,7 @@
 # Interactive Discovery Experiences: Learn by Doing, Not Reading
 
+> **Note**: This document outlines conceptual designs for interactive learning experiences that could showcase discovery-first principles. These are visionary concepts for potential future development, not current features of the MCP server.
+
 This document details interactive experiences that teach users our discovery-first philosophy through hands-on exploration rather than documentation.
 
 ## Table of Contents

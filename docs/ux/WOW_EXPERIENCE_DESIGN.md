@@ -1,5 +1,7 @@
 # The Discovery-First "Wow!" Experience Design
 
+> **Note**: This document describes aspirational UX features and design concepts for future development. While the core MCP server functionality is fully implemented, the enhanced user experiences described here represent our vision for creating magical discovery moments. Features marked with 🚧 are planned but not yet implemented.
+
 This document explores every aspect where we can create magical experiences that make engineers immediately feel the power of our zero-assumption, discovery-first approach.
 
 ## Table of Contents

@@ -101,7 +101,14 @@ func (s *Server) registerSchemaDiscoveryTools() error {
 	// Explore attributes for an event type
 	exploreAttributes := NewToolBuilder("discovery.explore_attributes", "Discover what attributes exist for an event type").
 		Category(CategoryQuery).
-		Handler(s.handleDiscoveryExploreAttributes).
+		Handler(func(ctx context.Context, params map[string]interface{}) (interface{}, error) {
+			// Use real implementation when client is available
+			if s.nrClient != nil {
+				return s.handleDiscoveryExploreAttributesImpl(ctx, params)
+			}
+			// Fall back to mock for testing
+			return s.handleDiscoveryExploreAttributes(ctx, params)
+		}).
 		Required("event_type").
 		Param("event_type", EnhancedProperty{
 			Property: Property{

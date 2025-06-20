@@ -5,6 +5,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -58,6 +59,10 @@ func (s *Server) registerAlertTools() error {
 					Type:        "string",
 					Description: "Alert policy ID to add condition to",
 				},
+				"account_id": {
+					Type:        "string",
+					Description: "Optional account ID to create alert in (uses default if not provided)",
+				},
 			},
 		},
 		Handler: s.handleCreateAlert,
@@ -83,6 +88,10 @@ func (s *Server) registerAlertTools() error {
 					Type:        "boolean",
 					Description: "Include recent incidents for each alert",
 					Default:     false,
+				},
+				"account_id": {
+					Type:        "string",
+					Description: "Optional account ID to query (uses default if not provided)",
 				},
 			},
 		},
@@ -330,18 +339,16 @@ func (s *Server) handleCreateAlert(ctx context.Context, params map[string]interf
 		return nil, fmt.Errorf("policy_id is required")
 	}
 
-	// Get New Relic client
-	nrClient := s.getNRClient()
-	if nrClient == nil {
-		return nil, fmt.Errorf("New Relic client not configured")
+	// Get account ID if specified
+	accountID, _ := params["account_id"].(string)
+
+	// Get New Relic client with account support
+	nrClient, err := s.getNRClientWithAccount(accountID)
+	if err != nil {
+		return nil, err
 	}
 
-	client, ok := nrClient.(*newrelic.Client)
-	if !ok {
-		return nil, fmt.Errorf("invalid New Relic client type")
-	}
-
-	// Create alert condition
+	// Create alert condition structure
 	condition := newrelic.AlertCondition{
 		Name:              name,
 		Query:             query,
@@ -352,22 +359,52 @@ func (s *Server) handleCreateAlert(ctx context.Context, params map[string]interf
 		Enabled:           true,
 	}
 
-	created, err := client.CreateAlertCondition(ctx, condition)
-	if err != nil {
-		return nil, fmt.Errorf("create alert condition: %w", err)
+	// Use reflection to call CreateAlertCondition
+	clientValue := reflect.ValueOf(nrClient)
+	method := clientValue.MethodByName("CreateAlertCondition")
+	if !method.IsValid() {
+		return nil, fmt.Errorf("CreateAlertCondition method not found on client")
+	}
+
+	// Call the method
+	args := []reflect.Value{
+		reflect.ValueOf(ctx),
+		reflect.ValueOf(condition),
+	}
+	results := method.Call(args)
+	
+	if len(results) != 2 {
+		return nil, fmt.Errorf("unexpected return values from CreateAlertCondition")
+	}
+
+	// Extract error
+	if !results[1].IsNil() {
+		return nil, results[1].Interface().(error)
+	}
+
+	// Extract created alert
+	createdValue := results[0].Elem()
+
+	// Helper to get field value using reflection
+	getField := func(name string) interface{} {
+		f := createdValue.FieldByName(name)
+		if f.IsValid() {
+			return f.Interface()
+		}
+		return nil
 	}
 
 	return map[string]interface{}{
 		"alert": map[string]interface{}{
-			"id":                 created.ID,
-			"name":               created.Name,
-			"query":              created.Query,
-			"comparison":         created.Comparison,
-			"threshold":          created.Threshold,
-			"threshold_duration": created.ThresholdDuration,
-			"enabled":            created.Enabled,
-			"policy_id":          created.PolicyID,
-			"created_at":         created.CreatedAt,
+			"id":                 getField("ID"),
+			"name":               getField("Name"),
+			"query":              getField("Query"),
+			"comparison":         getField("Comparison"),
+			"threshold":          getField("Threshold"),
+			"threshold_duration": getField("ThresholdDuration"),
+			"enabled":            getField("Enabled"),
+			"policy_id":          getField("PolicyID"),
+			"created_at":         getField("CreatedAt"),
 		},
 		"message":   fmt.Sprintf("Alert condition '%s' created successfully", name),
 		"threshold": map[string]interface{}{

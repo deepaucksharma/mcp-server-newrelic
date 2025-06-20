@@ -123,7 +123,7 @@ func main() {
 	// Initialize New Relic client (if not in mock mode)
 	if !*mockMode && !cfg.Development.MockMode {
 		logger.Info("Initializing New Relic client...")
-		nrClient, err := newrelic.NewClient(newrelic.Config{
+		nrClient, err := newrelic.NewMultiAccountClient(newrelic.Config{
 			APIKey:    cfg.NewRelic.APIKey,
 			AccountID: cfg.NewRelic.AccountID,
 			Region:    cfg.NewRelic.Region,
@@ -134,8 +134,9 @@ func main() {
 		}
 		server.SetNewRelicClient(nrClient)
 
-		// Test connection
-		if _, err := nrClient.GetAccountInfo(ctx); err != nil {
+		// Test connection with primary account
+		primaryClient := nrClient.GetPrimaryClient()
+		if _, err := primaryClient.GetAccountInfo(ctx); err != nil {
 			logger.Warn("Failed to connect to New Relic: %v", err)
 			logger.Warn("Continuing in degraded mode...")
 		} else {

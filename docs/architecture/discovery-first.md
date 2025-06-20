@@ -159,7 +159,7 @@ The foundation is granular tools that answer specific questions without assumpti
 ```yaml
 discovery_tools:
   schema_exploration:
-    - discovery.list_event_types      # What types of data exist?
+    - discovery.explore_event_types   # What types of data exist?
     - discovery.explore_attributes    # What fields are available?
     - discovery.profile_coverage      # How complete is the data?
     
@@ -205,7 +205,7 @@ workflow_patterns:
   investigation:
     pattern: "Discover → Explore → Analyze → Conclude"
     tools:
-      - discovery.list_event_types
+      - discovery.explore_event_types
       - discovery.explore_attributes
       - analysis.find_anomalies
       - report.generate_findings
@@ -375,7 +375,7 @@ var discoverEventTypesMetadata = ToolMetadata{
 ```yaml
 discovery_driven_investigation:
   initialize:
-    - tool: discovery.list_event_types
+    - tool: discovery.explore_event_types
       purpose: "What data is available?"
     
   explore:

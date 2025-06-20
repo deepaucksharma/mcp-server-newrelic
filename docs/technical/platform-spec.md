@@ -14,6 +14,7 @@
 | **Explainability**     | Every output cites *what was discovered* and *how confident* we are.                                |
 | **Extensibility**      | New tools drop in via a plugin pattern; discovery engine auto-surfaces them to LLMs.                |
 | **Self-observability** | Server pushes its own metrics to New Relic and audits missing-discovery violations.                 |
+| **Language**          | Core MCP server in Go for performance; client SDKs in Python, TypeScript, and more.                |
 
 ---
 
@@ -26,7 +27,7 @@
 | **Discovery Engine**        | `internal/discovery/…`                                                                                                                                     | *The heart.* Implements every "NO ASSUMPTIONS" chain:<br>• `schemas.go` (event/list schemas)<br>• `attributes.go` (profile types/cardinality)<br>• `serviceid.go`, `errors.go`, `metrics.go` (specialised chains)<br>• `datasources.go` (agent vs OTLP)<br>All results store in Redis/Ristretto via `cache.go`. |
 | **Tool Kits**               | `tools/…`                                                                                                                                                  | One Go file per tool family, e.g. `tools/nrql.go`, `tools/dashboards.go`, `tools/alerts.go`, `tools/usage.go`.<br>Each tool starts with **EnsureDiscovery()** helpers that read discovery cache or trigger discovery steps.                                                                                     |
 | **Adapters**                | `internal/nrgraph/` (GraphQL client), `internal/insights/` (NRQL REST), `internal/otel/` (OTLP meta), `internal/billing/` (ingestUsage).                   | Client adapters for New Relic APIs                                                                                                                                                                                                                                                                              |
-| **Intelligence** (optional) | `intelligence/` Python micro-service or Go plug-in exposing advanced ML (anomaly clustering, pattern mining). Registered via gRPC; called only if enabled. | Advanced analysis capabilities                                                                                                                                                                                                                                                                                  |
+| **Intelligence** (optional) | `intelligence/` Optional Python microservice exposing advanced ML (anomaly clustering, pattern mining). Registered via gRPC; called only if enabled. | Advanced analysis capabilities using Python ML ecosystem                                                                                                                                                                                                                                                                                  |
 | **Self-Monitoring**         | `internal/selfmon/` – wraps `expvar` + NR Telemetry SDK; emits tool latencies, discovery misses, AI misuse counters.                                       | Observability of the observability server                                                                                                                                                                                                                                                                       |
 | **Docs & Tests**            | `docs/`, `examples/`, `tests/unit`, `tests/e2e`. Docs are first-class; tests assert discovery chains and API promises.                                     | Comprehensive documentation and testing                                                                                                                                                                                                                                                                         |
 
@@ -174,15 +175,15 @@ steps:
 
 ---
 
-## 10 · Roadmap (New-Branch → GA)
+## 10 · Roadmap (Development → GA)
 
 | Sprint     | Deliverables                                                                                                                                        |
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **S-1**    | Discovery Engine MVP (schemas, attributes, serviceID). Refactor existing tools to call `EnsureDiscovery`. Docs: NO_ASSUMPTIONS_MANIFESTO.md live. |
 | **S-2**    | Dashboard/Widget parser, ingest usage tools, adaptive query builder library, API docs autogen script.                                               |
 | **S-3**    | Workflow YAML engine + first three workflows (perf investigate, incident, cost audit). Self-monitoring metrics.                                     |
-| **S-4**    | Security layer (dry-run, audit log), CI contract test, plugin SDK.                                                                                  |
-| **S-5 GA** | EU region toggle, multi-account selector, CLI wrapper (`mcpctl`) for manual ops. Tag v1.0.0, publish Docker image.                                  |
+| **S-4**    | Security layer (dry-run, audit log), CI contract test, client SDK improvements.                                                                      |
+| **S-5 GA** | Multi-account selector, CLI wrapper (`mcpctl`) for manual ops. Tag v1.0.0, publish Docker image. (EU region already complete)                       |
 
 ---
 
@@ -199,16 +200,17 @@ steps:
 ## 12 · Quick-Start for Contributors
 
 ```bash
-# clone & switch
-git clone https://github.com/deepaucksharma/mcp-server-newrelic -b new-branch
+# clone repository
+git clone https://github.com/deepaucksharma/mcp-server-newrelic
 cd mcp-server-newrelic
 
 # set minimal env
 cp .env.example .env           # fill NEW_RELIC_API_KEY, ACCOUNT_ID
-make run-stdio                 # launches stdio JSON-RPC server
+make build                     # build Go binary
+make run                       # launches MCP server
 
 # smoke test: list tools (discovery endpoint)
-echo '{"jsonrpc":"2.0","method":"mcp.discover","id":1}' | ./bin/mcp-stdio
+echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | ./bin/mcp-server
 ```
 
 *Run `make docs` to build API reference; `make test` for unit & contract checks; `make bench` for perf.*
