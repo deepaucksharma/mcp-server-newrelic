@@ -2,6 +2,8 @@
 
 This comprehensive guide covers all aspects of testing the New Relic MCP Server, from unit tests to performance benchmarks. Our testing philosophy emphasizes reliability, maintainability, and comprehensive coverage.
 
+See also the [Comprehensive Testing Strategy](./comprehensive-testing-strategy.md) for an overview of how all test layers fit together.
+
 ## Table of Contents
 
 1. [Testing Philosophy](#testing-philosophy)
@@ -25,6 +27,7 @@ Our testing approach follows these core principles:
 4. **Clear Failure Messages**: When tests fail, the reason should be immediately obvious
 5. **Deterministic Results**: Tests must be reliable and produce consistent results
 6. **Production-Like Testing**: Mock mode should closely simulate real behavior
+7. **Zero Assumptions**: The lint stage runs `scripts/assumption_scan.sh` to ensure no hard-coded field names leak into production code
 
 ## Test Environment Setup
 
