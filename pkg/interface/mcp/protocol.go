@@ -130,11 +130,8 @@ func (h *ProtocolHandler) processRequest(ctx context.Context, req Request) ([]by
 
 	// Add request tracking
 	if err := h.trackRequest(req.ID); err != nil {
-		return h.errorResponse(req.ID, RateLimitCode,
-			"Rate limit exceeded", map[string]interface{}{
-				"retryAfter": 60,
-				"limit": h.server.config.RateLimit,
-			})
+		rateLimitErr := NewRateLimitError(h.server.config.RateLimit, time.Minute)
+		return json.Marshal(ErrorResponse(req.ID, rateLimitErr))
 	}
 	defer h.untrackRequest(req.ID)
 
@@ -158,11 +155,8 @@ func (h *ProtocolHandler) processRequest(ctx context.Context, req Request) ([]by
 	case r := <-resultChan:
 		return r.data, r.err
 	case <-ctx.Done():
-		return h.errorResponse(req.ID, TimeoutErrorCode,
-			"Request timeout", map[string]interface{}{
-				"timeout": h.server.config.RequestTimeout.String(),
-				"method": req.Method,
-			})
+		timeoutErr := NewTimeoutError(req.Method, h.server.config.RequestTimeout)
+		return json.Marshal(ErrorResponse(req.ID, timeoutErr))
 	}
 }
 
@@ -324,44 +318,37 @@ func (h *ProtocolHandler) handleToolsList(ctx context.Context, req Request) ([]b
 func (h *ProtocolHandler) handleToolCall(ctx context.Context, req Request) ([]byte, error) {
 	var params ToolCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
-		return h.errorResponse(req.ID, InvalidParamsCode,
-			"Invalid parameters", map[string]interface{}{
-				"detail": err.Error(),
-				"expected": map[string]string{
-					"name":      "string",
-					"arguments": "object",
-					"stream":    "boolean (optional)",
-				},
-			})
+		invalidErr := NewInvalidParamsError("Failed to parse tool parameters", "params")
+		invalidErr.Details["parse_error"] = err.Error()
+		invalidErr.Details["expected"] = map[string]string{
+			"name":      "string",
+			"arguments": "object",
+			"stream":    "boolean (optional)",
+		}
+		return json.Marshal(ErrorResponse(req.ID, invalidErr))
 	}
 
 	// Validate required fields
 	if params.Name == "" {
-		return h.errorResponse(req.ID, InvalidParamsCode,
-			"Invalid parameters", map[string]string{
-				"detail": "Tool name is required",
-			})
+		return json.Marshal(ErrorResponse(req.ID, 
+			NewInvalidParamsError("Tool name is required", "name")))
 	}
 
 	// Get tool from registry
 	tool, exists := h.server.tools.Get(params.Name)
 	if !exists {
-		return h.errorResponse(req.ID, ToolNotFoundCode,
-			fmt.Sprintf("Tool '%s' not found", params.Name),
-			map[string]interface{}{
-				"availableTools": h.server.tools.ListNames(),
-				"suggestion":     h.findSimilarTool(params.Name),
-			})
+		similar := h.findSimilarTool(params.Name)
+		return json.Marshal(ErrorResponse(req.ID, 
+			NewMethodNotFoundError(params.Name, similar)))
 	}
 
 	// Validate parameters against schema
 	if err := h.validateToolParams(tool, params.Arguments); err != nil {
-		return h.errorResponse(req.ID, InvalidParamsCode,
-			"Invalid tool parameters", map[string]interface{}{
-				"detail":   err.Error(),
-				"schema":   tool.Parameters,
-				"received": params.Arguments,
-			})
+		validationErr := NewValidationError("arguments", err.Error())
+		validationErr.Details["schema"] = tool.Parameters
+		validationErr.Details["received"] = params.Arguments
+		validationErr.ToolName = tool.Name
+		return json.Marshal(ErrorResponse(req.ID, validationErr))
 	}
 
 	// Create execution context with metadata
@@ -395,21 +382,24 @@ func (h *ProtocolHandler) handleToolCall(ctx context.Context, req Request) ([]by
 	}
 
 	if err != nil {
-		// Determine error code based on error type
-		code := InternalErrorCode
-		if strings.Contains(err.Error(), "not found") {
-			code = InvalidParamsCode
-		} else if strings.Contains(err.Error(), "timeout") {
-			code = TimeoutErrorCode
+		// Convert to MCPError if not already
+		mcpErr := WrapError(err, ErrorTypeInternalError, tool.Name)
+		mcpErr.Details["duration"] = duration.String()
+		
+		// Add specific error handling
+		errStr := err.Error()
+		switch {
+		case strings.Contains(errStr, "not found"):
+			mcpErr.Type = ErrorTypeDataNotFound
+		case strings.Contains(errStr, "timeout"):
+			mcpErr = NewTimeoutError(tool.Name, duration)
+		case strings.Contains(errStr, "permission"):
+			mcpErr.Type = ErrorTypePermissionError
+		case strings.Contains(errStr, "query"):
+			mcpErr.Type = ErrorTypeQueryError
 		}
-
-		return h.errorResponse(req.ID, code,
-			fmt.Sprintf("Tool execution failed: %v", err),
-			map[string]interface{}{
-				"tool":     tool.Name,
-				"duration": duration.String(),
-				"hint":     h.getErrorHint(err),
-			})
+		
+		return json.Marshal(ErrorResponse(req.ID, mcpErr))
 	}
 
 	// Format response with metadata

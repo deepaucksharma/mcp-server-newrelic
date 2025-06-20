@@ -257,8 +257,8 @@ func (s *Server) handleAnalysisCalculateBaseline(ctx context.Context, params map
 	groupBy, _ := params["group_by"].(string)
 
 	// Check mock mode
-	if s.nrClient == nil {
-		return s.mockAnalysisBaseline(metric, eventType, timeRange, percentiles, groupBy), nil
+	if s.isMockMode() {
+		return s.getMockData("analysis.calculate_baseline", params), nil
 	}
 
 	// Build NRQL query for baseline calculation

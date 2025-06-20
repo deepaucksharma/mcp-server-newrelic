@@ -34,8 +34,8 @@ func (s *Server) handleDiscoveryExploreAttributesImpl(ctx context.Context, param
 	}
 
 	// Check mock mode
-	if s.nrClient == nil {
-		return s.handleDiscoveryExploreAttributes(ctx, params)
+	if s.isMockMode() {
+		return s.getMockData("discovery.explore_attributes", params), nil
 	}
 
 	// Cast to proper client type

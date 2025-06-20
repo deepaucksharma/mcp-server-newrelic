@@ -448,6 +448,11 @@ func (s *Server) handleListDashboards(ctx context.Context, params map[string]int
 	includeMetadata, _ := params["include_metadata"].(bool)
 	accountID, _ := params["account_id"].(string)
 
+	// Check mock mode
+	if s.isMockMode() {
+		return s.getMockData("list_dashboards", params), nil
+	}
+
 	// Get New Relic client with account support
 	nrClient, err := s.getNRClientWithAccount(accountID)
 	if err != nil {

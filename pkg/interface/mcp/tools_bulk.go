@@ -139,6 +139,38 @@ func (s *Server) registerBulkTools() error {
 		Handler: s.handleBulkExecuteQueries,
 	})
 
+	// Bulk dashboard migration
+	s.tools.Register(Tool{
+		Name:        "bulk_dashboard_migrate",
+		Description: "Migrate dashboards between accounts or update to new standards",
+		Parameters: ToolParameters{
+			Type:     "object",
+			Required: []string{"dashboard_ids"},
+			Properties: map[string]Property{
+				"dashboard_ids": {
+					Type:        "array",
+					Description: "List of dashboard IDs to migrate",
+					Items:       &Property{Type: "string"},
+				},
+				"target_account_id": {
+					Type:        "string",
+					Description: "Target account ID (if different from source)",
+				},
+				"update_queries": {
+					Type:        "boolean",
+					Description: "Update NRQL queries to match target account",
+					Default:     true,
+				},
+				"preserve_permissions": {
+					Type:        "boolean",
+					Description: "Preserve original dashboard permissions",
+					Default:     false,
+				},
+			},
+		},
+		Handler: s.handleBulkDashboardMigrate,
+	})
+
 	return nil
 }
 

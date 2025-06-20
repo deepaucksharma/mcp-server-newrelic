@@ -201,12 +201,12 @@ func (s *Server) registerQueryTools() error {
 func (s *Server) handleQueryNRDB(ctx context.Context, params map[string]interface{}) (interface{}, error) {
 	query, ok := params["query"].(string)
 	if !ok || query == "" {
-		return nil, fmt.Errorf("query parameter is required")
+		return nil, NewInvalidParamsError("query parameter is required and must be a non-empty string", "query")
 	}
 
 	// Validate query first
 	if err := s.validateNRQLSafety(query); err != nil {
-		return nil, fmt.Errorf("query validation failed: %w", err)
+		return nil, NewValidationError("query", err.Error())
 	}
 
 	// Get timeout
@@ -219,11 +219,14 @@ func (s *Server) handleQueryNRDB(ctx context.Context, params map[string]interfac
 	queryCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
 	defer cancel()
 
-	// Execute query using the NRDB client
-	// Note: This would use the actual New Relic client when implemented
+	// Execute query
 	result, err := s.executeNRQLQuery(queryCtx, query, params["account_id"])
 	if err != nil {
-		return nil, fmt.Errorf("query execution failed: %w", err)
+		// Check for timeout
+		if queryCtx.Err() == context.DeadlineExceeded {
+			return nil, NewTimeoutError("query_nrdb", time.Duration(timeout)*time.Second)
+		}
+		return nil, NewQueryError(query, err)
 	}
 
 	return result, nil
@@ -559,22 +562,13 @@ func (s *Server) estimateQueryCost(query string) map[string]interface{} {
 
 // executeNRQLQuery executes the actual query using the New Relic client
 func (s *Server) executeNRQLQuery(ctx context.Context, query string, accountID interface{}) (interface{}, error) {
-	// Check if we have a New Relic client
-	if s.getNRClient() == nil {
-		// If no client, return mock response for development
-		return map[string]interface{}{
-			"results": []map[string]interface{}{
-				{
-					"message": "New Relic client not configured - mock mode",
-					"query":   query,
-				},
-			},
-			"metadata": map[string]interface{}{
-				"executionTime": "0ms",
-				"inspectedCount": 0,
-				"matchedCount":   0,
-			},
-		}, nil
+	// Check if we're in mock mode
+	if s.isMockMode() {
+		// Return realistic mock data
+		return s.getMockData("query_nrdb", map[string]interface{}{
+			"query": query,
+			"account_id": accountID,
+		}), nil
 	}
 
 	// Convert accountID to string if provided

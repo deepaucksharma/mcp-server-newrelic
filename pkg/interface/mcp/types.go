@@ -36,14 +36,8 @@ type Error struct {
 	Data    interface{} `json:"data,omitempty"`
 }
 
-// Standard JSON-RPC error codes
-const (
-	ParseError     = -32700
-	InvalidRequest = -32600
-	MethodNotFound = -32601
-	InvalidParams  = -32602
-	InternalError  = -32603
-)
+// Standard JSON-RPC error codes are defined in protocol.go
+// Use ParseErrorCode, InvalidRequestCode, etc. instead
 
 // Tool definitions
 type Tool struct {
@@ -131,7 +125,7 @@ type ServerConfig struct {
 	HTTPPort         int
 	HTTPHost         string
 	RateLimit        int
-	EnhancedProtocol bool
+	MockMode         bool // For running in mock mode without New Relic connection
 }
 
 // Tool registry interface

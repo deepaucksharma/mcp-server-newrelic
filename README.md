@@ -57,8 +57,9 @@ make diagnose
 # Run MCP server (default: stdio transport)
 make run
 
-# Run in mock mode (no New Relic connection)
+# Run in mock mode (no New Relic connection needed)
 make run-mock
+# Mock mode provides realistic data for all tools without requiring New Relic credentials
 
 # Run with HTTP transport
 ./bin/mcp-server --transport http --port 8080
@@ -112,7 +113,7 @@ echo '{"jsonrpc":"2.0","method":"discovery.explore_event_types","id":1}' | ./bin
 - **Production-Ready**: Built-in resilience with circuit breakers, retries, and rate limiting
 - **Flexible Deployment**: Support for STDIO, HTTP, and SSE transports
 - **State Management**: Session tracking with pluggable storage (Memory/Redis)
-- **Mock Mode**: Development mode with realistic responses without New Relic connection
+- **Mock Mode**: Comprehensive development mode with realistic responses for all 100+ tools without New Relic connection
 - **Cross-Account Support**: Query and manage resources across multiple New Relic accounts without reconfiguration
 
 ## 🎯 Why Discovery-First?

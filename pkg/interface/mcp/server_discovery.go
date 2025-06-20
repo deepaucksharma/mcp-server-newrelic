@@ -40,6 +40,9 @@ type Server struct {
 	
 	// Validation
 	nrqlValidator *validation.NRQLValidator
+	
+	// Mock data generator for development/testing
+	mockGenerator *MockDataGenerator
 }
 
 // NewServer creates a new MCP server instance
@@ -50,6 +53,7 @@ func NewServer(config ServerConfig) *Server {
 		sessions:      NewSessionManager(),
 		shutdownCh:    make(chan struct{}),
 		nrqlValidator: validation.NewNRQLValidator(),
+		mockGenerator: NewMockDataGenerator(),
 	}
 	
 	s.protocol = &ProtocolHandler{
@@ -244,4 +248,17 @@ func (s *Server) Shutdown() {
 	if s.transport != nil {
 		s.transport.Close()
 	}
+}
+
+// isMockMode returns true if the server is running in mock mode
+func (s *Server) isMockMode() bool {
+	return s.getNRClient() == nil || s.config.MockMode
+}
+
+// getMockData generates mock data for a tool
+func (s *Server) getMockData(toolName string, params map[string]interface{}) interface{} {
+	if s.mockGenerator == nil {
+		s.mockGenerator = NewMockDataGenerator()
+	}
+	return s.mockGenerator.GenerateMockResponse(toolName, params)
 }

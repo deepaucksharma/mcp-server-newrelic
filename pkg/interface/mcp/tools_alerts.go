@@ -339,6 +339,11 @@ func (s *Server) handleCreateAlert(ctx context.Context, params map[string]interf
 		return nil, fmt.Errorf("policy_id is required")
 	}
 
+	// Check mock mode
+	if s.isMockMode() {
+		return s.getMockData("create_alert", params), nil
+	}
+
 	// Get account ID if specified
 	accountID, _ := params["account_id"].(string)
 
@@ -1029,6 +1034,21 @@ func (s *Server) handleCloseIncident(ctx context.Context, params map[string]inte
 
 // Helper function to calculate baseline threshold
 func (s *Server) calculateBaseline(ctx context.Context, query string, sensitivity string) (float64, error) {
+	// Check mock mode
+	if s.isMockMode() {
+		// Return mock baseline based on sensitivity
+		sensitivityMultipliers := map[string]float64{
+			"low":    1.5,
+			"medium": 1.2,
+			"high":   1.0,
+		}
+		multiplier := sensitivityMultipliers[sensitivity]
+		if multiplier == 0 {
+			multiplier = 1.2
+		}
+		return 100.0 * multiplier, nil
+	}
+
 	// Get New Relic client
 	nrClient := s.getNRClient()
 	if nrClient == nil {

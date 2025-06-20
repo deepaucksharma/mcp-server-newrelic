@@ -44,6 +44,8 @@ Welcome to the New Relic MCP Server documentation. This index provides quick acc
 - **[Contributing Guide](./guides/development.md#contributing)** - How to contribute
 - **[Testing Guide](./guides/testing.md)** - Writing and running tests
 - **[Refactoring Guide](./guides/refactoring.md)** - Modernizing the codebase
+- **[Mock Mode Guide](./guides/mock-mode.md)** - Development without New Relic connection
+- **[Error Handling Guide](./guides/error-handling.md)** - Comprehensive error handling
 
 ## 🎯 Examples & Tutorials
 

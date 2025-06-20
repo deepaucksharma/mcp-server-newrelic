@@ -30,25 +30,25 @@ func TestProtocolHandlerErrors(t *testing.T) {
 			name:        "Invalid JSON",
 			request:     `{invalid json`,
 			expectError: true,
-			errorCode:   ParseError,
+			errorCode:   ParseErrorCode,
 		},
 		{
 			name:        "Missing method",
 			request:     `{"jsonrpc":"2.0","id":1}`,
 			expectError: true,
-			errorCode:   MethodNotFound,
+			errorCode:   InvalidRequestCode,
 		},
 		{
 			name:        "Unknown method",
 			request:     `{"jsonrpc":"2.0","method":"unknown.method","id":1}`,
 			expectError: true,
-			errorCode:   MethodNotFound,
+			errorCode:   MethodNotFoundCode,
 		},
 		{
 			name:        "Invalid params",
 			request:     `{"jsonrpc":"2.0","method":"tools/call","params":"invalid","id":1}`,
 			expectError: true,
-			errorCode:   InvalidParams,
+			errorCode:   InvalidParamsCode,
 		},
 	}
 	
@@ -93,18 +93,16 @@ func TestProtocolHandlerNotifications(t *testing.T) {
 		server: server,
 	}
 	
-	// Notification (no ID) currently returns a response (JSON-RPC spec says no response)
-	// For now, we'll test that it doesn't error
-	notification := `{"jsonrpc":"2.0","method":"tools/list"}`
+	// Notification (no ID) should not return a response per JSON-RPC spec
+	notification := `{"jsonrpc":"2.0","method":"tools/changed"}`
 	respBytes, err := handler.HandleMessage(context.Background(), []byte(notification))
 	if err != nil {
 		t.Fatalf("HandleMessage error: %v", err)
 	}
 	
-	// Current implementation returns a response even for notifications
-	// This could be improved to follow JSON-RPC spec more strictly
-	if respBytes == nil {
-		t.Error("Expected response even for notification (current implementation)")
+	// Per JSON-RPC spec, notifications should not return a response
+	if respBytes != nil {
+		t.Error("Expected no response for notification")
 	}
 }
 
