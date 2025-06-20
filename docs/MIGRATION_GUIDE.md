@@ -1,176 +1,412 @@
-# Documentation Migration Guide
+# Migration Guide: From Assumption-Based to Discovery-First
 
-## Overview
+This guide helps you migrate from traditional assumption-based tools to the discovery-first architecture of the New Relic MCP Server.
 
-This guide helps consolidate and organize the project documentation to eliminate duplication and improve clarity.
+## Table of Contents
 
-## Current Issues
+1. [Core Concepts](#core-concepts)
+2. [Tool Migration Patterns](#tool-migration-patterns)
+3. [Workflow Migration](#workflow-migration)
+4. [Common Scenarios](#common-scenarios)
+5. [Best Practices](#best-practices)
 
-### 1. Duplicate Files
-These files contain overlapping or duplicate content:
+## Core Concepts
 
-| Root File | Docs File | Action |
-|-----------|-----------|---------|
-| `ARCHITECTURE.md` | `docs/ARCHITECTURE.md` | Keep docs version, delete root |
-| `IMPLEMENTATION_LOG.md` | `docs/IMPLEMENTATION_LOG.md` | Merge into `docs/IMPLEMENTATION_STATUS.md` |
-| `TRACK1_PROGRESS.md` | `docs/track1-discovery-core.md` | Merge into `docs/IMPLEMENTATION_STATUS.md` |
-| `TRACK1_COMPLETION_SUMMARY.md` | - | Archive or merge into status |
+### The Fundamental Shift
 
-### 2. Scattered Track Documentation
-Consolidate all track-related docs into `docs/IMPLEMENTATION_STATUS.md`:
-- `TRACK1_PROGRESS.md`
-- `TRACK1_COMPLETION_SUMMARY.md`
-- `docs/TRACK2_PROGRESS.md`
-- `docs/track2-week1-summary.md`
-- `docs/track2-week2-summary.md`
-
-### 3. Inconsistent Status Reporting
-- Multiple files report different completion percentages
-- No single source of truth for project status
-
-## Recommended Structure
-
-```
-mcp-server-newrelic/
-├── README.md                    # Project overview and quick start
-├── CLAUDE.md                    # AI assistant instructions
-├── LICENSE                      # License file
-├── .env.example                 # Example configuration
-│
-├── docs/
-│   ├── ARCHITECTURE.md          # System architecture (consolidated)
-│   ├── API_REFERENCE.md         # Complete API documentation
-│   ├── DEPLOYMENT.md            # Production deployment guide
-│   ├── DEVELOPMENT.md           # Developer guide
-│   ├── IMPLEMENTATION_STATUS.md # Single source for progress
-│   ├── QUICKSTART.md           # 5-minute setup guide
-│   └── archives/               # Old/duplicate docs (for reference)
-│       ├── track1-progress/
-│       ├── track2-progress/
-│       └── legacy/
-│
-├── pkg/                        # Go packages with inline docs
-├── features/                   # Python features with docstrings
-├── tests/README.md            # Testing guide
-└── scripts/README.md          # Script documentation
+**Old Way (Assumption-Based)**
+```yaml
+approach: "I know what data exists"
+process:
+  1. Write query assuming schema
+  2. Execute and hope it works
+  3. Fail if assumptions wrong
 ```
 
-## Migration Steps
-
-### Step 1: Archive Duplicates
-```bash
-# Create archive directory
-mkdir -p docs/archives/{track1-progress,track2-progress,legacy}
-
-# Move duplicate files
-mv ARCHITECTURE.md docs/archives/legacy/
-mv IMPLEMENTATION_LOG.md docs/archives/legacy/
-mv TRACK1_*.md docs/archives/track1-progress/
-mv docs/track2-week*.md docs/archives/track2-progress/
+**New Way (Discovery-First)**
+```yaml
+approach: "Let me discover what exists"
+process:
+  1. Explore available data
+  2. Understand structure and quality
+  3. Build adaptive queries
+  4. Validate before execution
 ```
 
-### Step 2: Update Cross-References
-Search and replace file references:
-- `ARCHITECTURE.md` → `docs/ARCHITECTURE.md`
-- `track1-discovery-core.md` → `docs/IMPLEMENTATION_STATUS.md#track-1`
-- Track-specific docs → `docs/IMPLEMENTATION_STATUS.md`
+## Tool Migration Patterns
 
-### Step 3: Consolidate Content
-1. Merge all track progress into `IMPLEMENTATION_STATUS.md`
-2. Update completion percentages to be consistent
-3. Remove conflicting information
+### Pattern 1: Query Migration
 
-### Step 4: Update README Links
-Ensure README.md links point to correct locations:
-```markdown
-- **[Architecture Overview](./docs/ARCHITECTURE.md)**
-- **[Implementation Status](./docs/IMPLEMENTATION_STATUS.md)**
+#### Old Tool: Direct Query Execution
+```yaml
+# BEFORE - Assumes 'error' exists and is boolean
+tool: query_nrdb
+params:
+  query: "SELECT percentage(count(*), WHERE error IS true) FROM Transaction"
+  
+problems:
+  - Fails if 'error' doesn't exist
+  - Fails if 'error' isn't boolean
+  - No way to handle schema variations
 ```
 
-## Content Guidelines
-
-### IMPLEMENTATION_STATUS.md Structure
-```markdown
-# Implementation Status
-
-## Overview
-- Overall progress percentage
-- Last updated date
-
-## Track Summary Table
-| Track | Progress | Status | Details |
-
-## Track 1: Discovery Core
-### Completed ✅
-### In Progress 🚧
-### Pending ⏳
-
-## Track 2: Interface Layer
-...
-
-## Known Issues
-## Upcoming Milestones
-## Action Items
+#### New Approach: Discovery Before Query
+```yaml
+# AFTER - Discovers then adapts
+workflow: get_error_rate
+steps:
+  1. discover_error_indicators:
+     tool: discovery.explore_attributes
+     params:
+       event_type: "Transaction"
+       attributes: ["error", "error.class", "httpResponseCode"]
+       
+  2. build_appropriate_query:
+     tool: nrql.build_where
+     params:
+       conditions:
+         - if_exists: "error"
+           condition: "error IS true"
+         - else_if_exists: "error.class"
+           condition: "error.class IS NOT NULL"
+         - else_if_exists: "httpResponseCode"
+           condition: "httpResponseCode >= 400"
+           
+  3. execute_validated_query:
+     tool: nrql.execute
+     params:
+       query: "${built_query}"
+       validate_first: true
 ```
 
-### Version Control
-- Keep archived docs in git history
-- Add redirect notes in old locations
-- Update any external documentation links
+### Pattern 2: Dashboard Migration
 
-## Benefits After Migration
-
-1. **Single Source of Truth**: One place for implementation status
-2. **Clear Navigation**: Logical documentation structure
-3. **Reduced Confusion**: No conflicting information
-4. **Easier Maintenance**: Less duplication to update
-5. **Better Discoverability**: Clear hierarchy
-
-## Maintenance Guidelines
-
-### Going Forward
-1. **No Root-Level Docs**: Keep all documentation in `docs/`
-2. **Regular Reviews**: Monthly documentation audits
-3. **Automated Checks**: Add CI checks for broken links
-4. **Versioning**: Tag documentation with releases
-
-### Documentation Standards
-- Use relative links within docs
-- Include "Last Updated" timestamps
-- Follow consistent formatting
-- Keep technical details in code comments
-
-## Tools for Migration
-
-### Find Broken Links
-```bash
-# Install markdown-link-check
-npm install -g markdown-link-check
-
-# Check all markdown files
-find . -name "*.md" -exec markdown-link-check {} \;
+#### Old Tool: Fixed Dashboard Templates
+```yaml
+# BEFORE - Hard-coded widget queries
+tool: create_dashboard
+params:
+  widgets:
+    - title: "Error Rate"
+      query: "SELECT percentage(count(*), WHERE error IS true) FROM Transaction"
+    - title: "Response Time"
+      query: "SELECT average(duration) FROM Transaction FACET appName"
+      
+problems:
+  - Widgets fail if attributes missing
+  - Can't adapt to different schemas
+  - One-size-fits-all approach
 ```
 
-### Find Duplicates
-```bash
-# Find similar content
-grep -r "Track 1" --include="*.md" . | sort | uniq -c
+#### New Approach: Discovery-Driven Dashboards
+```yaml
+# AFTER - Dashboards adapt to available data
+workflow: create_adaptive_dashboard
+steps:
+  1. discover_available_metrics:
+     tool: discovery.explore_event_types
+     params:
+       time_range: "7 days"
+       min_volume: 1000
+       
+  2. profile_key_attributes:
+     parallel:
+       - tool: discovery.find_natural_groupings
+         params:
+           event_type: "Transaction"
+       - tool: discovery.profile_attribute_values
+         params:
+           event_type: "Transaction"
+           attributes: ["duration", "error", "name"]
+           
+  3. generate_dashboard:
+     tool: dashboard.generate_from_discovery
+     params:
+       discoveries: "${step_2.results}"
+       widget_types:
+         - error_tracking # Adapts to error schema
+         - performance_metrics # Uses available timing data
+         - traffic_patterns # Based on discovered groupings
 ```
 
-### Update References
-```bash
-# Update all references
-find . -name "*.md" -exec sed -i 's|ARCHITECTURE.md|docs/ARCHITECTURE.md|g' {} \;
+### Pattern 3: Alert Migration
+
+#### Old Tool: Static Alert Conditions
+```yaml
+# BEFORE - Fixed thresholds and assumptions
+tool: create_alert
+params:
+  condition: "SELECT average(duration) FROM Transaction"
+  threshold: 1000  # Arbitrary threshold
+  
+problems:
+  - Threshold may not match reality
+  - Doesn't account for patterns
+  - Can't adapt to different services
 ```
 
-## Checklist
+#### New Approach: Data-Driven Alerts
+```yaml
+# AFTER - Alerts based on discovered baselines
+workflow: create_intelligent_alert
+steps:
+  1. analyze_historical_performance:
+     tool: analysis.calculate_baseline
+     params:
+       metric_query: "SELECT average(duration) FROM Transaction"
+       time_range: "30 days"
+       include_patterns: ["daily", "weekly"]
+       
+  2. detect_anomaly_patterns:
+     tool: discovery.detect_temporal_patterns
+     params:
+       query: "${metric_query}"
+       pattern_types: ["seasonality", "trends"]
+       
+  3. create_adaptive_alert:
+     tool: alert.create_from_baseline
+     params:
+       baseline: "${step_1.baseline}"
+       patterns: "${step_2.patterns}"
+       sensitivity: "medium"
+       adaptive_thresholds: true
+```
 
-- [ ] Archive duplicate files
-- [ ] Update IMPLEMENTATION_STATUS.md with all track info
-- [ ] Fix all cross-references
-- [ ] Update README.md links
-- [ ] Remove conflicting information
-- [ ] Add redirects for moved files
-- [ ] Update external documentation
-- [ ] Run link checker
-- [ ] Commit with clear message
+## Workflow Migration
+
+### Investigation Workflows
+
+#### Old Workflow: Linear Investigation
+```yaml
+# BEFORE - Rigid step sequence
+workflow: investigate_slowness
+steps:
+  1. Check transaction duration
+  2. Look at database time
+  3. Check CPU usage
+  4. Review error logs
+  
+problems:
+  - Assumes specific metrics exist
+  - Fixed investigation path
+  - Misses unexpected causes
+```
+
+#### New Workflow: Discovery-Driven Investigation
+```yaml
+# AFTER - Adaptive investigation
+workflow: investigate_slowness
+phases:
+  1. discover_what_changed:
+     - What metrics show anomalies?
+     - When did patterns shift?
+     - Which entities are affected?
+     
+  2. explore_relationships:
+     - How do affected components connect?
+     - What dependencies exist?
+     - Where did issues propagate?
+     
+  3. trace_root_cause:
+     - What happened first?
+     - How did it cascade?
+     - What evidence supports this?
+```
+
+### Capacity Planning Workflows
+
+#### Old Workflow: Assumption-Based Planning
+```yaml
+# BEFORE - Fixed metrics and calculations
+workflow: capacity_planning
+steps:
+  1. Get CPU average over 30 days
+  2. Apply 20% growth factor
+  3. Recommend scaling at 80% threshold
+  
+problems:
+  - Ignores actual growth patterns
+  - Misses resource correlations
+  - One-size-fits-all thresholds
+```
+
+#### New Workflow: Pattern-Based Planning
+```yaml
+# AFTER - Data-driven projections
+workflow: capacity_planning
+phases:
+  1. discover_resource_patterns:
+     - What resources are actually constrained?
+     - How do they correlate with load?
+     - What patterns exist historically?
+     
+  2. analyze_growth_trends:
+     - What's the actual growth rate?
+     - Are there seasonal variations?
+     - What drives resource usage?
+     
+  3. project_intelligently:
+     - Based on discovered patterns
+     - Account for correlations
+     - Service-specific thresholds
+```
+
+## Common Scenarios
+
+### Scenario 1: New Service Onboarding
+
+**Old Approach**
+```yaml
+# Apply standard dashboard and alerts
+steps:
+  1. Deploy standard dashboard template
+  2. Create alerts with default thresholds
+  3. Hope they work for this service
+```
+
+**New Approach**
+```yaml
+# Discover and adapt to service specifics
+steps:
+  1. discover_service_data:
+     - What events does it generate?
+     - What attributes are available?
+     - What patterns exist?
+     
+  2. profile_service_behavior:
+     - What's normal performance?
+     - How does it handle load?
+     - What indicates problems?
+     
+  3. generate_custom_monitoring:
+     - Service-specific dashboards
+     - Baseline-driven alerts
+     - Relevant metrics only
+```
+
+### Scenario 2: Debugging Failed Queries
+
+**Old Approach**
+```yaml
+# Query fails, guess why
+error: "attribute 'error' does not exist"
+response: Try different attribute names randomly
+```
+
+**New Approach**
+```yaml
+# Systematic discovery
+steps:
+  1. explore_available_attributes:
+     tool: discovery.explore_attributes
+     # See what actually exists
+     
+  2. find_error_indicators:
+     tool: discovery.profile_attribute_values
+     # Understand what indicates errors
+     
+  3. build_working_query:
+     tool: nrql.build_from_discovery
+     # Create query that matches reality
+```
+
+### Scenario 3: Cross-Team Data Access
+
+**Old Approach**
+```yaml
+# Assume same schema everywhere
+problem: Different teams instrument differently
+result: Queries work for some services, fail for others
+```
+
+**New Approach**
+```yaml
+# Discover each team's schema
+steps:
+  1. map_team_schemas:
+     - Discover what each team collects
+     - Find common attributes
+     - Identify variations
+     
+  2. create_adaptive_queries:
+     - Queries that work across schemas
+     - Handle missing attributes
+     - Aggregate despite differences
+```
+
+## Best Practices
+
+### 1. Always Start with Discovery
+
+```yaml
+# Make discovery your first step
+before_any_operation:
+  - What data exists?
+  - Is it complete?
+  - How is it structured?
+  - What patterns are present?
+```
+
+### 2. Cache Discoveries for Performance
+
+```yaml
+# Discovery results are cacheable
+caching_strategy:
+  - Cache schema information (1 hour)
+  - Cache baselines (15 minutes)
+  - Cache relationships (30 minutes)
+  - Invalidate on schema changes
+```
+
+### 3. Build Adaptive, Not Brittle
+
+```yaml
+# Queries should handle variations
+adaptive_patterns:
+  - Use conditional logic
+  - Provide fallbacks
+  - Handle missing data gracefully
+  - Validate before execution
+```
+
+### 4. Document Discoveries
+
+```yaml
+# Record what you learn
+documentation:
+  - Schema variations by service
+  - Common patterns found
+  - Reliability scores
+  - Relationship mappings
+```
+
+### 5. Progressive Migration
+
+```yaml
+# Don't migrate everything at once
+migration_phases:
+  1. Start with investigation workflows
+  2. Move to dashboard generation
+  3. Update alert creation
+  4. Refactor bulk operations
+```
+
+## Migration Checklist
+
+- [ ] Identify assumption-based tools in use
+- [ ] Map to discovery-first equivalents
+- [ ] Update workflows to include discovery phase
+- [ ] Add validation before operations
+- [ ] Implement caching for performance
+- [ ] Test with varied schemas
+- [ ] Document discovered patterns
+- [ ] Train team on new approach
+
+## Getting Help
+
+- Review [DISCOVERY_FIRST_ARCHITECTURE.md](./DISCOVERY_FIRST_ARCHITECTURE.md) for principles
+- See [API_REFERENCE_V2.md](./API_REFERENCE_V2.md) for tool details
+- Check [WORKFLOW_PATTERNS_GUIDE.md](./WORKFLOW_PATTERNS_GUIDE.md) for examples
+- Use mock mode to test migrations safely
+
+Remember: The goal isn't to predict what data exists, but to discover it and adapt accordingly.
