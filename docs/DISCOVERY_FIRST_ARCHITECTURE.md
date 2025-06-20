@@ -280,6 +280,72 @@ tools:
       aggregation_rules: Pre-compute common queries
 ```
 
+### 4. Platform Governance Tools (Data Observability)
+
+```yaml
+category: governance
+purpose: Understand platform usage, costs, and adoption patterns
+tools:
+
+  # Dashboard Analysis
+  - tool: dashboard.list_widgets
+    purpose: Inventory all dashboard widgets
+    inputs:
+      cursor: Pagination cursor
+    outputs:
+      widgets: List with dashboard info, type, raw config
+      
+  - tool: dashboard.classify_widgets
+    purpose: Categorize widgets by data source
+    inputs:
+      dashboard_guid: Dashboard to analyze
+    outputs:
+      metric_widgets: Count using Metrics API
+      event_widgets: Count using NRQL
+      metric_names: List of dimensional metrics
+      event_types: List of event types
+      
+  - tool: dashboard.find_nrdot_dashboards
+    purpose: Find Data Explorer dashboards
+    inputs:
+      account_id: Optional account filter
+    outputs:
+      dashboard_guids: List of NRDOT dashboards
+      
+  # Metric Usage Analysis
+  - tool: metric.widget_usage_rank
+    purpose: Rank metrics by dashboard usage
+    inputs:
+      limit: Top N metrics
+      time_range: Analysis window
+    outputs:
+      rankings: Metrics with usage counts and dashboards
+      
+  # Ingest Analysis
+  - tool: usage.ingest_summary
+    purpose: Total ingest with source breakdown
+    inputs:
+      period: Time window (e.g., "30d")
+    outputs:
+      total_bytes: Overall ingest
+      breakdown: Bytes by source (AGENT, OTLP, API)
+      
+  - tool: usage.otlp_collectors
+    purpose: OTEL collector ingest analysis
+    inputs:
+      period: Time window
+    outputs:
+      collectors: Name, metric count, bytes estimate
+      
+  - tool: usage.agent_ingest
+    purpose: Native agent ingest stats
+    inputs:
+      period: Time window
+    outputs:
+      agents: Agent name and bytes
+      comparison: OTEL vs Agent ratio
+```
+
 ## Workflow Patterns
 
 ### Pattern 1: Investigation Workflow
@@ -387,6 +453,56 @@ phase_3_set_realistic_targets:
   - What's achievable?
   - What matters to users?
   - What can we measure reliably?
+```
+
+### Pattern 4: Platform Governance Workflow
+
+```yaml
+workflow: platform_cost_optimization
+pattern: discover_usage_then_optimize
+
+phase_1_inventory_dashboards:
+  - What dashboards exist?
+  - Which use dimensional metrics vs events?
+  - What's the widget distribution?
+
+phase_2_analyze_usage_patterns:
+  - Which metrics are most used?
+  - What event types dominate dashboards?
+  - How does UI usage correlate with ingest?
+
+phase_3_identify_cost_drivers:
+  - What's the ingest breakdown by source?
+  - Which collectors are noisiest?
+  - Where's the OTEL vs Agent split?
+
+phase_4_optimization_opportunities:
+  - Which NRQL widgets can migrate to metrics?
+  - What data is collected but never queried?
+  - Where can we aggregate or sample?
+
+example_flow:
+  - dashboard.list_widgets()
+    # Found: 150 dashboards, 2500 widgets
+    
+  - parallel:
+    - dashboard.classify_widgets(each_dashboard)
+    # Result: 40% metric widgets, 60% event widgets
+    
+  - metric.widget_usage_rank(limit=50)
+    # Top metric: http.server.duration (45 dashboards)
+    
+  - usage.ingest_summary(period="30d")
+    # Total: 10TB, OTLP: 6TB, Agent: 3TB, API: 1TB
+    
+  - usage.otlp_collectors()
+    # Found: payment-collector using 40% of OTLP
+    
+  - analysis.migration_impact(
+      dashboards=high_event_usage,
+      target="metrics"
+    )
+    # Potential savings: 2TB/month
 ```
 
 ## Implementation Guide
@@ -556,6 +672,13 @@ implementation:
 - No brittle failures
 - Clear data lineage
 - Explainable results
+
+### 5. Platform Governance
+- Complete visibility into dashboard composition
+- Data-driven cost optimization recommendations
+- Clear understanding of ingest sources and volumes
+- Metrics adoption tracking across teams
+- Identification of redundant data collection
 
 ## Conclusion
 

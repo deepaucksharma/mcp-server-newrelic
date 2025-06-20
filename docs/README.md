@@ -7,10 +7,14 @@ This directory contains the comprehensive documentation for the New Relic Model 
 The New Relic MCP Server breaks new ground by putting data discovery at the center of all operations. Instead of assuming what data exists, it explores, understands, and adapts to your actual NRDB landscape.
 
 **Key Documentation:**
+- **[DISCOVERY_PHILOSOPHY.md](./DISCOVERY_PHILOSOPHY.md)** - The philosophical foundations of our approach
+- **[NO_ASSUMPTIONS_MANIFESTO.md](./NO_ASSUMPTIONS_MANIFESTO.md)** - Our radical commitment to zero assumptions
 - **[DISCOVERY_FIRST_ARCHITECTURE.md](./DISCOVERY_FIRST_ARCHITECTURE.md)** - Complete architectural vision
 - **[DISCOVERY_FIRST_WORKFLOWS.md](./DISCOVERY_FIRST_WORKFLOWS.md)** - First-principles workflow design
+- **[ZERO_ASSUMPTIONS_EXAMPLES.md](./ZERO_ASSUMPTIONS_EXAMPLES.md)** - Real code showing zero assumptions
+- **[DATA_OBSERVABILITY_TOOLKIT.md](./DATA_OBSERVABILITY_TOOLKIT.md)** - Platform governance and cost optimization
 - **[DISCOVERY_DRIVEN_INVESTIGATION_EXAMPLES.md](./DISCOVERY_DRIVEN_INVESTIGATION_EXAMPLES.md)** - Real-world scenarios
-- **[DISCOVERY_FIRST_CODE_EXAMPLE.md](./DISCOVERY_FIRST_CODE_EXAMPLE.md)** - Concrete implementation example
+- **[DISCOVERY_FIRST_CODE_EXAMPLE.md](./DISCOVERY_FIRST_CODE_EXAMPLE.md)** - Implementation patterns
 - **[../DISCOVERY_FIRST_SUMMARY.md](../DISCOVERY_FIRST_SUMMARY.md)** - Executive summary
 
 ## Documentation Structure

@@ -500,6 +500,204 @@ Generate standard golden signal queries.
 | entity_name | string | No | Specific entity name |
 | custom_attributes | array | No | Additional attributes |
 
+## Platform Governance Tools
+
+### dashboard.list_widgets
+
+Inventory all dashboard widgets with their configurations.
+
+**Category**: governance  
+**Safety Level**: safe  
+**Performance**: 5s expected for 100 dashboards
+
+#### Parameters
+
+| Name | Type | Required | Description | Default |
+|------|------|----------|-------------|---------|
+| cursor | string | No | Pagination cursor | null |
+| account_id | int | No | Filter by account | current |
+
+#### Returns
+
+```json
+{
+  "widgets": [
+    {
+      "dashboardGuid": "MXxEQVNIQk9BUkR8MTIzNDU",
+      "dashboardName": "Production Overview",
+      "widgetId": "widget-1",
+      "type": "line",
+      "visualization": "viz.line",
+      "rawConfiguration": "{...}"
+    }
+  ],
+  "nextCursor": "..."
+}
+```
+
+### dashboard.classify_widgets
+
+Classify widgets as dimensional-metric-based or event-NRQL-based.
+
+**Category**: governance  
+**Safety Level**: safe  
+**Performance**: 500ms per dashboard
+
+#### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| dashboard_guid | string | Yes | Dashboard to analyze |
+
+#### Returns
+
+```json
+{
+  "dashboardGuid": "MXxEQVNIQk9BUkR8MTIzNDU",
+  "metricWidgets": 12,
+  "eventWidgets": 34,
+  "metricNames": ["http.server.duration", "cpu.usage"],
+  "eventTypes": ["Transaction", "PageView"],
+  "classification": {
+    "percentMetrics": 26.1,
+    "percentEvents": 73.9
+  }
+}
+```
+
+### dashboard.find_nrdot_dashboards
+
+Find dashboards using NR1 Data Explorer (NRDOT).
+
+**Category**: governance  
+**Safety Level**: safe  
+**Performance**: 3s expected
+
+#### Parameters
+
+| Name | Type | Required | Description | Default |
+|------|------|----------|-------------|---------|
+| account_id | int | No | Filter by account | all |
+
+### metric.widget_usage_rank
+
+Rank metrics by their usage across dashboard widgets.
+
+**Category**: governance  
+**Safety Level**: safe  
+**Performance**: 2s expected
+
+#### Parameters
+
+| Name | Type | Required | Description | Default |
+|------|------|----------|-------------|---------|
+| limit | int | No | Top N metrics | 50 |
+| time_range | string | No | Analysis window | '30 days' |
+
+#### Returns
+
+```json
+{
+  "rankings": [
+    {
+      "metricName": "http.server.duration",
+      "widgetCount": 45,
+      "dashboards": ["Dashboard1", "Dashboard2", ...],
+      "percentageOfTotal": 12.3
+    }
+  ]
+}
+```
+
+### usage.ingest_summary
+
+Get total ingest volume with breakdown by source.
+
+**Category**: governance  
+**Safety Level**: safe  
+**Performance**: 2s expected
+
+#### Parameters
+
+| Name | Type | Required | Description | Default |
+|------|------|----------|-------------|---------|
+| period | string | No | Time window | '30d' |
+| account_id | int | No | Specific account | current |
+
+#### Returns
+
+```json
+{
+  "totalBytes": 10995116277760,
+  "totalGB": 10240,
+  "breakdown": [
+    {"source": "OTLP", "bytes": 6597069766656, "percentage": 60},
+    {"source": "AGENT", "bytes": 3298534883328, "percentage": 30},
+    {"source": "API", "bytes": 1099511627776, "percentage": 10}
+  ]
+}
+```
+
+### usage.otlp_collectors
+
+Analyze OTEL collector ingest volumes.
+
+**Category**: governance  
+**Safety Level**: safe  
+**Performance**: 3s expected
+
+#### Parameters
+
+| Name | Type | Required | Description | Default |
+|------|------|----------|-------------|---------|
+| period | string | No | Time window | '30d' |
+
+#### Returns
+
+```json
+{
+  "collectors": [
+    {
+      "name": "otel-payment-prod",
+      "metricCount": 15000000,
+      "bytesEstimate": 120000000,
+      "percentageOfOtlp": 40
+    }
+  ],
+  "totalOtlpBytes": 6597069766656
+}
+```
+
+### usage.agent_ingest
+
+Get native agent ingest statistics.
+
+**Category**: governance  
+**Safety Level**: safe  
+**Performance**: 2s expected
+
+#### Parameters
+
+| Name | Type | Required | Description | Default |
+|------|------|----------|-------------|---------|
+| period | string | No | Time window | '30d' |
+
+#### Returns
+
+```json
+{
+  "agents": [
+    {"name": "Infrastructure", "bytes": 1649267441664},
+    {"name": "APM", "bytes": 1099511627776}
+  ],
+  "comparison": {
+    "agentBytes": 3298534883328,
+    "otelBytes": 6597069766656,
+    "ratio": 0.5
+  }
+}
+```
+
 ## Tool Metadata
 
 Each tool includes rich metadata for AI guidance:

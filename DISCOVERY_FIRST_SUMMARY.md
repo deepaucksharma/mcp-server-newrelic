@@ -46,7 +46,7 @@ This approach makes the system resilient to:
 └─────────────────────────────────┘
 ```
 
-### Granular Tools (100+)
+### Granular Tools (120+)
 
 **Discovery Tools** (~30)
 - Schema exploration
@@ -68,6 +68,13 @@ This approach makes the system resilient to:
 - Alert generation
 - Dashboard creation
 - Configuration optimization
+
+**Platform Governance Tools** (~20)
+- Dashboard widget inventory
+- Metric vs event classification
+- Ingest source analysis
+- OTEL collector tracking
+- Cost optimization identification
 
 ### Workflow Orchestration
 
@@ -101,6 +108,12 @@ Sophisticated patterns for complex operations:
 - Evolves with schema changes
 - Works across diverse teams
 
+### 5. Platform Governance
+- **Complete dashboard visibility** - Know exactly what's using metrics vs events
+- **Cost optimization** - Identify where to migrate NRQL to metrics
+- **Ingest transparency** - Understand OTEL vs Agent split
+- **Adoption tracking** - Monitor dimensional metrics uptake
+
 ## Real-World Impact
 
 ### Scenario: Performance Investigation
@@ -114,6 +127,10 @@ Sophisticated patterns for complex operations:
 ### Scenario: Cross-Team Analytics
 **Before**: Different schemas break unified queries
 **After**: Discover variations → build adaptive queries → seamless aggregation
+
+### Scenario: Cost Optimization
+**Before**: No visibility into what drives ingest costs
+**After**: Complete breakdown → "Migrate 17 NRQL widgets to save 2TB/month"
 
 ## Implementation Roadmap
 

@@ -4,9 +4,10 @@
 
 A revolutionary **Discovery-First** Model Context Protocol (MCP) server that provides AI assistants with intelligent access to New Relic observability data. Unlike traditional tools that assume data schemas, this server explores, understands, and adapts to your actual NRDB landscape.
 
-Built in Go with full MCP DRAFT-2025 compliance, this server enables AI-powered observability workflows through a comprehensive suite of 100+ granular tools that compose into sophisticated workflows.
+Built in Go with full MCP DRAFT-2025 compliance, this server enables AI-powered observability workflows through a comprehensive suite of 120+ granular tools that compose into sophisticated workflows.
 
-**→ [Read the Discovery-First Architecture Summary](./DISCOVERY_FIRST_SUMMARY.md)**
+**→ [Read the Discovery-First Architecture Summary](./DISCOVERY_FIRST_SUMMARY.md)**  
+**→ [Explore our Zero Assumptions Philosophy](./NO_ASSUMPTIONS_SUMMARY.md)**
 
 ## 🚀 Quick Start
 
@@ -89,7 +90,7 @@ This approach provides:
 
 ## 🛠️ Available MCP Tools
 
-The server provides 100+ granular tools organized into four categories:
+The server provides 120+ granular tools organized into five categories:
 
 ### Discovery Tools (Foundation)
 ```json
@@ -139,7 +140,18 @@ The server provides 100+ granular tools organized into four categories:
 }
 ```
 
-See [API Reference V2](./docs/API_REFERENCE_V2.md) for all 100+ tools.
+### Platform Governance Tools (Cost Optimization)
+```json
+{
+  "tool": "dashboard.classify_widgets",
+  "params": {
+    "dashboard_guid": "MXxEQVNIQk9BUkR8MTIz",
+    "show_migration_opportunities": true
+  }
+}
+```
+
+See [API Reference V2](./docs/API_REFERENCE_V2.md) for all 120+ tools.
 
 ## 🏗️ Architecture
 

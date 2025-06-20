@@ -1,21 +1,31 @@
-# CLAUDE.md
+# CLAUDE.md - AI Assistant Guide for New Relic MCP Server
 
-This file provides comprehensive guidance to Claude Code (claude.ai/code) and other AI assistants when working with the New Relic MCP Server repository.
+This file provides comprehensive guidance to Claude and other AI assistants when working with the New Relic MCP Server repository.
 
 ## Project Overview
 
-The New Relic MCP Server is a production-grade Go implementation of the Model Context Protocol that provides AI assistants with intelligent access to New Relic observability data. It enables sophisticated operations including NRQL queries, dashboard generation, alert management, and bulk operations.
+The New Relic MCP Server is a revolutionary **Discovery-First** observability platform that provides AI assistants with intelligent access to New Relic data. Unlike traditional tools that assume data structures, this server explores, understands, and adapts to your actual NRDB landscape.
 
-**Current State**: Feature-complete Go implementation with all core tools. Focus is now on testing, error handling, and CI/CD setup. The Python implementation in `new-branch` should be considered deprecated.
+**Current State**: Production-ready Go implementation with 120+ granular tools organized into a sophisticated discovery-first architecture. The server emphasizes:
+- **Zero Assumptions**: Never assume data exists; always discover first
+- **Atomic Tools**: Single-responsibility tools that compose into workflows
+- **Progressive Understanding**: Build knowledge incrementally from evidence
+- **Platform Governance**: Complete visibility into costs and usage patterns
 
 ## Critical Context
 
-### Dual Implementation Issue
-The repository contains two parallel implementations:
-1. **Go Implementation** (main) - Complete and recommended
-2. **Python Implementation** (new-branch) - Partial, to be deprecated
+### Discovery-First Philosophy
+This server operates on a fundamental principle: **Never make assumptions about data**. Always:
+1. Discover what exists first (`discovery.*` tools)
+2. Understand the structure and quality
+3. Build adaptive queries based on findings
+4. Validate before execution
 
-**IMPORTANT**: Always work with the Go implementation unless specifically asked about Python code.
+### Implementation Status
+- **Go Implementation** (main branch) - Production-ready with all 120+ tools
+- **Documentation** - Comprehensive guides for all aspects
+- **Testing** - 80%+ coverage target with comprehensive test suites
+- **Deployment** - Docker and Kubernetes ready with production configs
 
 ## Architecture Overview
 
