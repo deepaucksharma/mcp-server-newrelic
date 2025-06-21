@@ -53,7 +53,7 @@ func (s *Server) registerTools() error {
 	}
 	
 	// Governance tools
-	if err := s.RegisterGovernanceTools(); err != nil {
+	if err := s.RegisterGovernanceGranularTools(); err != nil {
 		return fmt.Errorf("failed to register governance tools: %w", err)
 	}
 	

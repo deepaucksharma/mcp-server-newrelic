@@ -291,7 +291,7 @@ func (s *Server) handleAnalysisCalculateBaseline(ctx context.Context, params map
 		timeRange)
 
 	// Execute query
-	result, err := s.executeNRQL(ctx, query)
+	result, err := s.executeNRQL(ctx, query, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to calculate baseline: %w", err)
 	}
@@ -337,7 +337,7 @@ func (s *Server) handleAnalysisDetectAnomalies(ctx context.Context, params map[s
 		SINCE %s
 	`, metric, eventType, timeRange)
 
-	result, err := s.executeNRQL(ctx, query)
+	result, err := s.executeNRQL(ctx, query, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get time series: %w", err)
 	}
@@ -898,7 +898,3 @@ func calculateCorrelation(ctx context.Context, s *Server, eventType, metric1, me
 	}
 }
 
-func generateCorrelationInsights(correlations []map[string]interface{}) []string {
-	// Generate insights from correlations
-	return []string{}
-}

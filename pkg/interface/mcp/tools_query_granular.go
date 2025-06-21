@@ -10,7 +10,7 @@ import (
 func (s *Server) registerGranularQueryTools() error {
 	// 1. Query Execution Tools
 	executeQuery := NewToolBuilder("nrql.execute", "Execute NRQL query with timeout and metadata controls").
-		Category(ToolCategoryCore).
+		Category(CategoryQuery).
 		Handler(s.handleNRQLExecute).
 		Required("query").
 		Param("query", EnhancedProperty{
@@ -43,18 +43,20 @@ func (s *Server) registerGranularQueryTools() error {
 				Default:     false,
 			},
 		}).
-		Safety(SafetyMetadata{Level: SafetyLevelSafe}).
-		Performance(PerformanceMetadata{
-			ExpectedLatencyMS: 1000,
-			MaxLatencyMS:      30000,
-			Cacheable:         true,
-			CacheTTLSeconds:   300,
+		Safety(func(s *SafetyMetadata) {
+			s.Level = SafetyLevelSafe
+		}).
+		Performance(func(p *PerformanceMetadata) {
+			p.ExpectedLatencyMS = 1000
+			p.MaxLatencyMS = 30000
+			p.Cacheable = true
+			p.CacheTTLSeconds = 300
 		}).
 		Build()
 
 	// 2. Query Validation
 	validateQuery := NewToolBuilder("nrql.validate", "Validate NRQL syntax and estimate impact").
-		Category(ToolCategoryCore).
+		Category(CategoryQuery).
 		Handler(s.handleNRQLValidate).
 		Required("query").
 		Param("query", EnhancedProperty{
@@ -77,12 +79,12 @@ func (s *Server) registerGranularQueryTools() error {
 				Default:     true,
 			},
 		}).
-		Safety(SafetyMetadata{Level: SafetyLevelSafe}).
+		Safety(func(s *SafetyMetadata) { s.Level = SafetyLevelSafe }).
 		Build()
 
 	// 3. Query Cost Estimation
 	estimateCost := NewToolBuilder("nrql.estimate_cost", "Estimate query execution cost and impact").
-		Category(ToolCategoryAnalysis).
+		Category(CategoryAnalysis).
 		Handler(s.handleNRQLEstimateCost).
 		Required("query").
 		Param("query", EnhancedProperty{
@@ -107,12 +109,12 @@ func (s *Server) registerGranularQueryTools() error {
 				Default:     "once",
 			},
 		}).
-		Safety(SafetyMetadata{Level: SafetyLevelSafe}).
+		Safety(func(s *SafetyMetadata) { s.Level = SafetyLevelSafe }).
 		Build()
 
 	// 4. Query Builder - SELECT clause
 	buildSelect := NewToolBuilder("nrql.build_select", "Build SELECT clause with aggregations").
-		Category(ToolCategoryCore).
+		Category(CategoryQuery).
 		Handler(s.handleNRQLBuildSelect).
 		Required("event_type").
 		Param("event_type", EnhancedProperty{
@@ -154,12 +156,12 @@ func (s *Server) registerGranularQueryTools() error {
 				map[string]string{"duration": "avgDuration", "count(*)": "totalCount"},
 			},
 		}).
-		Safety(SafetyMetadata{Level: SafetyLevelSafe}).
+		Safety(func(s *SafetyMetadata) { s.Level = SafetyLevelSafe }).
 		Build()
 
 	// 5. Query Builder - WHERE clause
 	buildWhere := NewToolBuilder("nrql.build_where", "Build WHERE clause with conditions").
-		Category(ToolCategoryCore).
+		Category(CategoryQuery).
 		Handler(s.handleNRQLBuildWhere).
 		Required("conditions").
 		Param("conditions", EnhancedProperty{
@@ -190,12 +192,12 @@ func (s *Server) registerGranularQueryTools() error {
 				Default:     false,
 			},
 		}).
-		Safety(SafetyMetadata{Level: SafetyLevelSafe}).
+		Safety(func(s *SafetyMetadata) { s.Level = SafetyLevelSafe }).
 		Build()
 
 	// 6. Query Builder - Time range
 	buildTimeRange := NewToolBuilder("nrql.build_time_range", "Build SINCE/UNTIL time clauses").
-		Category(ToolCategoryCore).
+		Category(CategoryQuery).
 		Handler(s.handleNRQLBuildTimeRange).
 		Param("since", EnhancedProperty{
 			Property: Property{
@@ -218,12 +220,12 @@ func (s *Server) registerGranularQueryTools() error {
 			},
 			Examples: []interface{}{"1 week ago", "1 month ago"},
 		}).
-		Safety(SafetyMetadata{Level: SafetyLevelSafe}).
+		Safety(func(s *SafetyMetadata) { s.Level = SafetyLevelSafe }).
 		Build()
 
 	// 7. Query Template Library
 	getQueryTemplate := NewToolBuilder("nrql.get_template", "Get pre-built query templates").
-		Category(ToolCategoryCore).
+		Category(CategoryQuery).
 		Handler(s.handleNRQLGetTemplate).
 		Required("template_name").
 		Param("template_name", EnhancedProperty{
@@ -246,7 +248,7 @@ func (s *Server) registerGranularQueryTools() error {
 				Description: "Template parameters",
 			},
 		}).
-		Safety(SafetyMetadata{Level: SafetyLevelSafe}).
+		Safety(func(s *SafetyMetadata) { s.Level = SafetyLevelSafe }).
 		Build()
 
 	// Register all tools

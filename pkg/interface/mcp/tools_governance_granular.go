@@ -14,8 +14,8 @@ const (
 	ToolCategoryGovernance ToolCategory = "governance"
 )
 
-// RegisterGovernanceTools registers all platform governance and data observability tools
-func (s *Server) RegisterGovernanceTools() error {
+// RegisterGovernanceGranularTools registers all platform governance and data observability tools
+func (s *Server) RegisterGovernanceGranularTools() error {
 	tools := []EnhancedTool{
 		// Dashboard Analysis Tools
 		{

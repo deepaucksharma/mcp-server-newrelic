@@ -1,0 +1,287 @@
+# PERF-CMP-001: Cross-Region Latency Investigation
+# Tests performance comparison across regions with network chaos
+# Validates region switching, chaos resilience, and complex analysis
+
+id: PERF-CMP-001
+title: Cross-region latency comparison with network degradation
+tags:
+  - performance
+  - cross-region
+  - chaos
+  - complex-analysis
+  - critical
+
+environment:
+  account_type: single-account
+  load_profile: steady
+  variables:
+    service_name: "frontend-api"
+    baseline_region: "us-east-1"
+    comparison_region: "eu-west-1"
+    degradation_start: "${fn:now()-30m}"
+    slo_latency_p95: 250  # 250ms SLO
+
+setup:
+  seed_data_script: scripts/seed-cross-region-latency.py
+  environment:
+    REGIONS: "us-east-1,eu-west-1,ap-southeast-1"
+    LATENCY_MULTIPLIER_EU: "2.5"  # EU has 2.5x higher latency
+    BASELINE_P95: "100"  # 100ms baseline
+  
+  # Inject network chaos for EU region
+  toxiproxy:
+    proxies:
+      - name: newrelic-eu
+        listen: "127.0.0.1:8443"
+        upstream: "api.eu.newrelic.com:443"
+        toxics:
+          - type: latency
+            name: eu-latency
+            stream: downstream
+            toxicity: 0.5  # 50% of requests affected
+            attributes:
+              latency: 150  # Add 150ms
+              jitter: 50    # ±50ms jitter
+          
+          - type: bandwidth
+            name: eu-bandwidth
+            stream: downstream
+            attributes:
+              rate: 524288  # 512KB/s limit
+  
+  wait: 10s
+
+workflow:
+  # Step 1: Discover performance metrics structure
+  - tool: discovery.explore_event_types
+    params:
+      pattern: "Transaction|PageView|Span"
+      include_samples: true
+    store_as: perf_events
+    timeout: 30s
+
+  # Step 2: Profile latency attributes across regions
+  - parallel:
+    - tool: discovery.profile_attribute
+      params:
+        event_type: Transaction
+        attribute: duration
+        facet: "aws.region"
+        percentiles: [50, 75, 90, 95, 99]
+      store_as: latency_profile_us
+      environment:
+        NEW_RELIC_REGION: "US"
+    
+    - tool: discovery.profile_attribute
+      params:
+        event_type: Transaction
+        attribute: duration
+        facet: "aws.region"
+        percentiles: [50, 75, 90, 95, 99]
+      store_as: latency_profile_eu
+      environment:
+        NEW_RELIC_REGION: "EU"
+
+  # Step 3: Detect performance anomalies
+  - tool: analysis.detect_anomalies
+    params:
+      query: |
+        SELECT percentile(duration, 95) as p95_latency
+        FROM Transaction
+        WHERE appName = '${service_name}'
+        FACET aws.region
+        SINCE ${degradation_start}
+        TIMESERIES 1 minute
+      sensitivity: medium
+      compare_to_baseline: true
+      baseline_window: "1 hour ago"
+    store_as: latency_anomalies
+
+  # Step 4: Compare regional performance
+  - tool: analysis.compare_segments
+    params:
+      metric_query: |
+        SELECT 
+          percentile(duration, 50) as p50,
+          percentile(duration, 95) as p95,
+          percentile(duration, 99) as p99,
+          count(*) as throughput,
+          percentage(count(*), WHERE error IS TRUE) as error_rate
+        FROM Transaction
+        WHERE appName = '${service_name}'
+        SINCE ${degradation_start}
+      segment_by: "aws.region"
+      comparison_type: "statistical"
+      include_distribution: true
+    store_as: region_comparison
+
+  # Step 5: Analyze network path differences
+  - tool: analysis.trace_path_analysis
+    params:
+      service: "${service_name}"
+      group_by: "aws.region"
+      focus_on: "external_calls"
+      time_range: "SINCE ${degradation_start}"
+    store_as: network_paths
+
+  # Step 6: Calculate SLO compliance by region
+  - tool: governance.calculate_slo_compliance
+    params:
+      slo_query: |
+        SELECT percentage(count(*), WHERE duration <= ${slo_latency_p95})
+        FROM Transaction
+        WHERE appName = '${service_name}'
+        FACET aws.region
+        SINCE ${degradation_start}
+      target: 95.0
+      window: "30 minutes"
+    store_as: slo_compliance
+
+  # Step 7: Find correlated infrastructure issues
+  - tool: analysis.correlate_metrics
+    params:
+      primary_query: |
+        SELECT percentile(duration, 95) as p95_latency
+        FROM Transaction
+        WHERE appName = '${service_name}' AND aws.region = '${comparison_region}'
+        TIMESERIES 1 minute
+      correlation_queries:
+        - name: "cpu_utilization"
+          query: |
+            SELECT average(cpuPercent) as cpu
+            FROM SystemSample
+            WHERE aws.region = '${comparison_region}'
+            TIMESERIES 1 minute
+        - name: "network_errors"
+          query: |
+            SELECT sum(provider.networkDroppedPackets.rate) as dropped_packets
+            FROM NetworkSample
+            WHERE aws.region = '${comparison_region}'
+            TIMESERIES 1 minute
+        - name: "external_service_latency"
+          query: |
+            SELECT average(duration) as external_duration
+            FROM Span
+            WHERE aws.region = '${comparison_region}' AND span.kind = 'client'
+            TIMESERIES 1 minute
+      window: 60m
+    store_as: infra_correlations
+
+  # Step 8: Generate performance optimization recommendations
+  - tool: analysis.performance_recommendations
+    params:
+      service: "${service_name}"
+      performance_data: "${region_comparison}"
+      anomalies: "${latency_anomalies}"
+      network_analysis: "${network_paths}"
+      slo_data: "${slo_compliance}"
+    store_as: optimization_recs
+
+  # Step 9: Create comparison dashboard
+  - tool: dashboards.create_comparison_dashboard
+    params:
+      title: "Regional Performance Analysis: ${service_name}"
+      comparison_dimension: "aws.region"
+      metrics:
+        - latency_percentiles
+        - throughput
+        - error_rate
+        - slo_compliance
+      time_range: "SINCE ${degradation_start}"
+      include_forecasts: true
+      tags: ["performance", "regional", "e2e-test"]
+    store_as: perf_dashboard
+
+  # Step 10: Test with increased chaos (optional based on results)
+  - tool: chaos.modify_toxic
+    params:
+      proxy: "newrelic-eu"
+      toxic: "eu-latency"
+      toxicity: 0.8  # Increase to 80%
+      attributes:
+        latency: 300  # Increase to 300ms
+    condition: "${latency_anomalies.severity} < 'high'"
+    store_as: chaos_increase
+
+assert:
+  # Verify performance events discovered
+  - jsonpath: "$.perf_events.Transaction.found"
+    operator: "=="
+    value: true
+    message: "Transaction events should be discovered"
+
+  # Verify latency profiles show difference
+  - jsonpath: "$.latency_profile_eu.percentiles.p95"
+    operator: ">"
+    value: "${latency_profile_us.percentiles.p95}"
+    message: "EU latency should be higher than US"
+
+  # Verify anomaly detected in EU region
+  - jsonpath: "$.latency_anomalies.anomalies[?(@.dimension=='eu-west-1')].detected"
+    operator: "=="
+    value: true
+    message: "Should detect anomaly in EU region"
+
+  # Verify statistical significance in comparison
+  - jsonpath: "$.region_comparison.comparisons[?(@.segments[0]=='us-east-1' && @.segments[1]=='eu-west-1')].statistically_significant"
+    operator: "=="
+    value: true
+    message: "Regional difference should be statistically significant"
+
+  # Verify EU region has higher p95
+  - jsonpath: "$.region_comparison.data['eu-west-1'].p95"
+    operator: ">"
+    value: 200  # > 200ms
+    message: "EU p95 latency should exceed 200ms"
+
+  # Verify SLO violation in EU
+  - jsonpath: "$.slo_compliance.compliance['eu-west-1'].percentage"
+    operator: "<"
+    value: 95.0
+    message: "EU region should violate SLO"
+
+  # Verify US region meets SLO
+  - jsonpath: "$.slo_compliance.compliance['us-east-1'].percentage"
+    operator: ">="
+    value: 95.0
+    message: "US region should meet SLO"
+
+  # Verify network correlation found
+  - jsonpath: "$.infra_correlations.correlations[?(@.metric=='external_service_latency')].coefficient"
+    operator: ">"
+    value: 0.7
+    message: "Should find correlation with external service latency"
+
+  # Verify recommendations include CDN
+  - jsonpath: "$.optimization_recs.recommendations[?(@.category=='network')].actions"
+    operator: "contains"
+    value: "cdn"
+    message: "Should recommend CDN for latency optimization"
+
+  # NRQL assertion - verify latency ratio
+  - type: nrql
+    query: |
+      SELECT 
+        filter(percentile(duration, 95), WHERE aws.region = 'eu-west-1') / 
+        filter(percentile(duration, 95), WHERE aws.region = 'us-east-1') as latency_ratio
+      FROM Transaction
+      WHERE appName = '${service_name}'
+      SINCE ${degradation_start}
+    operator: ">"
+    value: 2.0
+    message: "EU latency should be at least 2x US latency"
+
+  # Trace assertions for chaos validation
+  - type: trace
+    operator: trace_shows_chaos_impact
+    value: true
+    message: "Trace should show chaos injection impact"
+
+  - type: trace
+    operator: trace_recommendation_quality
+    value: 0.85
+    message: "Recommendations should be high quality"
+
+cleanup:
+  drop_dashboards_with_tag: "e2e-test"
+  delete_test_data: true

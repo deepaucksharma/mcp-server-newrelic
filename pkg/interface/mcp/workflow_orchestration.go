@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -16,7 +17,7 @@ type ContextManager struct {
 
 // StepValidator validates workflow steps
 type StepValidator interface {
-	Validate(step *WorkflowStep, context *WorkflowContext) error
+	Validate(step *WorkflowStepDef, context *WorkflowContext) error
 }
 
 // DataTransformer transforms data between workflow steps
@@ -156,7 +157,7 @@ func (o *WorkflowOrchestrator) ExecuteSequential(ctx context.Context, workflowID
 		
 		// Check if we should skip this step
 		if !o.shouldExecuteStep(ctx, execution, &step) {
-			o.logStepSkipped(execution, &step, "Condition not met")
+			o.logStepSkipped(execution, step.Name, "Condition not met")
 			continue
 		}
 
@@ -166,13 +167,13 @@ func (o *WorkflowOrchestrator) ExecuteSequential(ctx context.Context, workflowID
 			if !step.ContinueOnFail {
 				return fmt.Errorf("step %s failed: %w", step.ID, err)
 			}
-			o.logStepError(execution, &step, err)
+			o.logStepError(execution, step.Name, err)
 			continue
 		}
 
 		// Store result in context
 		execution.Context.Set(step.ID+".output", result)
-		o.logStepCompleted(execution, &step, result)
+		o.logStepCompleted(execution, step.Name, result)
 	}
 
 	return nil
@@ -208,13 +209,13 @@ func (o *WorkflowOrchestrator) ExecuteParallel(ctx context.Context, workflowID s
 					errChan <- fmt.Errorf("step %s failed: %w", step.ID, err)
 					return
 				}
-				o.logStepError(execution, &step, err)
+				o.logStepError(execution, step.Name, err)
 				return
 			}
 
 			// Store result
 			execution.Context.Set(step.ID+".output", result)
-			o.logStepCompleted(execution, &step, result)
+			o.logStepCompleted(execution, step.Name, result)
 		}()
 	}
 
@@ -247,10 +248,10 @@ func (o *WorkflowOrchestrator) ExecuteConditional(ctx context.Context, workflowI
 
 	// Execute appropriate branch
 	if conditionMet {
-		o.logDecision(execution, "Condition met, executing true branch", condition)
+		o.logDecision(execution, "Condition met, executing true branch")
 		return o.ExecuteSequential(ctx, workflowID, trueBranch)
 	} else {
-		o.logDecision(execution, "Condition not met, executing false branch", condition)
+		o.logDecision(execution, "Condition not met, executing false branch")
 		return o.ExecuteSequential(ctx, workflowID, falseBranch)
 	}
 }
@@ -417,7 +418,7 @@ func (o *WorkflowOrchestrator) executeStep(ctx context.Context, execution *Workf
 	defer cancel()
 
 	// Prepare inputs by resolving references
-	resolvedInputs, err := o.resolveInputs(execution, step.Inputs)
+	resolvedInputs, err := o.resolveInputs(ctx, execution, step.Inputs)
 	if err != nil {
 		return nil, fmt.Errorf("input resolution failed: %w", err)
 	}
@@ -428,25 +429,23 @@ func (o *WorkflowOrchestrator) executeStep(ctx context.Context, execution *Workf
 		return nil, fmt.Errorf("tool %s not found", step.Tool)
 	}
 
-	// Execute with retry
-	var result interface{}
-	err = o.executeWithRetry(stepCtx, step.Retry, func() error {
-		var execErr error
-		result, execErr = tool.Handler(stepCtx, resolvedInputs)
-		return execErr
-	})
+	// Execute tool handler directly (retry logic can be added later)
+	result, err := tool.Handler(stepCtx, resolvedInputs)
+	if err != nil {
+		return nil, fmt.Errorf("tool execution failed: %w", err)
+	}
 
-	return result, err
+	return result, nil
 }
 
 func (o *WorkflowOrchestrator) evaluateCondition(ctx context.Context, execution *WorkflowExecution, condition StepCondition) (bool, error) {
 	// Resolve condition parameters
-	left, err := o.resolveValue(execution, condition.Left)
+	left, err := o.resolveValue(ctx, execution, condition.Left)
 	if err != nil {
 		return false, err
 	}
 
-	right, err := o.resolveValue(execution, condition.Right)
+	right, err := o.resolveValue(ctx, execution, condition.Right)
 	if err != nil {
 		return false, err
 	}
@@ -458,9 +457,25 @@ func (o *WorkflowOrchestrator) evaluateCondition(ctx context.Context, execution 
 	case "not_equals":
 		return fmt.Sprintf("%v", left) != fmt.Sprintf("%v", right), nil
 	case "greater_than":
-		return compareNumeric(left, right, ">")
+		leftNum, err := toFloat64(left)
+		if err != nil {
+			return false, err
+		}
+		rightNum, err := toFloat64(right)
+		if err != nil {
+			return false, err
+		}
+		return compareNumeric(leftNum, rightNum, ">"), nil
 	case "less_than":
-		return compareNumeric(left, right, "<")
+		leftNum, err := toFloat64(left)
+		if err != nil {
+			return false, err
+		}
+		rightNum, err := toFloat64(right)
+		if err != nil {
+			return false, err
+		}
+		return compareNumeric(leftNum, rightNum, "<"), nil
 	case "contains":
 		leftStr := fmt.Sprintf("%v", left)
 		rightStr := fmt.Sprintf("%v", right)
@@ -538,10 +553,10 @@ func (o *WorkflowOrchestrator) getExecution(id string) (*WorkflowExecution, erro
 	return execution, nil
 }
 
-func (o *WorkflowOrchestrator) shouldExecuteStep(ctx context.Context, execution *WorkflowExecution, step *WorkflowStep) bool {
+func (o *WorkflowOrchestrator) shouldExecuteStep(ctx context.Context, execution *WorkflowExecution, step *WorkflowStepDef) bool {
 	// Check conditions
-	if step.Condition != "" {
-		result, err := o.evaluateCondition(ctx, execution, step.Condition)
+	for _, condition := range step.Conditions {
+		result, err := o.evaluateCondition(ctx, execution, condition)
 		if err != nil || !result {
 			return false
 		}
@@ -559,7 +574,7 @@ func (o *WorkflowOrchestrator) shouldExecuteStep(ctx context.Context, execution 
 
 func (o *WorkflowOrchestrator) isStepCompleted(execution *WorkflowExecution, stepName string) bool {
 	for _, log := range execution.ExecutionLog {
-		if log.StepName == stepName && log.Status == "completed" {
+		if log.StepID == stepName && log.Level == "info" && log.Message == "Step completed" {
 			return true
 		}
 	}
@@ -569,36 +584,46 @@ func (o *WorkflowOrchestrator) isStepCompleted(execution *WorkflowExecution, ste
 func (o *WorkflowOrchestrator) logStepSkipped(execution *WorkflowExecution, stepName string, reason string) {
 	o.addLogEntry(execution, ExecutionLogEntry{
 		Timestamp: time.Now(),
-		StepName:  stepName,
-		Status:    "skipped",
-		Message:   reason,
+		Level:     "info",
+		StepID:    stepName,
+		Message:   fmt.Sprintf("Step skipped: %s", reason),
+		Data: map[string]interface{}{
+			"status": "skipped",
+		},
 	})
 }
 
 func (o *WorkflowOrchestrator) logStepError(execution *WorkflowExecution, stepName string, err error) {
 	o.addLogEntry(execution, ExecutionLogEntry{
 		Timestamp: time.Now(),
-		StepName:  stepName,
-		Status:    "error",
-		Error:     err,
-		Message:   err.Error(),
+		Level:     "error",
+		StepID:    stepName,
+		Message:   fmt.Sprintf("Step error: %v", err),
+		Data: map[string]interface{}{
+			"status": "error",
+			"error":  err.Error(),
+		},
 	})
 }
 
 func (o *WorkflowOrchestrator) logStepCompleted(execution *WorkflowExecution, stepName string, result interface{}) {
 	o.addLogEntry(execution, ExecutionLogEntry{
 		Timestamp: time.Now(),
-		StepName:  stepName,
-		Status:    "completed",
-		Result:    result,
+		Level:     "info",
+		StepID:    stepName,
+		Message:   "Step completed",
+		Data: map[string]interface{}{
+			"status": "completed",
+			"result": result,
+		},
 	})
 }
 
 func (o *WorkflowOrchestrator) logDecision(execution *WorkflowExecution, message string) {
 	o.addLogEntry(execution, ExecutionLogEntry{
 		Timestamp: time.Now(),
-		StepName:  "decision",
-		Status:    "info",
+		Level:     "info",
+		StepID:    "decision",
 		Message:   message,
 	})
 }
@@ -606,7 +631,7 @@ func (o *WorkflowOrchestrator) logDecision(execution *WorkflowExecution, message
 func (o *WorkflowOrchestrator) logInfo(execution *WorkflowExecution, message string) {
 	o.addLogEntry(execution, ExecutionLogEntry{
 		Timestamp: time.Now(),
-		Status:    "info",
+		Level:     "info",
 		Message:   message,
 	})
 }
@@ -614,16 +639,18 @@ func (o *WorkflowOrchestrator) logInfo(execution *WorkflowExecution, message str
 func (o *WorkflowOrchestrator) logError(execution *WorkflowExecution, message string, err error) {
 	o.addLogEntry(execution, ExecutionLogEntry{
 		Timestamp: time.Now(),
-		Status:    "error",
+		Level:     "error",
 		Message:   message,
-		Error:     err,
+		Data: map[string]interface{}{
+			"error": err.Error(),
+		},
 	})
 }
 
 func (o *WorkflowOrchestrator) logWarning(execution *WorkflowExecution, message string) {
 	o.addLogEntry(execution, ExecutionLogEntry{
 		Timestamp: time.Now(),
-		Status:    "warning",
+		Level:     "warning",
 		Message:   message,
 	})
 }
@@ -695,10 +722,10 @@ func (o *WorkflowOrchestrator) resolveValue(ctx context.Context, execution *Work
 	}
 }
 
-func (o *WorkflowOrchestrator) executeWithRetry(ctx context.Context, execution *WorkflowExecution, step *WorkflowStep, inputs map[string]interface{}) (interface{}, error) {
-	maxRetries := step.MaxRetries
-	if maxRetries <= 0 {
-		maxRetries = 1
+func (o *WorkflowOrchestrator) executeWithRetry(ctx context.Context, execution *WorkflowExecution, step *WorkflowStepDef, inputs map[string]interface{}) (interface{}, error) {
+	maxRetries := 1
+	if step.Retry.MaxAttempts > 0 {
+		maxRetries = step.Retry.MaxAttempts
 	}
 	
 	var lastErr error
@@ -708,7 +735,14 @@ func (o *WorkflowOrchestrator) executeWithRetry(ctx context.Context, execution *
 			time.Sleep(time.Duration(attempt) * time.Second)
 		}
 		
-		result, err := o.executeTool(ctx, step.Tool, inputs)
+		// Get tool from registry
+		tool, exists := o.toolRegistry.Get(step.Tool)
+		if !exists {
+			return nil, fmt.Errorf("tool %s not found", step.Tool)
+		}
+		
+		// Execute tool handler
+		result, err := tool.Handler(ctx, inputs)
 		if err == nil {
 			return result, nil
 		}
@@ -721,6 +755,23 @@ func (o *WorkflowOrchestrator) executeWithRetry(ctx context.Context, execution *
 }
 
 // Helper function for numeric comparison
+func toFloat64(v interface{}) (float64, error) {
+	switch val := v.(type) {
+	case float64:
+		return val, nil
+	case float32:
+		return float64(val), nil
+	case int:
+		return float64(val), nil
+	case int64:
+		return float64(val), nil
+	case string:
+		return strconv.ParseFloat(val, 64)
+	default:
+		return 0, fmt.Errorf("cannot convert %T to float64", v)
+	}
+}
+
 func compareNumeric(left, right float64, operator string) bool {
 	switch operator {
 	case ">":

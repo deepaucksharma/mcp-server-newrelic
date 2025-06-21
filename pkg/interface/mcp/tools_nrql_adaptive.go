@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/deepaucksharma/mcp-server-newrelic/pkg/discovery"
 	"github.com/deepaucksharma/mcp-server-newrelic/pkg/newrelic"
 )
 
@@ -183,7 +184,7 @@ func (s *Server) validateAndAdaptQuery(ctx context.Context, query string, accoun
 
 	// Get schema information if available
 	if s.discovery != nil {
-		schema, err := s.discovery.GetSchema(ctx, eventType)
+		schema, err := s.discovery.ProfileSchema(ctx, eventType, discovery.ProfileDepthBasic)
 		if err == nil && schema != nil {
 			validation.Schema = map[string]interface{}{
 				"eventType":  eventType,
@@ -628,10 +629,10 @@ func (s *Server) handleNRQLEstimateCost(ctx context.Context, params map[string]i
 		return nil, fmt.Errorf("query parameter is required")
 	}
 
-	timeRange := "1 hour"
-	if tr, ok := params["time_range"].(string); ok {
-		timeRange = tr
-	}
+	// time_range parameter could be used for more accurate cost estimation in the future
+	// if tr, ok := params["time_range"].(string); ok {
+	//     timeRange = tr
+	// }
 
 	frequency := "once"
 	if freq, ok := params["execution_frequency"].(string); ok {

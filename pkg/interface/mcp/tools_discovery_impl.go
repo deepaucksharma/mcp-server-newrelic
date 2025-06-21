@@ -59,14 +59,14 @@ func (s *Server) handleDiscoveryExploreAttributesImpl(ctx context.Context, param
 
 	// Extract unique attributes from all samples
 	attributeMap := make(map[string]bool)
-	if results, ok := keysetResult["results"].([]interface{}); ok {
+	if keysetResult != nil && len(keysetResult.Results) > 0 {
+		results := keysetResult.Results
 		for _, result := range results {
-			if res, ok := result.(map[string]interface{}); ok {
-				if keyset, ok := res["keyset"].([]interface{}); ok {
-					for _, key := range keyset {
-						if keyStr, ok := key.(string); ok {
-							attributeMap[keyStr] = true
-						}
+			res := result
+			if keyset, ok := res["keyset"].([]interface{}); ok {
+				for _, key := range keyset {
+					if keyStr, ok := key.(string); ok {
+						attributeMap[keyStr] = true
 					}
 				}
 			}
@@ -101,16 +101,15 @@ func (s *Server) handleDiscoveryExploreAttributesImpl(ctx context.Context, param
 			`, attr, attr, eventType, int(sampleSize))
 
 			detailResult, err := client.QueryNRQL(ctx, detailQuery)
-			if err == nil && len(detailResult["results"].([]interface{})) > 0 {
-				if res, ok := detailResult["results"].([]interface{})[0].(map[string]interface{}); ok {
-					total := getFloat64(res, "total")
-					nonNull := getFloat64(res, "nonNullCount")
-					cardinality := getFloat64(res, "cardinality")
+			if err == nil && detailResult != nil && len(detailResult.Results) > 0 {
+				res := detailResult.Results[0]
+				total := getFloat64(res, "total")
+				nonNull := getFloat64(res, "nonNullCount")
+				cardinality := getFloat64(res, "cardinality")
 
-					if showCoverage && total > 0 {
-						detail["coverage"] = nonNull / total
-						detail["cardinality"] = int(cardinality)
-					}
+				if showCoverage && total > 0 {
+					detail["coverage"] = nonNull / total
+					detail["cardinality"] = int(cardinality)
 				}
 			}
 
@@ -125,11 +124,10 @@ func (s *Server) handleDiscoveryExploreAttributesImpl(ctx context.Context, param
 				`, attr, eventType, attr)
 
 				exampleResult, err := client.QueryNRQL(ctx, exampleQuery)
-				if err == nil && len(exampleResult["results"].([]interface{})) > 0 {
-					if res, ok := exampleResult["results"].([]interface{})[0].(map[string]interface{}); ok {
-						if examples, ok := res["examples"].([]interface{}); ok {
-							detail["examples"] = examples
-						}
+				if err == nil && exampleResult != nil && len(exampleResult.Results) > 0 {
+					res := exampleResult.Results[0]
+					if examples, ok := res["examples"].([]interface{}); ok {
+						detail["examples"] = examples
 					}
 				}
 			}
@@ -184,7 +182,11 @@ func inferDataType(attr string, examples interface{}) string {
 	if exampleList, ok := examples.([]interface{}); ok && len(exampleList) > 0 {
 		// Check first example type
 		switch exampleList[0].(type) {
-		case float64, int, int64:
+		case float64:
+			return "numeric"
+		case int:
+			return "numeric"
+		case int64:
 			return "numeric"
 		case bool:
 			return "boolean"
@@ -294,7 +296,6 @@ func generateAttributeRecommendations(eventType string, attributes []map[string]
 	return recommendations
 }
 
-// Helper functions
 func getFloat64(m map[string]interface{}, key string) float64 {
 	if val, ok := m[key]; ok {
 		switch v := val.(type) {

@@ -1,0 +1,191 @@
+# GOV-COST-001: Cost Optimization Analysis
+# Tests governance tools for identifying cost optimization opportunities
+# Validates query optimization, data retention, and resource usage analysis
+
+id: GOV-COST-001
+title: Identify and optimize high-cost queries and data retention
+tags:
+  - governance
+  - cost-optimization
+  - compliance
+  - critical
+
+environment:
+  account_type: single-account
+  variables:
+    cost_threshold: 100  # $100/month
+    retention_days: 395  # Current retention
+    target_retention: 90  # Target retention
+    optimization_window: "7 days ago"
+
+setup:
+  seed_data_script: scripts/seed-high-cardinality-data.py
+  environment:
+    HIGH_CARDINALITY_ATTRS: "trace.id,session.id,request.id,user.email"
+    EVENT_VOLUME: "1000000"  # 1M events
+    UNIQUE_VALUES: "500000"   # 500K unique values
+  wait: 5s
+
+workflow:
+  # Step 1: Analyze current data usage
+  - tool: governance.analyze_data_usage
+    params:
+      include_costs: true
+      group_by: ["event_type", "retention_period"]
+      time_range: "SINCE ${optimization_window}"
+    store_as: data_usage
+
+  # Step 2: Identify high-cost queries
+  - tool: governance.find_expensive_queries
+    params:
+      cost_threshold: "${cost_threshold}"
+      include_frequency: true
+      include_optimization_hints: true
+      limit: 20
+    store_as: expensive_queries
+
+  # Step 3: Analyze attribute cardinality
+  - tool: discovery.analyze_cardinality
+    params:
+      event_types: ["Transaction", "Span", "Log"]
+      cardinality_threshold: 100000
+      include_impact_analysis: true
+    store_as: cardinality_analysis
+
+  # Step 4: Find redundant dashboards and alerts
+  - parallel:
+    - tool: governance.find_redundant_dashboards
+      params:
+        similarity_threshold: 0.85
+        include_usage_stats: true
+      store_as: redundant_dashboards
+    
+    - tool: governance.find_redundant_alerts
+      params:
+        include_disabled: true
+        include_never_triggered: true
+        window: "30 days"
+      store_as: redundant_alerts
+
+  # Step 5: Calculate retention optimization
+  - tool: governance.optimize_retention
+    params:
+      current_retention: "${retention_days}"
+      target_budget: "${cost_threshold}"
+      preserve_slo_data: true
+      simulation_mode: true
+    store_as: retention_optimization
+
+  # Step 6: Generate query optimization recommendations
+  - tool: governance.optimize_queries
+    params:
+      queries: "${expensive_queries.queries}"
+      optimization_goals:
+        - reduce_scanned_data
+        - improve_performance
+        - maintain_accuracy
+      include_rewritten_queries: true
+    store_as: query_optimizations
+
+  # Step 7: Estimate cost savings
+  - tool: governance.estimate_savings
+    params:
+      optimizations:
+        - type: "retention"
+          changes: "${retention_optimization.recommendations}"
+        - type: "queries"
+          changes: "${query_optimizations.optimized_queries}"
+        - type: "dashboards"
+          remove_count: "${redundant_dashboards.redundant_count}"
+        - type: "cardinality"
+          reduce_attributes: "${cardinality_analysis.high_cardinality_attributes}"
+      projection_months: 12
+    store_as: cost_savings
+
+  # Step 8: Generate compliance report
+  - tool: governance.generate_compliance_report
+    params:
+      compliance_frameworks: ["SOC2", "GDPR"]
+      include_data_governance: true
+      include_cost_governance: true
+      findings:
+        - "${data_usage}"
+        - "${cardinality_analysis}"
+        - "${retention_optimization}"
+    store_as: compliance_report
+
+  # Step 9: Create optimization dashboard
+  - tool: dashboards.create_governance_dashboard
+    params:
+      title: "Cost Optimization Insights"
+      sections:
+        - data_usage_trends
+        - query_costs
+        - cardinality_metrics
+        - savings_projections
+      tags: ["governance", "cost-optimization", "e2e-test"]
+    store_as: optimization_dashboard
+
+assert:
+  # Verify data usage analysis completed
+  - jsonpath: "$.data_usage.total_gb_scanned"
+    operator: ">"
+    value: 0
+    message: "Should calculate data usage"
+
+  # Verify expensive queries found
+  - jsonpath: "$.expensive_queries.count"
+    operator: ">"
+    value: 0
+    message: "Should find expensive queries"
+
+  # Verify high cardinality attributes identified
+  - jsonpath: "$.cardinality_analysis.high_cardinality_count"
+    operator: ">"
+    value: 2
+    message: "Should identify high cardinality attributes"
+
+  # Verify redundant resources found
+  - jsonpath: "$.redundant_dashboards.redundant_count"
+    operator: ">"
+    value: 0
+    message: "Should find redundant dashboards"
+
+  # Verify retention optimization calculated
+  - jsonpath: "$.retention_optimization.recommended_retention"
+    operator: "<"
+    value: "${retention_days}"
+    message: "Should recommend shorter retention"
+
+  # Verify query optimizations generated
+  - jsonpath: "$.query_optimizations.optimization_count"
+    operator: ">"
+    value: 0
+    message: "Should generate query optimizations"
+
+  # Verify significant cost savings
+  - jsonpath: "$.cost_savings.total_annual_savings"
+    operator: ">"
+    value: 1000  # > $1000/year
+    message: "Should project significant savings"
+
+  # Verify compliance issues found
+  - jsonpath: "$.compliance_report.findings.data_retention_compliance"
+    operator: "=="
+    value: "warning"
+    message: "Should flag retention compliance issue"
+
+  # NRQL assertion - verify cardinality
+  - type: nrql
+    query: |
+      SELECT uniqueCount(trace.id) as trace_cardinality
+      FROM Transaction
+      WHERE e2e_test = true
+      SINCE ${optimization_window}
+    operator: ">"
+    value: 100000
+    message: "Should have high trace.id cardinality"
+
+cleanup:
+  drop_dashboards_with_tag: "e2e-test"
+  delete_test_data: true

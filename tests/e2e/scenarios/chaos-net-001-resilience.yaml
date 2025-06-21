@@ -1,0 +1,259 @@
+# CHAOS-NET-001: Network Chaos Resilience Testing
+# Tests server behavior under various network failure conditions
+# Validates retry logic, circuit breakers, and graceful degradation
+
+id: CHAOS-NET-001
+title: Network chaos resilience with progressive failures
+tags:
+  - chaos
+  - resilience
+  - network
+  - stress-test
+
+environment:
+  account_type: single-account
+  variables:
+    test_duration: "10m"
+    max_retry_attempts: 3
+    circuit_breaker_threshold: 5
+
+setup:
+  toxiproxy:
+    proxies:
+      - name: newrelic-api
+        listen: "127.0.0.1:8443"
+        upstream: "api.newrelic.com:443"
+        toxics:
+          # Start with mild latency
+          - type: latency
+            name: initial-latency
+            stream: downstream
+            toxicity: 0.2  # 20% affected
+            attributes:
+              latency: 100
+              jitter: 50
+
+workflow:
+  # Step 1: Baseline performance check
+  - tool: nrql.execute
+    params:
+      query: "SELECT count(*) FROM Transaction WHERE appName = 'mcp-server' SINCE 1 minute ago"
+      timeout: 5000
+    store_as: baseline_check
+    retry:
+      max_attempts: 1
+      delay: 0s
+
+  # Step 2: Test with connection timeouts
+  - tool: chaos.modify_toxic
+    params:
+      proxy: "newrelic-api"
+      toxic: "timeout-toxic"
+      action: "create"
+      type: "timeout"
+      toxicity: 0.3  # 30% timeout
+      attributes:
+        timeout: 1000  # 1 second timeout
+    store_as: timeout_chaos
+
+  - tool: discovery.explore_event_types
+    params:
+      limit: 10
+    store_as: discovery_with_timeouts
+    retry:
+      max_attempts: "${max_retry_attempts}"
+      delay: 1s
+      backoff: exponential
+
+  # Step 3: Add bandwidth limitation
+  - tool: chaos.modify_toxic
+    params:
+      proxy: "newrelic-api"
+      toxic: "bandwidth-toxic"
+      action: "create"
+      type: "bandwidth"
+      stream: downstream
+      attributes:
+        rate: 32768  # 32KB/s
+    store_as: bandwidth_chaos
+
+  - tool: nrql.execute
+    params:
+      query: |
+        SELECT percentile(duration, 95) as p95, count(*) as volume
+        FROM Transaction
+        SINCE 5 minutes ago
+        TIMESERIES 1 minute
+      timeout: 30000
+    store_as: query_with_bandwidth_limit
+
+  # Step 4: Simulate connection drops
+  - tool: chaos.modify_toxic
+    params:
+      proxy: "newrelic-api"
+      toxic: "down-toxic"
+      action: "create"
+      type: "down"
+      toxicity: 0.5  # 50% connection drops
+      stream: downstream
+    store_as: connection_drops
+
+  # Test circuit breaker activation
+  - parallel:
+    - tool: nrql.execute
+      params:
+        query: "SELECT count(*) FROM Transaction"
+      store_as: query_1
+      on_error: continue
+    
+    - tool: nrql.execute
+      params:
+        query: "SELECT count(*) FROM Span"
+      store_as: query_2
+      on_error: continue
+    
+    - tool: nrql.execute
+      params:
+        query: "SELECT count(*) FROM Log"
+      store_as: query_3
+      on_error: continue
+
+  # Step 5: Check circuit breaker status
+  - tool: diagnostics.check_circuit_breakers
+    store_as: circuit_status
+
+  # Step 6: Test recovery - remove some toxics
+  - tool: chaos.modify_toxic
+    params:
+      proxy: "newrelic-api"
+      toxic: "down-toxic"
+      action: "delete"
+    store_as: remove_down_toxic
+
+  - tool: chaos.modify_toxic
+    params:
+      proxy: "newrelic-api"
+      toxic: "timeout-toxic"
+      toxicity: 0.1  # Reduce to 10%
+    store_as: reduce_timeouts
+
+  # Wait for circuit breaker recovery
+  - tool: diagnostics.wait_for_recovery
+    params:
+      component: "nerdgraph_client"
+      max_wait: 30s
+    store_as: recovery_wait
+
+  # Step 7: Verify recovery
+  - tool: nrql.execute
+    params:
+      query: "SELECT count(*) FROM Transaction WHERE appName = 'mcp-server' SINCE 1 minute ago"
+      timeout: 5000
+    store_as: recovery_check
+
+  # Step 8: Test rate limiting under chaos
+  - tool: chaos.modify_toxic
+    params:
+      proxy: "newrelic-api"
+      toxic: "slow-close-toxic"
+      action: "create"
+      type: "slow_close"
+      attributes:
+        delay: 5000  # 5 second delay on close
+    store_as: slow_close_chaos
+
+  # Burst requests to test rate limiting
+  - parallel:
+    - tool: discovery.explore_event_types
+      store_as: burst_1
+      on_error: continue
+    - tool: discovery.explore_event_types
+      store_as: burst_2
+      on_error: continue
+    - tool: discovery.explore_event_types
+      store_as: burst_3
+      on_error: continue
+    - tool: discovery.explore_event_types
+      store_as: burst_4
+      on_error: continue
+    - tool: discovery.explore_event_types
+      store_as: burst_5
+      on_error: continue
+
+  # Step 9: Collect resilience metrics
+  - tool: diagnostics.collect_metrics
+    params:
+      metrics:
+        - retry_count
+        - circuit_breaker_trips
+        - rate_limit_hits
+        - successful_requests
+        - failed_requests
+        - p95_latency
+      duration: "${test_duration}"
+    store_as: resilience_metrics
+
+assert:
+  # Verify baseline worked
+  - jsonpath: "$.baseline_check.error"
+    operator: "=="
+    value: null
+    message: "Baseline check should succeed"
+
+  # Verify retries occurred with timeouts
+  - jsonpath: "$.discovery_with_timeouts._metadata.retry_count"
+    operator: ">"
+    value: 0
+    message: "Should retry on timeouts"
+
+  # Verify bandwidth limit impact
+  - jsonpath: "$.query_with_bandwidth_limit._metadata.duration_ms"
+    operator: ">"
+    value: 1000
+    message: "Bandwidth limit should slow queries"
+
+  # Verify circuit breaker tripped
+  - jsonpath: "$.circuit_status.circuits.nerdgraph_client.state"
+    operator: "=="
+    value: "open"
+    message: "Circuit breaker should open under heavy failures"
+
+  # Verify recovery successful
+  - jsonpath: "$.recovery_check.error"
+    operator: "=="
+    value: null
+    message: "Should recover after reducing chaos"
+
+  # Verify rate limiting engaged
+  - jsonpath: "$.resilience_metrics.rate_limit_hits"
+    operator: ">"
+    value: 0
+    message: "Rate limiting should engage during burst"
+
+  # Verify success rate acceptable
+  - jsonpath: "$.resilience_metrics.success_rate"
+    operator: ">"
+    value: 0.6  # 60% success rate under chaos
+    message: "Should maintain 60%+ success rate"
+
+  # Verify retry effectiveness
+  - jsonpath: "$.resilience_metrics.retry_success_rate"
+    operator: ">"
+    value: 0.5  # 50% of retries succeed
+    message: "Retries should improve success rate"
+
+  # Trace assertions
+  - type: trace
+    operator: trace_shows_retries
+    value: true
+    message: "Trace should show retry attempts"
+
+  - type: trace
+    operator: trace_shows_circuit_breaker
+    value: true
+    message: "Trace should show circuit breaker activation"
+
+cleanup:
+  # Remove all toxiproxy toxics
+  custom_commands:
+    - "toxiproxy-cli toxic delete --all newrelic-api"

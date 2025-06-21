@@ -1,268 +1,198 @@
 package framework
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"sync"
+	"io"
+	"net/http"
+	"os"
 	"time"
-
-	"github.com/deepaucksharma/mcp-server-newrelic/pkg/interface/mcp"
 )
 
-// MCPTestClient provides a test-friendly MCP client
-type MCPTestClient struct {
-	server     *mcp.Server
-	account    *TestAccount
-	discovery  map[string]interface{}
-	mu         sync.RWMutex
-	requestLog []RequestLog
+// TestClient provides methods for interacting with New Relic APIs
+type TestClient struct {
+	httpClient *http.Client
+	apiKey     string
+	accountID  string
+	region     string
+	baseURL    string
 }
 
-// RequestLog captures request/response for debugging
-type RequestLog struct {
-	Timestamp time.Time
-	Tool      string
-	Params    map[string]interface{}
-	Response  interface{}
-	Error     error
-	Duration  time.Duration
-}
-
-// NewMCPTestClient creates a test client for the given account
-func NewMCPTestClient(account *TestAccount) *MCPTestClient {
-	config := mcp.ServerConfig{
-		APIKey:    account.APIKey,
-		AccountID: account.AccountID,
-		Region:    account.Region,
-		Timeout:   30 * time.Second,
+// NewTestClient creates a new test client
+func NewTestClient(ctx context.Context) (*TestClient, error) {
+	apiKey := os.Getenv("NEW_RELIC_API_KEY_PRIMARY")
+	if apiKey == "" {
+		apiKey = os.Getenv("E2E_PRIMARY_API_KEY")
 	}
 	
-	server := mcp.NewServer(config)
-	
-	return &MCPTestClient{
-		server:    server,
-		account:   account,
-		discovery: make(map[string]interface{}),
+	accountID := os.Getenv("NEW_RELIC_ACCOUNT_ID_PRIMARY")
+	if accountID == "" {
+		accountID = os.Getenv("E2E_PRIMARY_ACCOUNT_ID")
 	}
-}
-
-// ExecuteTool executes an MCP tool and returns the result
-func (c *MCPTestClient) ExecuteTool(ctx context.Context, toolName string, params map[string]interface{}) (map[string]interface{}, error) {
-	start := time.Now()
 	
-	// Build JSON-RPC request
-	request := map[string]interface{}{
-		"jsonrpc": "2.0",
-		"method":  "tools/call",
-		"params": map[string]interface{}{
-			"name":      toolName,
-			"arguments": params,
+	if apiKey == "" || accountID == "" {
+		return nil, fmt.Errorf("missing required environment variables")
+	}
+	
+	region := os.Getenv("NEW_RELIC_REGION_PRIMARY")
+	if region == "" {
+		region = "US"
+	}
+	
+	baseURL := "https://api.newrelic.com"
+	if region == "EU" {
+		baseURL = "https://api.eu.newrelic.com"
+	}
+	
+	return &TestClient{
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
 		},
-		"id": fmt.Sprintf("test-%d", time.Now().UnixNano()),
-	}
-	
-	// Execute through MCP protocol handler
-	response, err := c.server.HandleRequest(ctx, request)
-	
-	duration := time.Since(start)
-	
-	// Log request for debugging
-	c.logRequest(toolName, params, response, err, duration)
-	
-	if err != nil {
-		return nil, fmt.Errorf("tool execution failed: %w", err)
-	}
-	
-	// Extract result from JSON-RPC response
-	if respMap, ok := response.(map[string]interface{}); ok {
-		if result, exists := respMap["result"]; exists {
-			if resultMap, ok := result.(map[string]interface{}); ok {
-				return resultMap, nil
-			}
-		}
-		if errorData, exists := respMap["error"]; exists {
-			return nil, fmt.Errorf("MCP error: %v", errorData)
-		}
-	}
-	
-	return nil, fmt.Errorf("unexpected response format: %T", response)
+		apiKey:    apiKey,
+		accountID: accountID,
+		region:    region,
+		baseURL:   baseURL,
+	}, nil
 }
 
-// ExecuteWorkflow runs a multi-step workflow
-func (c *MCPTestClient) ExecuteWorkflow(ctx context.Context, steps []WorkflowStep) (*WorkflowResult, error) {
-	result := &WorkflowResult{
-		Steps:     make([]StepResult, 0, len(steps)),
-		StartTime: time.Now(),
+// ExecuteNRQL executes a NRQL query
+func (c *TestClient) ExecuteNRQL(ctx context.Context, query, accountID string) (map[string]interface{}, error) {
+	if accountID == "" {
+		accountID = c.accountID
 	}
 	
-	workflowCtx := make(map[string]interface{})
-	
-	for i, step := range steps {
-		stepResult := StepResult{
-			Index:     i,
-			Name:      step.Name,
-			Tool:      step.Tool,
-			StartTime: time.Now(),
-		}
-		
-		// Resolve parameters with context
-		params := c.resolveParameters(step.Params, workflowCtx)
-		
-		// Execute step
-		response, err := c.ExecuteTool(ctx, step.Tool, params)
-		stepResult.EndTime = time.Now()
-		stepResult.Duration = stepResult.EndTime.Sub(stepResult.StartTime)
-		
-		if err != nil {
-			stepResult.Error = err
-			result.Steps = append(result.Steps, stepResult)
-			
-			if !step.ContinueOnError {
-				return result, fmt.Errorf("step %d (%s) failed: %w", i, step.Name, err)
+	payload := map[string]interface{}{
+		"query": fmt.Sprintf(`{
+			actor {
+				account(id: %s) {
+					nrql(query: "%s") {
+						results
+						totalResult
+						metadata {
+							eventTypes
+							messages
+							timeWindow {
+								begin
+								end
+							}
+						}
+					}
+				}
 			}
-			continue
-		}
-		
-		stepResult.Response = response
-		result.Steps = append(result.Steps, stepResult)
-		
-		// Update context with step results
-		if step.StoreAs != "" {
-			workflowCtx[step.StoreAs] = response
-		}
-		
-		// Validate step if validator provided
-		if step.Validate != nil {
-			if err := step.Validate(response); err != nil {
-				return result, fmt.Errorf("step %d (%s) validation failed: %w", i, step.Name, err)
+		}`, accountID, query),
+	}
+	
+	return c.graphQLRequest(ctx, payload)
+}
+
+// DiscoverEventTypes discovers available event types
+func (c *TestClient) DiscoverEventTypes(ctx context.Context, limit int) ([]string, error) {
+	// SHOW EVENT TYPES doesn't support LIMIT directly
+	query := "SHOW EVENT TYPES"
+	result, err := c.ExecuteNRQL(ctx, query, c.accountID)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Parse the response to extract event types
+	eventTypes := []string{}
+	if data, ok := result["data"].(map[string]interface{}); ok {
+		if actor, ok := data["actor"].(map[string]interface{}); ok {
+			if account, ok := actor["account"].(map[string]interface{}); ok {
+				if nrql, ok := account["nrql"].(map[string]interface{}); ok {
+					if results, ok := nrql["results"].([]interface{}); ok {
+						for _, r := range results {
+							if m, ok := r.(map[string]interface{}); ok {
+								if et, ok := m["eventType"].(string); ok {
+									eventTypes = append(eventTypes, et)
+								}
+							}
+						}
+					}
+				}
 			}
 		}
 	}
 	
-	result.EndTime = time.Now()
-	result.TotalDuration = result.EndTime.Sub(result.StartTime)
-	result.Success = true
+	return eventTypes, nil
+}
+
+// DiscoverAttributes discovers attributes for an event type
+func (c *TestClient) DiscoverAttributes(ctx context.Context, eventType string, limit int) ([]string, error) {
+	query := fmt.Sprintf("SELECT keyset() FROM %s LIMIT %d", eventType, limit)
+	result, err := c.ExecuteNRQL(ctx, query, c.accountID)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Parse the response to extract attributes
+	attributes := []string{}
+	if data, ok := result["data"].(map[string]interface{}); ok {
+		if actor, ok := data["actor"].(map[string]interface{}); ok {
+			if account, ok := actor["account"].(map[string]interface{}); ok {
+				if nrql, ok := account["nrql"].(map[string]interface{}); ok {
+					if results, ok := nrql["results"].([]interface{}); ok {
+						for _, r := range results {
+							if m, ok := r.(map[string]interface{}); ok {
+								if keys, ok := m["keyset"].([]interface{}); ok {
+									for _, k := range keys {
+										if attr, ok := k.(string); ok {
+											attributes = append(attributes, attr)
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	return attributes, nil
+}
+
+// graphQLRequest executes a GraphQL request
+func (c *TestClient) graphQLRequest(ctx context.Context, payload map[string]interface{}) (map[string]interface{}, error) {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal payload: %w", err)
+	}
+	
+	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/graphql", bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	
+	req.Header.Set("API-Key", c.apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+	
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GraphQL request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+	
+	var result map[string]interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+	
+	// Check for GraphQL errors
+	if errors, ok := result["errors"].([]interface{}); ok && len(errors) > 0 {
+		return nil, fmt.Errorf("GraphQL errors: %v", errors)
+	}
 	
 	return result, nil
-}
-
-// StoreDiscovery stores discovered information for later use
-func (c *MCPTestClient) StoreDiscovery(key string, value interface{}) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.discovery[key] = value
-}
-
-// GetDiscovery retrieves previously discovered information
-func (c *MCPTestClient) GetDiscovery(key string) (interface{}, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	val, exists := c.discovery[key]
-	return val, exists
-}
-
-// GetRequestLog returns the request history for debugging
-func (c *MCPTestClient) GetRequestLog() []RequestLog {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	
-	// Return a copy to avoid race conditions
-	log := make([]RequestLog, len(c.requestLog))
-	copy(log, c.requestLog)
-	return log
-}
-
-// ClearRequestLog clears the request history
-func (c *MCPTestClient) ClearRequestLog() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.requestLog = nil
-}
-
-// Close cleans up the client resources
-func (c *MCPTestClient) Close() error {
-	// Any cleanup needed
-	return nil
-}
-
-// Private methods
-
-func (c *MCPTestClient) logRequest(tool string, params map[string]interface{}, response interface{}, err error, duration time.Duration) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	
-	c.requestLog = append(c.requestLog, RequestLog{
-		Timestamp: time.Now(),
-		Tool:      tool,
-		Params:    params,
-		Response:  response,
-		Error:     err,
-		Duration:  duration,
-	})
-}
-
-func (c *MCPTestClient) resolveParameters(params map[string]interface{}, context map[string]interface{}) map[string]interface{} {
-	resolved := make(map[string]interface{})
-	
-	for key, value := range params {
-		switch v := value.(type) {
-		case string:
-			// Check if it's a context reference
-			if len(v) > 2 && v[0] == '$' && v[1] == '{' && v[len(v)-1] == '}' {
-				contextKey := v[2 : len(v)-1]
-				if contextValue, exists := context[contextKey]; exists {
-					resolved[key] = contextValue
-				} else {
-					resolved[key] = v // Keep original if not found
-				}
-			} else {
-				resolved[key] = v
-			}
-		default:
-			resolved[key] = value
-		}
-	}
-	
-	return resolved
-}
-
-// WorkflowStep defines a step in a workflow
-type WorkflowStep struct {
-	Name            string
-	Tool            string
-	Params          map[string]interface{}
-	StoreAs         string
-	ContinueOnError bool
-	Validate        func(response map[string]interface{}) error
-}
-
-// WorkflowResult contains the results of a workflow execution
-type WorkflowResult struct {
-	Steps         []StepResult
-	StartTime     time.Time
-	EndTime       time.Time
-	TotalDuration time.Duration
-	Success       bool
-}
-
-// StepResult contains the result of a single workflow step
-type StepResult struct {
-	Index     int
-	Name      string
-	Tool      string
-	Response  map[string]interface{}
-	Error     error
-	StartTime time.Time
-	EndTime   time.Time
-	Duration  time.Duration
-}
-
-// ExportToJSON exports the workflow result as JSON
-func (r *WorkflowResult) ExportToJSON() (string, error) {
-	data, err := json.MarshalIndent(r, "", "  ")
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
 }

@@ -1,0 +1,257 @@
+# INC-SQL-404: Incident Response Workflow
+# Tests complex incident response scenario with SQL database returning 404 errors
+# Validates multi-tool orchestration, cross-account discovery, and adaptive analysis
+
+id: INC-SQL-404
+title: Incident response for SQL database 404 errors
+tags:
+  - incident-response
+  - complex-workflow
+  - multi-tool
+  - critical
+  - cross-account
+
+environment:
+  account_type: multi-account
+  data_source_mix: "apm,infra,logs,synthetics"
+  load_profile: spike
+  variables:
+    primary_account: "${E2E_PRIMARY_ACCOUNT_ID}"
+    secondary_account: "${E2E_SECONDARY_ACCOUNT_ID}"
+    alert_name: "High 404 Error Rate - SQL Service"
+    service_name: "payment-service"
+    database_name: "payments-db"
+    error_threshold: 0.05  # 5% error rate
+    spike_time: "${fn:now()-15m}"
+
+setup:
+  seed_data_script: scripts/seed-incident-404-spike.py
+  environment:
+    SPIKE_START: "${spike_time}"
+    ERROR_RATE: "0.25"  # 25% 404 errors
+    AFFECTED_ENDPOINTS: "/api/v1/payments/status,/api/v1/payments/history"
+  wait: 10s  # Wait for data to propagate
+
+workflow:
+  # Step 1: Alert triggered - get alert details
+  - tool: alerts.get_violation
+    params:
+      alert_name: "${alert_name}"
+      account_id: "${primary_account}"
+    store_as: alert_details
+    timeout: 30s
+
+  # Step 2: Discover available data sources in parallel
+  - parallel:
+    - tool: discovery.explore_event_types
+      params:
+        pattern: "Transaction|Span|Log|Infra"
+        account_id: "${primary_account}"
+      store_as: primary_events
+    
+    - tool: discovery.explore_event_types
+      params:
+        pattern: "Transaction|Span|Log|Infra"
+        account_id: "${secondary_account}"
+      store_as: secondary_events
+
+  # Step 3: Analyze error patterns
+  - tool: analysis.detect_anomalies
+    params:
+      query: |
+        SELECT count(*), percentage(count(*), WHERE httpResponseCode = 404) as error_rate
+        FROM Transaction
+        WHERE appName = '${service_name}'
+        SINCE ${spike_time}
+        TIMESERIES 1 minute
+      sensitivity: high
+      include_forecast: true
+    store_as: error_anomaly
+
+  # Step 4: Correlate with database metrics
+  - tool: analysis.correlate_metrics
+    params:
+      primary_query: |
+        SELECT percentage(count(*), WHERE httpResponseCode = 404) as error_rate
+        FROM Transaction
+        WHERE appName = '${service_name}'
+        SINCE ${spike_time}
+        TIMESERIES 1 minute
+      correlation_queries:
+        - name: "database_connections"
+          query: |
+            SELECT average(provider.databaseConnections.inUse) as connections
+            FROM DatastoreSample
+            WHERE displayName = '${database_name}'
+            TIMESERIES 1 minute
+        - name: "database_errors"
+          query: |
+            SELECT count(*) as db_errors
+            FROM Span
+            WHERE db.instance = '${database_name}' AND error IS TRUE
+            TIMESERIES 1 minute
+      window: 30m
+    store_as: correlations
+
+  # Step 5: Root cause analysis - check logs
+  - tool: query.build_adaptive
+    params:
+      event_type: Log
+      query_type: error_investigation
+      filters:
+        service_name: "${service_name}"
+        severity: ["ERROR", "FATAL"]
+        time_range: "SINCE ${spike_time}"
+      discovered_attributes: "${primary_events.Log.attributes}"
+    store_as: log_query
+
+  - tool: nrql.execute
+    params:
+      query: "${log_query.nrql}"
+      account_id: "${primary_account}"
+    store_as: error_logs
+
+  # Step 6: Find impacted users/transactions
+  - tool: analysis.find_outliers
+    params:
+      query: |
+        SELECT count(*) as requests, uniqueCount(userId) as users
+        FROM Transaction
+        WHERE appName = '${service_name}' AND httpResponseCode = 404
+        FACET request.uri
+        SINCE ${spike_time}
+      outlier_threshold: 2.5
+      include_statistics: true
+    store_as: impacted_endpoints
+
+  # Step 7: Check distributed trace for failure pattern
+  - tool: query.distributed_trace
+    params:
+      service_name: "${service_name}"
+      error_only: true
+      time_range: "SINCE ${spike_time}"
+      limit: 5
+    store_as: error_traces
+
+  # Step 8: Generate incident summary
+  - tool: analysis.summarize_incident
+    params:
+      alert: "${alert_details}"
+      anomalies: "${error_anomaly}"
+      correlations: "${correlations}"
+      logs_analysis: "${error_logs}"
+      impacted_resources: "${impacted_endpoints}"
+      traces: "${error_traces}"
+    store_as: incident_summary
+
+  # Step 9: Create diagnostic dashboard
+  - tool: dashboards.create_incident_dashboard
+    params:
+      title: "INC-404: ${service_name} Error Investigation"
+      widgets:
+        - type: line
+          title: "404 Error Rate"
+          query: "${error_anomaly.query}"
+        - type: billboard
+          title: "Impacted Users"
+          query: "SELECT uniqueCount(userId) FROM Transaction WHERE httpResponseCode = 404"
+        - type: table
+          title: "Error Logs"
+          query: "${log_query.nrql}"
+        - type: histogram
+          title: "Response Time Distribution"
+          query: "SELECT histogram(duration) FROM Transaction WHERE appName = '${service_name}'"
+      tags: ["incident", "test", "e2e-test"]
+    store_as: diagnostic_dashboard
+
+  # Step 10: Recommend remediation
+  - tool: analysis.recommend_actions
+    params:
+      incident_type: "database_connectivity"
+      symptoms: "${incident_summary.key_findings}"
+      impacted_services: ["${service_name}", "${database_name}"]
+    store_as: recommendations
+
+assert:
+  # Verify alert was found
+  - jsonpath: "$.alert_details.found"
+    operator: "=="
+    value: true
+    message: "Alert should be found in the system"
+
+  # Verify anomaly was detected
+  - jsonpath: "$.error_anomaly.anomaly_detected"
+    operator: "=="
+    value: true
+    message: "Should detect anomaly in error rate"
+
+  # Verify spike timing matches
+  - jsonpath: "$.error_anomaly.anomaly_start"
+    operator: "approx"
+    value: "${spike_time}"
+    message: "Anomaly should start around spike time"
+
+  # Verify correlation found database issue
+  - jsonpath: "$.correlations.highest_correlation.metric"
+    operator: "contains"
+    value: "database"
+    message: "Should correlate with database metrics"
+
+  # Verify correlation strength
+  - jsonpath: "$.correlations.highest_correlation.coefficient"
+    operator: ">"
+    value: 0.8
+    message: "Database correlation should be strong"
+
+  # Verify impacted endpoints identified
+  - jsonpath: "$.impacted_endpoints.outliers[0].request.uri"
+    operator: "contains"
+    value: "/payments/"
+    message: "Should identify payment endpoints as impacted"
+
+  # Verify root cause in logs
+  - jsonpath: "$.error_logs.results[0].message"
+    operator: "contains"
+    value: "connection"
+    message: "Logs should show database connection issues"
+
+  # Verify dashboard created
+  - jsonpath: "$.diagnostic_dashboard.created"
+    operator: "=="
+    value: true
+    message: "Diagnostic dashboard should be created"
+
+  # Verify recommendations include database check
+  - jsonpath: "$.recommendations.actions[0].category"
+    operator: "=="
+    value: "database"
+    message: "Should recommend database investigation"
+
+  # NRQL assertion - verify error rate spike
+  - type: nrql
+    query: |
+      SELECT max(percentage(count(*), WHERE httpResponseCode = 404)) as max_error_rate
+      FROM Transaction
+      WHERE appName = '${service_name}'
+      SINCE ${spike_time}
+    operator: ">"
+    value: 20  # Greater than 20%
+    message: "Error rate should spike above 20%"
+
+  # Trace assertions
+  - type: trace
+    operator: trace_shows_cascade
+    value: true
+    message: "Trace should show cascading failures"
+
+  - type: trace
+    operator: trace_confidence
+    value: 0.9
+    message: "High confidence due to strong correlations"
+
+cleanup:
+  drop_dashboards_with_tag: "e2e-test"
+  delete_test_data: true
+  custom_commands:
+    - "DELETE FROM Transaction WHERE appName = '${service_name}' AND e2e_test = true"
+    - "DELETE FROM Log WHERE service_name = '${service_name}' AND e2e_test = true"

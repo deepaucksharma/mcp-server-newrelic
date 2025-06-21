@@ -106,7 +106,7 @@ func (s *Server) handleDiscoveryExploreEventTypes(ctx context.Context, params ma
 	}
 	paginatedEventTypes := eventTypes[start:end]
 	
-	result := map[string]interface{}{
+	response := map[string]interface{}{
 		"event_types": paginatedEventTypes,
 		"total":       len(paginatedEventTypes),
 		"discovery_metadata": map[string]interface{}{
@@ -124,8 +124,8 @@ func (s *Server) handleDiscoveryExploreEventTypes(ctx context.Context, params ma
 	
 	// Add next offset if there are more results
 	if end < totalCount {
-		result["next_offset"] = end
+		response["next_offset"] = end
 	}
 	
-	return result, nil
+	return response, nil
 }

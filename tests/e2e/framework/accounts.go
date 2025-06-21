@@ -175,7 +175,13 @@ func (v *AccountValidator) ValidateHasData() error {
 		return fmt.Errorf("failed to discover event types: %w", err)
 	}
 	
-	eventTypes, ok := result["event_types"].([]interface{})
+	// Type assert result first
+	resultMap, ok := result.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("unexpected result type: %T", result)
+	}
+	
+	eventTypes, ok := resultMap["event_types"].([]interface{})
 	if !ok || len(eventTypes) == 0 {
 		return fmt.Errorf("account has no event types")
 	}
@@ -195,7 +201,13 @@ func (v *AccountValidator) ValidateIsEmpty() error {
 		return fmt.Errorf("failed to discover event types: %w", err)
 	}
 	
-	eventTypes, ok := result["event_types"].([]interface{})
+	// Type assert result first
+	resultMap, ok := result.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("unexpected result type: %T", result)
+	}
+	
+	eventTypes, ok := resultMap["event_types"].([]interface{})
 	if ok && len(eventTypes) > 0 {
 		return fmt.Errorf("account has %d event types, expected 0", len(eventTypes))
 	}
@@ -224,8 +236,14 @@ func (v *AccountValidator) ValidateHighCardinality() error {
 		return fmt.Errorf("failed to count services: %w", err)
 	}
 	
+	// Type assert result first
+	resultMap, ok := result.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("unexpected result type: %T", result)
+	}
+	
 	// Extract count from results
-	if results, ok := result["results"].([]interface{}); ok && len(results) > 0 {
+	if results, ok := resultMap["results"].([]interface{}); ok && len(results) > 0 {
 		if firstResult, ok := results[0].(map[string]interface{}); ok {
 			if count, ok := firstResult["uniqueCount"].(float64); ok {
 				if count < 100 {
@@ -250,7 +268,13 @@ func (v *AccountValidator) discoverServiceAttribute(ctx context.Context) (string
 		})
 		
 		if err == nil {
-			if profile, ok := result["profile"].(map[string]interface{}); ok {
+			// Type assert result first
+			resultMap, ok := result.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			
+			if profile, ok := resultMap["profile"].(map[string]interface{}); ok {
 				if coverage, ok := profile["coverage"].(float64); ok && coverage > 50 {
 					return attr, nil
 				}

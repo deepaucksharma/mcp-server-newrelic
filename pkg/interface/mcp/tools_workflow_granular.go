@@ -589,7 +589,7 @@ func (s *Server) registerAnalysisTools() error {
 	return s.tools.Register(forecast.Tool)
 }
 
-// Handler implementations (simplified for demonstration)
+// Handler implementations
 
 func (s *Server) handleWorkflowCreate(ctx context.Context, params map[string]interface{}) (interface{}, error) {
 	name, _ := params["name"].(string)
@@ -638,7 +638,8 @@ func (s *Server) handleWorkflowCreate(ctx context.Context, params map[string]int
 func (s *Server) handleWorkflowExecuteStep(ctx context.Context, params map[string]interface{}) (interface{}, error) {
 	workflowID, _ := params["workflow_id"].(string)
 	stepOverride, _ := params["step_override"].(string)
-	inputs, _ := params["inputs"].(map[string]interface{})
+	// inputs could be used to customize step execution
+	// inputs, _ := params["inputs"].(map[string]interface{})
 
 	// Mock execution
 	result := map[string]interface{}{
@@ -661,9 +662,75 @@ func (s *Server) handleWorkflowExecuteStep(ctx context.Context, params map[strin
 	return result, nil
 }
 
+func (s *Server) handleWorkflowGetState(ctx context.Context, params map[string]interface{}) (interface{}, error) {
+	workflowID, ok := params["workflow_id"].(string)
+	if !ok || workflowID == "" {
+		return nil, fmt.Errorf("workflow_id is required")
+	}
+
+	includeOutputs := true
+	if io, ok := params["include_outputs"].(bool); ok {
+		includeOutputs = io
+	}
+
+	// Mock implementation for now
+	return map[string]interface{}{
+		"workflow_id": workflowID,
+		"status":      "in_progress",
+		"progress":    0.5,
+		"steps": []map[string]interface{}{
+			{
+				"id":     "step1",
+				"status": "completed",
+				"output": includeOutputs,
+			},
+		},
+	}, nil
+}
+
+func (s *Server) handleContextAddFinding(ctx context.Context, params map[string]interface{}) (interface{}, error) {
+	workflowID, ok := params["workflow_id"].(string)
+	if !ok || workflowID == "" {
+		return nil, fmt.Errorf("workflow_id is required")
+	}
+
+	_, ok = params["finding"].(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("finding is required")
+	}
+
+	// Mock implementation
+	return map[string]interface{}{
+		"workflow_id": workflowID,
+		"finding_id": fmt.Sprintf("finding_%d", time.Now().Unix()),
+		"added":      true,
+	}, nil
+}
+
+func (s *Server) handleContextGetRecommendations(ctx context.Context, params map[string]interface{}) (interface{}, error) {
+	workflowID, ok := params["workflow_id"].(string)
+	if !ok || workflowID == "" {
+		return nil, fmt.Errorf("workflow_id is required")
+	}
+
+	// Mock implementation
+	return map[string]interface{}{
+		"workflow_id": workflowID,
+		"recommendations": []map[string]interface{}{
+			{
+				"id":          "rec1",
+				"title":       "Check database connections",
+				"priority":    "high",
+				"confidence":  0.85,
+			},
+		},
+	}, nil
+}
+
 func (s *Server) handleInvestigateIdentifyScope(ctx context.Context, params map[string]interface{}) (interface{}, error) {
-	symptoms, _ := params["symptoms"].([]interface{})
-	entityHints, _ := params["entity_hints"].([]interface{})
+	// Extract parameters for future use
+	// symptoms, _ := params["symptoms"].([]interface{})
+	// entityHints, _ := params["entity_hints"].([]interface{})
 	timeRange, _ := params["time_range"].(string)
 
 	// Mock scope identification
@@ -700,6 +767,106 @@ func (s *Server) handleInvestigateIdentifyScope(ctx context.Context, params map[
 	}
 
 	return scope, nil
+}
+
+func (s *Server) handleInvestigateFindCorrelations(ctx context.Context, params map[string]interface{}) (interface{}, error) {
+	primarySignal, ok := params["primary_signal"].(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("primary_signal is required")
+	}
+
+	// Mock implementation
+	return map[string]interface{}{
+		"correlations": []map[string]interface{}{
+			{
+				"metric":      "cpu_usage",
+				"correlation": 0.92,
+				"lag_minutes": 5,
+			},
+		},
+		"primary_signal": primarySignal,
+	}, nil
+}
+
+func (s *Server) handleIncidentGetContext(ctx context.Context, params map[string]interface{}) (interface{}, error) {
+	incidentID, ok := params["incident_id"].(string)
+	if !ok || incidentID == "" {
+		return nil, fmt.Errorf("incident_id is required")
+	}
+
+	// Mock implementation
+	return map[string]interface{}{
+		"incident_id": incidentID,
+		"context": map[string]interface{}{
+			"start_time":       time.Now().Add(-1 * time.Hour).Format(time.RFC3339),
+			"severity":         "critical",
+			"affected_services": []string{"api", "database"},
+		},
+	}, nil
+}
+
+func (s *Server) handleImpactAssessUser(ctx context.Context, params map[string]interface{}) (interface{}, error) {
+	entityGUID, ok := params["entity_guid"].(string)
+	if !ok || entityGUID == "" {
+		return nil, fmt.Errorf("entity_guid is required")
+	}
+
+	// Mock implementation
+	return map[string]interface{}{
+		"entity_guid": entityGUID,
+		"impact": map[string]interface{}{
+			"error_count":     15,
+			"affected_transactions": []string{"checkout", "payment"},
+			"last_error":      time.Now().Add(-5 * time.Minute).Format(time.RFC3339),
+		},
+	}, nil
+}
+
+func (s *Server) handlePatternDetect(ctx context.Context, params map[string]interface{}) (interface{}, error) {
+	query, ok := params["query"].(string)
+	if !ok {
+		return nil, fmt.Errorf("query is required")
+	}
+
+	// Mock implementation
+	return map[string]interface{}{
+		"patterns": []map[string]interface{}{
+			{
+				"type":       "periodic",
+				"period":     "daily",
+				"confidence": 0.89,
+			},
+		},
+		"query": query,
+	}, nil
+}
+
+func (s *Server) handlePatternForecast(ctx context.Context, params map[string]interface{}) (interface{}, error) {
+	query, ok := params["query"].(string)
+	if !ok {
+		return nil, fmt.Errorf("query is required")
+	}
+
+	forecastWindow, ok := params["forecast_window"].(string)
+	if !ok {
+		return nil, fmt.Errorf("forecast_window is required")
+	}
+
+	// Mock implementation
+	return map[string]interface{}{
+		"query":  query,
+		"window": forecastWindow,
+		"forecast": []map[string]interface{}{
+			{
+				"timestamp": time.Now().Add(24 * time.Hour).Format(time.RFC3339),
+				"value":     150.5,
+				"confidence_interval": map[string]float64{
+					"lower": 140.0,
+					"upper": 161.0,
+				},
+			},
+		},
+	}, nil
 }
 
 // Helper methods
