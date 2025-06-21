@@ -103,7 +103,7 @@ func (s *Server) registerDashboardTools() error {
 	// List dashboards
 	s.tools.Register(Tool{
 		Name:        "list_dashboards",
-		Description: "List all dashboards in the account",
+		Description: "List all dashboards in the account with pagination support",
 		Parameters: ToolParameters{
 			Type: "object",
 			Properties: map[string]Property{
@@ -118,8 +118,12 @@ func (s *Server) registerDashboardTools() error {
 				},
 				"limit": {
 					Type:        "integer",
-					Description: "Maximum number of dashboards to return",
+					Description: "Maximum number of dashboards to return per page (max: 200)",
 					Default:     50,
+				},
+				"cursor": {
+					Type:        "string",
+					Description: "Pagination cursor from previous response",
 				},
 				"account_id": {
 					Type:        "string",
@@ -443,8 +447,13 @@ func (s *Server) handleListDashboards(ctx context.Context, params map[string]int
 	limit := 50
 	if l, ok := params["limit"].(float64); ok {
 		limit = int(l)
+		// Cap at 200 for performance
+		if limit > 200 {
+			limit = 200
+		}
 	}
 
+	cursor, _ := params["cursor"].(string)
 	includeMetadata, _ := params["include_metadata"].(bool)
 	accountID, _ := params["account_id"].(string)
 
@@ -530,16 +539,43 @@ func (s *Server) handleListDashboards(ctx context.Context, params map[string]int
 		dashboards = dashboards[:limit]
 	}
 
+	// Implement cursor-based pagination
+	// For now, we'll use offset-based pagination encoded in the cursor
+	offset := 0
+	if cursor != "" {
+		// Simple cursor implementation - in production use proper cursor encoding
+		fmt.Sscanf(cursor, "offset:%d", &offset)
+	}
+	
+	// Apply offset and limit
+	start := offset
+	end := offset + limit
+	if start > len(dashboards) {
+		start = len(dashboards)
+	}
+	if end > len(dashboards) {
+		end = len(dashboards)
+	}
+	paginatedDashboards := dashboards[start:end]
+	
 	result := map[string]interface{}{
-		"total":      len(dashboards),
-		"dashboards": dashboards,
+		"total":      len(paginatedDashboards),
+		"dashboards": paginatedDashboards,
+	}
+	
+	// Calculate next cursor if there are more results
+	hasMore := end < len(dashboards)
+	if hasMore {
+		result["next_cursor"] = fmt.Sprintf("offset:%d", end)
 	}
 
 	if includeMetadata {
 		result["metadata"] = map[string]interface{}{
 			"filter":       filter,
 			"limit":        limit,
-			"has_more":     len(dashboards) == limit,
+			"offset":       offset,
+			"has_more":     hasMore,
+			"total_count":  len(dashboards),
 			"retrieved_at": time.Now(),
 		}
 	}

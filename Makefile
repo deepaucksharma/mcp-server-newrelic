@@ -121,3 +121,11 @@ help:
 	@echo "  docker-run     - Run with Docker Compose"
 	@echo ""
 	@echo "  help           - Show this help"
+	@echo ""
+	@echo "E2E Test targets:"
+	@echo "  test-e2e       - Run all E2E tests (requires .env.test)"
+	@echo "  test-e2e-setup - Setup E2E test environment"
+	@echo "  help-e2e       - Show all E2E test targets"
+
+# Include E2E test targets
+-include Makefile.e2e

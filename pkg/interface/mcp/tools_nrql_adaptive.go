@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"regexp"
 	"strings"
 	"time"
@@ -38,10 +39,22 @@ func (s *Server) handleNRQLExecute(ctx context.Context, params map[string]interf
 		return s.generateMockNRQLResult(query, includeMetadata), nil
 	}
 
-	// Get New Relic client
-	client, ok := s.nrClient.(*newrelic.Client)
-	if !ok {
-		return nil, fmt.Errorf("invalid New Relic client type")
+	// Get New Relic client (with account support)
+	var client interface{}
+	var err error
+	
+	if accountID > 0 {
+		// Get client for specific account
+		client, err = s.getNRClientWithAccount(fmt.Sprintf("%d", accountID))
+		if err != nil {
+			return nil, fmt.Errorf("failed to get client for account %d: %w", accountID, err)
+		}
+	} else {
+		// Use default client
+		client = s.getNRClient()
+		if client == nil {
+			return nil, fmt.Errorf("New Relic client not configured")
+		}
 	}
 
 	// Step 1: Validate and adapt the query
@@ -70,9 +83,27 @@ func (s *Server) handleNRQLExecute(ctx context.Context, params map[string]interf
 
 	startTime := time.Now()
 	
-	// Execute NRQL query
-	result, err := client.QueryNRDB(queryCtx, executionQuery)
-	if err != nil {
+	// Execute NRQL query using reflection to handle interface{}
+	clientValue := reflect.ValueOf(client)
+	method := clientValue.MethodByName("QueryNRQL")
+	if !method.IsValid() {
+		return nil, fmt.Errorf("QueryNRQL method not found on client")
+	}
+	
+	// Call QueryNRQL method
+	args := []reflect.Value{reflect.ValueOf(queryCtx), reflect.ValueOf(executionQuery)}
+	results := method.Call(args)
+	if len(results) != 2 {
+		return nil, fmt.Errorf("unexpected return values from QueryNRQL")
+	}
+	
+	// Extract result and error
+	var result *newrelic.NRQLResult
+	if !results[0].IsNil() {
+		result = results[0].Interface().(*newrelic.NRQLResult)
+	}
+	if !results[1].IsNil() {
+		err := results[1].Interface().(error)
 		// Provide helpful error context
 		return nil, s.enhanceQueryError(err, query, validation)
 	}
@@ -225,10 +256,14 @@ func (s *Server) validateNRQLSyntaxBasic(query string) error {
 }
 
 // processQueryResults processes raw results and validates against schema
-func (s *Server) processQueryResults(rawResults map[string]interface{}, schema map[string]interface{}, query string) ([]interface{}, error) {
-	results, ok := rawResults["results"].([]interface{})
-	if !ok {
-		return nil, fmt.Errorf("unexpected result format")
+func (s *Server) processQueryResults(rawResults *newrelic.NRQLResult, schema map[string]interface{}, query string) ([]interface{}, error) {
+	if rawResults == nil {
+		return nil, fmt.Errorf("nil result")
+	}
+	
+	results := make([]interface{}, len(rawResults.Results))
+	for i, r := range rawResults.Results {
+		results[i] = r
 	}
 
 	// If no schema validation needed, return as-is

@@ -67,6 +67,20 @@ func (s *Server) registerSchemaDiscoveryTools() error {
 				Default:     10,
 			},
 		}).
+		Param("limit", EnhancedProperty{
+			Property: Property{
+				Type:        "integer",
+				Description: "Maximum number of event types to return per page",
+				Default:     100,
+			},
+		}).
+		Param("offset", EnhancedProperty{
+			Property: Property{
+				Type:        "integer",
+				Description: "Number of event types to skip for pagination",
+				Default:     0,
+			},
+		}).
 		Performance(func(p *PerformanceMetadata) {
 			p.ExpectedLatencyMS = 1000
 			p.MaxLatencyMS = 5000

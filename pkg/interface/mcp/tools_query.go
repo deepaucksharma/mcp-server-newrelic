@@ -584,53 +584,34 @@ func (s *Server) executeNRQLQuery(ctx context.Context, query string, accountID i
 		}
 	}
 
+	// Get client for the specified account (or default if no account specified)
+	client, err := s.getNRClientWithAccount(accountIDStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get client for account: %w", err)
+	}
+
 	// Use reflection to call QueryNRQL method
-	// This avoids circular imports while still allowing real execution
-	client := s.getNRClient()
 	clientValue := reflect.ValueOf(client)
-	
-	// Check if this is a MultiAccountClient
 	method := clientValue.MethodByName("QueryNRQL")
 	if !method.IsValid() {
 		return nil, fmt.Errorf("QueryNRQL method not found on client")
 	}
 
-	// Check method signature to determine if it supports multi-account
-	methodType := method.Type()
-	if methodType.NumIn() == 3 && methodType.In(2).Kind() == reflect.String {
-		// Multi-account client with 3 parameters: (ctx, query, accountID)
-		args := []reflect.Value{
-			reflect.ValueOf(ctx),
-			reflect.ValueOf(query),
-			reflect.ValueOf(accountIDStr),
-		}
-		results := method.Call(args)
-		if len(results) != 2 {
-			return nil, fmt.Errorf("unexpected return values from QueryNRQL")
-		}
-		// Extract result and error
-		if !results[1].IsNil() {
-			return nil, results[1].Interface().(error)
-		}
-		return results[0].Interface(), nil
-	} else if methodType.NumIn() == 2 {
-		// Standard client with 2 parameters: (ctx, query)
-		args := []reflect.Value{
-			reflect.ValueOf(ctx),
-			reflect.ValueOf(query),
-		}
-		results := method.Call(args)
-		if len(results) != 2 {
-			return nil, fmt.Errorf("unexpected return values from QueryNRQL")
-		}
-		// Extract result and error
-		if !results[1].IsNil() {
-			return nil, results[1].Interface().(error)
-		}
-		return results[0].Interface(), nil
+	// Call QueryNRQL with just context and query (account is already selected)
+	args := []reflect.Value{
+		reflect.ValueOf(ctx),
+		reflect.ValueOf(query),
 	}
-
-	return nil, fmt.Errorf("unsupported QueryNRQL method signature")
+	results := method.Call(args)
+	if len(results) != 2 {
+		return nil, fmt.Errorf("unexpected return values from QueryNRQL")
+	}
+	
+	// Extract result and error
+	if !results[1].IsNil() {
+		return nil, results[1].Interface().(error)
+	}
+	return results[0].Interface(), nil
 }
 
 // isValidAggregateFunction checks if a string is a valid NRQL aggregate function

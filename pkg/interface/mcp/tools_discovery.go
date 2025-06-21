@@ -22,6 +22,11 @@ func (s *Server) registerTools() error {
 		return fmt.Errorf("failed to register query tools: %w", err)
 	}
 	
+	// Granular query tools (includes adaptive NRQL execution)
+	if err := s.registerGranularQueryTools(); err != nil {
+		return fmt.Errorf("failed to register granular query tools: %w", err)
+	}
+	
 	// Dashboard tools
 	if err := s.registerDashboardTools(); err != nil {
 		return fmt.Errorf("failed to register dashboard tools: %w", err)

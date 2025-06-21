@@ -71,7 +71,7 @@ func (s *Server) registerAlertTools() error {
 	// List alert conditions
 	s.tools.Register(Tool{
 		Name:        "list_alerts",
-		Description: "List all alert conditions in the account",
+		Description: "List all alert conditions in the account with pagination support",
 		Parameters: ToolParameters{
 			Type: "object",
 			Properties: map[string]Property{
@@ -88,6 +88,15 @@ func (s *Server) registerAlertTools() error {
 					Type:        "boolean",
 					Description: "Include recent incidents for each alert",
 					Default:     false,
+				},
+				"limit": {
+					Type:        "integer",
+					Description: "Maximum number of alerts to return per page (max: 200)",
+					Default:     50,
+				},
+				"cursor": {
+					Type:        "string",
+					Description: "Pagination cursor from previous response",
 				},
 				"account_id": {
 					Type:        "string",

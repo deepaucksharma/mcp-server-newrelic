@@ -1,0 +1,160 @@
+# DISC-MISS-001: Discovery with Missing Attributes
+# Tests how the server handles discovery when expected attributes are missing
+# This scenario validates the discovery-first philosophy and adaptive behavior
+
+id: DISC-MISS-001
+title: Discovery handles missing attributes gracefully
+tags:
+  - discovery
+  - schema-drift
+  - adaptive
+  - critical
+
+environment:
+  account_type: single-account
+  schema_drift: high  # Indicates many missing attributes
+  variables:
+    expected_event_type: Transaction
+    expected_attributes:
+      - duration
+      - error
+      - http.statusCode
+      - request.method
+
+setup:
+  seed_data_script: scripts/seed-missing-attributes.py
+  environment:
+    SEED_MISSING_ATTRS: "duration,error.message,http.method"
+  wait: 5s
+
+workflow:
+  # Step 1: Discover available event types
+  - tool: discovery.explore_event_types
+    params:
+      limit: 100
+    store_as: discovered_events
+    timeout: 30s
+
+  # Step 2: Verify Transaction event exists
+  - tool: discovery.find_event_type
+    params:
+      pattern: "Transaction"
+      fuzzy_match: true
+    store_as: transaction_info
+    condition: "${discovered_events.count} > 0"
+
+  # Step 3: Discover Transaction attributes
+  - tool: discovery.explore_attributes
+    params:
+      event_type: Transaction
+      sample_size: 1000
+    store_as: transaction_attrs
+    retry:
+      max_attempts: 3
+      delay: 2s
+
+  # Step 4: Profile specific attributes to check presence
+  - tool: discovery.profile_attribute
+    params:
+      event_type: Transaction
+      attribute: duration
+    store_as: duration_profile
+    on_error: continue  # Continue even if attribute missing
+
+  # Step 5: Profile error attribute
+  - tool: discovery.profile_attribute
+    params:
+      event_type: Transaction
+      attribute: error
+    store_as: error_profile
+    on_error: continue
+
+  # Step 6: Find alternative attributes
+  - tool: discovery.find_similar_attributes
+    params:
+      event_type: Transaction
+      target_attributes:
+        - duration
+        - error
+      similarity_threshold: 0.7
+    store_as: alternative_attrs
+
+  # Step 7: Build adaptive query using discovered schema
+  - tool: query.build_adaptive
+    params:
+      event_type: Transaction
+      query_type: latency_percentiles
+      discovered_attributes: "${transaction_attrs.attributes}"
+      alternatives: "${alternative_attrs.mapping}"
+    store_as: adaptive_query
+
+  # Step 8: Execute the adaptive query
+  - tool: nrql.execute
+    params:
+      query: "${adaptive_query.nrql}"
+      timeout: 30000
+    store_as: query_result
+
+  # Step 9: Validate query executed successfully
+  - tool: query.validate_results
+    params:
+      results: "${query_result}"
+      expected_shape: percentile_data
+    store_as: validation
+
+assert:
+  # Verify discovery found Transaction event type
+  - jsonpath: "$.transaction_info.found"
+    operator: "=="
+    value: true
+    message: "Transaction event type should be discovered"
+
+  # Verify attributes were discovered (even if not all expected)
+  - jsonpath: "$.transaction_attrs.count"
+    operator: ">"
+    value: 0
+    message: "Should discover at least some attributes"
+
+  # Verify missing attributes were detected
+  - jsonpath: "$.duration_profile.exists"
+    operator: "=="
+    value: false
+    message: "Should detect that duration attribute is missing"
+
+  # Verify alternative attributes were found
+  - jsonpath: "$.alternative_attrs.found_alternatives"
+    operator: ">"
+    value: 0
+    message: "Should find alternative attributes for missing ones"
+
+  # Verify adaptive query was built
+  - jsonpath: "$.adaptive_query.success"
+    operator: "=="
+    value: true
+    message: "Should successfully build an adaptive query"
+
+  # Verify adaptive query used alternative attributes
+  - jsonpath: "$.adaptive_query.used_alternatives"
+    operator: "=="
+    value: true
+    message: "Adaptive query should use alternative attributes"
+
+  # Verify query executed successfully despite missing attributes
+  - jsonpath: "$.query_result.error"
+    operator: "=="
+    value: null
+    message: "Query should execute successfully with adapted schema"
+
+  # Trace assertions
+  - type: trace
+    operator: trace_contains_confidence
+    value: 0.7
+    message: "Confidence should be lower due to missing attributes"
+
+  - type: trace
+    operator: trace_has_discovery
+    value: true
+    message: "Trace should show discovery was performed"
+
+cleanup:
+  delete_test_data: true

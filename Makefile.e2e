@@ -1,0 +1,251 @@
+# End-to-End Testing Makefile
+
+.PHONY: test-e2e test-e2e-discovery test-e2e-workflows test-e2e-performance \
+        test-e2e-resilience test-e2e-integration test-e2e-setup test-e2e-validate \
+        test-e2e-report test-e2e-clean
+
+# E2E Test Configuration
+E2E_TIMEOUT ?= 30m
+E2E_PARALLEL ?= 4
+E2E_FILTER ?= ""
+E2E_ACCOUNT ?= primary
+E2E_LOG_LEVEL ?= info
+E2E_CAPTURE_TRAFFIC ?= false
+E2E_RESULTS_DIR ?= tests/results
+
+# Load test environment
+-include .env.test
+
+# Main E2E test targets
+
+## Run all E2E tests
+test-e2e: test-e2e-validate test-e2e-setup
+	@echo "Running all E2E tests..."
+	@mkdir -p $(E2E_RESULTS_DIR)
+	@go test -v -timeout $(E2E_TIMEOUT) \
+		-run "TestE2E" \
+		-parallel $(E2E_PARALLEL) \
+		./tests/e2e/... \
+		2>&1 | tee $(E2E_RESULTS_DIR)/e2e-all.log
+	@$(MAKE) test-e2e-report
+
+## Run discovery tests only
+test-e2e-discovery: test-e2e-validate
+	@echo "Running discovery E2E tests..."
+	@mkdir -p $(E2E_RESULTS_DIR)
+	@go test -v -timeout $(E2E_TIMEOUT) \
+		-run "TestDiscovery" \
+		./tests/e2e/discovery/... \
+		2>&1 | tee $(E2E_RESULTS_DIR)/e2e-discovery.log
+
+## Run workflow tests only
+test-e2e-workflows: test-e2e-validate
+	@echo "Running workflow E2E tests..."
+	@mkdir -p $(E2E_RESULTS_DIR)
+	@go test -v -timeout $(E2E_TIMEOUT) \
+		-run "TestWorkflow" \
+		./tests/e2e/workflows/... \
+		2>&1 | tee $(E2E_RESULTS_DIR)/e2e-workflows.log
+
+## Run performance tests only
+test-e2e-performance: test-e2e-validate
+	@echo "Running performance E2E tests..."
+	@mkdir -p $(E2E_RESULTS_DIR)
+	@go test -v -timeout $(E2E_TIMEOUT) \
+		-run "TestPerformance" \
+		-bench=. \
+		./tests/e2e/performance/... \
+		2>&1 | tee $(E2E_RESULTS_DIR)/e2e-performance.log
+
+## Run resilience tests only
+test-e2e-resilience: test-e2e-validate
+	@echo "Running resilience E2E tests..."
+	@mkdir -p $(E2E_RESULTS_DIR)
+	@go test -v -timeout $(E2E_TIMEOUT) \
+		-run "TestResilience" \
+		./tests/e2e/resilience/... \
+		2>&1 | tee $(E2E_RESULTS_DIR)/e2e-resilience.log
+
+## Run integration tests only
+test-e2e-integration: test-e2e-validate
+	@echo "Running integration E2E tests..."
+	@mkdir -p $(E2E_RESULTS_DIR)
+	@go test -v -timeout $(E2E_TIMEOUT) \
+		-run "TestIntegration" \
+		./tests/e2e/integration/... \
+		2>&1 | tee $(E2E_RESULTS_DIR)/e2e-integration.log
+
+# Support targets
+
+## Validate E2E test environment
+test-e2e-validate:
+	@echo "Validating E2E test environment..."
+	@if [ -z "$(NEW_RELIC_API_KEY_PRIMARY)" ]; then \
+		echo "Error: NEW_RELIC_API_KEY_PRIMARY not set"; \
+		echo "Please configure .env.test with test account credentials"; \
+		exit 1; \
+	fi
+	@if [ -z "$(NEW_RELIC_ACCOUNT_ID_PRIMARY)" ]; then \
+		echo "Error: NEW_RELIC_ACCOUNT_ID_PRIMARY not set"; \
+		exit 1; \
+	fi
+	@echo "Primary test account configured ✓"
+	@if [ -n "$(NEW_RELIC_API_KEY_SECONDARY)" ]; then \
+		echo "Secondary test account configured ✓"; \
+	else \
+		echo "Warning: Secondary account not configured (some tests will be skipped)"; \
+	fi
+	@if [ -n "$(NEW_RELIC_API_KEY_EMPTY)" ]; then \
+		echo "Empty test account configured ✓"; \
+	else \
+		echo "Warning: Empty account not configured (some tests will be skipped)"; \
+	fi
+	@if [ -n "$(NEW_RELIC_API_KEY_HIGH_CARD)" ]; then \
+		echo "High cardinality test account configured ✓"; \
+	else \
+		echo "Warning: High cardinality account not configured (some tests will be skipped)"; \
+	fi
+
+## Setup E2E test environment
+test-e2e-setup:
+	@echo "Setting up E2E test environment..."
+	@mkdir -p $(E2E_RESULTS_DIR)/{logs,reports,traffic,coverage}
+	@if [ ! -f .env.test ]; then \
+		echo "Creating .env.test from template..."; \
+		cp .env.test.example .env.test 2>/dev/null || \
+		echo "# E2E Test Configuration\n\
+NEW_RELIC_API_KEY_PRIMARY=\n\
+NEW_RELIC_ACCOUNT_ID_PRIMARY=\n\
+NEW_RELIC_API_KEY_SECONDARY=\n\
+NEW_RELIC_ACCOUNT_ID_SECONDARY=\n\
+NEW_RELIC_API_KEY_EMPTY=\n\
+NEW_RELIC_ACCOUNT_ID_EMPTY=\n\
+NEW_RELIC_API_KEY_HIGH_CARD=\n\
+NEW_RELIC_ACCOUNT_ID_HIGH_CARD=\n\
+E2E_TEST_TIMEOUT=300s\n\
+E2E_PARALLEL_TESTS=4\n\
+E2E_RETRY_ATTEMPTS=3\n\
+E2E_CACHE_DISABLED=true" > .env.test; \
+		echo "Please edit .env.test with your New Relic credentials"; \
+	fi
+
+## Generate E2E test report
+test-e2e-report:
+	@echo "Generating E2E test report..."
+	@if command -v go-test-report >/dev/null 2>&1; then \
+		go-test-report -o $(E2E_RESULTS_DIR)/report.html $(E2E_RESULTS_DIR)/*.log; \
+		echo "HTML report generated: $(E2E_RESULTS_DIR)/report.html"; \
+	else \
+		echo "Install go-test-report for HTML reports: go install github.com/vakenbolt/go-test-report@latest"; \
+	fi
+	@echo "Test logs available in: $(E2E_RESULTS_DIR)/"
+
+## Clean E2E test results
+test-e2e-clean:
+	@echo "Cleaning E2E test results..."
+	@rm -rf $(E2E_RESULTS_DIR)
+	@echo "Test results cleaned"
+
+# Advanced targets
+
+## Run specific E2E test
+test-e2e-run:
+	@if [ -z "$(TEST)" ]; then \
+		echo "Usage: make test-e2e-run TEST=TestEventTypeDiscovery"; \
+		exit 1; \
+	fi
+	@echo "Running specific test: $(TEST)"
+	@go test -v -timeout $(E2E_TIMEOUT) \
+		-run "$(TEST)" \
+		./tests/e2e/...
+
+## Run E2E tests with debug logging
+test-e2e-debug:
+	@echo "Running E2E tests with debug logging..."
+	@E2E_LOG_LEVEL=debug \
+	E2E_CAPTURE_TRAFFIC=true \
+	go test -v -timeout $(E2E_TIMEOUT) \
+		-run "$(E2E_FILTER)" \
+		./tests/e2e/... \
+		2>&1 | tee $(E2E_RESULTS_DIR)/e2e-debug.log
+
+## Run E2E tests with specific account
+test-e2e-account:
+	@if [ -z "$(ACCOUNT)" ]; then \
+		echo "Usage: make test-e2e-account ACCOUNT=secondary"; \
+		exit 1; \
+	fi
+	@echo "Running E2E tests with account: $(ACCOUNT)"
+	@E2E_ACCOUNT=$(ACCOUNT) go test -v -timeout $(E2E_TIMEOUT) \
+		-run "$(E2E_FILTER)" \
+		./tests/e2e/...
+
+## Watch E2E test execution
+test-e2e-watch:
+	@if command -v entr >/dev/null 2>&1; then \
+		find tests/e2e -name "*.go" | entr -c make test-e2e-run TEST=$(TEST); \
+	else \
+		echo "Install entr to use watch mode: brew install entr"; \
+		exit 1; \
+	fi
+
+## Generate E2E test coverage
+test-e2e-coverage:
+	@echo "Running E2E tests with coverage..."
+	@mkdir -p $(E2E_RESULTS_DIR)/coverage
+	@go test -v -timeout $(E2E_TIMEOUT) \
+		-coverprofile=$(E2E_RESULTS_DIR)/coverage/e2e.out \
+		-coverpkg=./pkg/... \
+		./tests/e2e/...
+	@go tool cover -html=$(E2E_RESULTS_DIR)/coverage/e2e.out \
+		-o $(E2E_RESULTS_DIR)/coverage/e2e.html
+	@echo "Coverage report: $(E2E_RESULTS_DIR)/coverage/e2e.html"
+
+## Benchmark E2E performance
+test-e2e-bench:
+	@echo "Running E2E performance benchmarks..."
+	@go test -v -timeout $(E2E_TIMEOUT) \
+		-bench=. -benchmem \
+		-benchtime=10s \
+		./tests/e2e/performance/... \
+		2>&1 | tee $(E2E_RESULTS_DIR)/e2e-bench.log
+
+## Validate test data in accounts
+test-e2e-validate-data:
+	@echo "Validating test data in configured accounts..."
+	@go run tests/e2e/framework/validate/main.go
+
+## Generate test data in accounts
+test-e2e-generate-data:
+	@echo "Generating test data in accounts..."
+	@go run tests/e2e/framework/generate/main.go
+
+## Run E2E tests in CI mode
+test-e2e-ci:
+	@echo "Running E2E tests in CI mode..."
+	@E2E_PARALLEL=1 \
+	E2E_RETRY_ATTEMPTS=1 \
+	E2E_TIMEOUT=45m \
+	$(MAKE) test-e2e
+	@$(MAKE) test-e2e-coverage
+
+# Help target
+help-e2e:
+	@echo "E2E Testing Targets:"
+	@echo "  test-e2e              - Run all E2E tests"
+	@echo "  test-e2e-discovery    - Run discovery tests only"
+	@echo "  test-e2e-workflows    - Run workflow tests only"
+	@echo "  test-e2e-performance  - Run performance tests only"
+	@echo "  test-e2e-resilience   - Run resilience tests only"
+	@echo "  test-e2e-integration  - Run integration tests only"
+	@echo "  test-e2e-setup        - Setup E2E test environment"
+	@echo "  test-e2e-validate     - Validate test environment"
+	@echo "  test-e2e-report       - Generate test report"
+	@echo "  test-e2e-clean        - Clean test results"
+	@echo "  test-e2e-run          - Run specific test (TEST=name)"
+	@echo "  test-e2e-debug        - Run with debug logging"
+	@echo "  test-e2e-account      - Run with specific account"
+	@echo "  test-e2e-watch        - Watch mode for development"
+	@echo "  test-e2e-coverage     - Generate coverage report"
+	@echo "  test-e2e-bench        - Run performance benchmarks"
+	@echo "  test-e2e-ci           - Run in CI mode"

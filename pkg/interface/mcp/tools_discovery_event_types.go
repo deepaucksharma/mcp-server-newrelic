@@ -13,6 +13,16 @@ func (s *Server) handleDiscoveryExploreEventTypes(ctx context.Context, params ma
 	if p, ok := params["pattern"].(string); ok {
 		pattern = p
 	}
+	
+	limit := 100
+	if l, ok := params["limit"].(float64); ok {
+		limit = int(l)
+	}
+	
+	offset := 0
+	if o, ok := params["offset"].(float64); ok {
+		offset = int(o)
+	}
 
 	// Check mock mode
 	if s.isMockMode() {
@@ -84,13 +94,38 @@ func (s *Server) handleDiscoveryExploreEventTypes(ctx context.Context, params ma
 		})
 	}
 
-	return map[string]interface{}{
-		"event_types": eventTypes,
-		"total":       len(eventTypes),
+	// Apply pagination
+	totalCount := len(eventTypes)
+	start := offset
+	end := offset + limit
+	if start > totalCount {
+		start = totalCount
+	}
+	if end > totalCount {
+		end = totalCount
+	}
+	paginatedEventTypes := eventTypes[start:end]
+	
+	result := map[string]interface{}{
+		"event_types": paginatedEventTypes,
+		"total":       len(paginatedEventTypes),
 		"discovery_metadata": map[string]interface{}{
 			"account_id":    accountID,
 			"time_range":    "24 hours",
 			"discovered_at": ctx.Value("timestamp"),
+			"pagination": map[string]interface{}{
+				"limit":      limit,
+				"offset":     offset,
+				"total_count": totalCount,
+				"has_more":   end < totalCount,
+			},
 		},
-	}, nil
+	}
+	
+	// Add next offset if there are more results
+	if end < totalCount {
+		result["next_offset"] = end
+	}
+	
+	return result, nil
 }
