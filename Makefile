@@ -81,6 +81,7 @@ docker-run:
 lint:
 	@echo "Running linter..."
 	@golangci-lint run
+	@./scripts/assumption_scan.sh
 
 format:
 	@echo "Formatting code..."
