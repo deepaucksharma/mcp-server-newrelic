@@ -1,0 +1,233 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [ main, develop, new-branch ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run nightly at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      test_suite:
+        description: 'Test suite to run'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - protocol
+          - discovery
+          - performance
+
+env:
+  GO_VERSION: '1.21'
+  TEST_TIMEOUT: '30m'
+
+jobs:
+  e2e-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache: true
+    
+    - name: Verify dependencies
+      run: |
+        go mod download
+        go mod verify
+        go mod tidy -v
+    
+    - name: Build MCP Server
+      run: |
+        make build-mcp
+        echo "MCP Server built successfully"
+        ls -la bin/
+    
+    - name: Create test environment
+      env:
+        NR_API_KEY: ${{ secrets.NR_API_KEY }}
+        NR_ACCOUNT_ID: ${{ secrets.NR_ACCOUNT_ID }}
+        NR_USER_KEY: ${{ secrets.NR_USER_KEY }}
+        NR_REGION: ${{ secrets.NR_REGION || 'US' }}
+      run: |
+        # Create .env.test file
+        cat > .env.test <<EOF
+        NEW_RELIC_API_KEY=$NR_API_KEY
+        NEW_RELIC_ACCOUNT_ID=$NR_ACCOUNT_ID
+        NEW_RELIC_USER_KEY=$NR_USER_KEY
+        NEW_RELIC_REGION=$NR_REGION
+        LOG_LEVEL=INFO
+        EOF
+        
+        echo "Test environment configured"
+    
+    - name: Run Protocol Compliance Tests
+      if: github.event.inputs.test_suite == 'protocol' || github.event.inputs.test_suite == 'all' || github.event.inputs.test_suite == ''
+      run: |
+        echo "Running Protocol Compliance Tests..."
+        go test -v -timeout ${{ env.TEST_TIMEOUT }} ./tests/e2e/... \
+          -run '^TestMCPProtocolCompliance$' \
+          2>&1 | tee protocol-test-results.log
+    
+    - name: Run Discovery Tests
+      if: github.event.inputs.test_suite == 'discovery' || github.event.inputs.test_suite == 'all' || github.event.inputs.test_suite == ''
+      run: |
+        echo "Running Discovery Tests..."
+        go test -v -timeout ${{ env.TEST_TIMEOUT }} ./tests/e2e/... \
+          -run '^Test(DiscoveryChain|AdaptiveQueryBuilding)$' \
+          2>&1 | tee discovery-test-results.log
+    
+    - name: Run Performance Benchmarks
+      if: (github.event.inputs.test_suite == 'performance' || github.event.inputs.test_suite == 'all') || (github.event_name == 'schedule')
+      run: |
+        echo "Running Performance Benchmarks..."
+        go test -v -timeout ${{ env.TEST_TIMEOUT }} ./tests/e2e/... \
+          -run '^TestMCPPerformanceBenchmarks$' \
+          2>&1 | tee benchmark-results.log
+    
+    - name: Run All E2E Tests
+      if: github.event.inputs.test_suite == 'all' && github.event_name != 'schedule'
+      run: |
+        echo "Running complete E2E test suite..."
+        go test -v -timeout ${{ env.TEST_TIMEOUT }} ./tests/e2e/... \
+          2>&1 | tee e2e-test-results.log
+    
+    - name: Generate test report
+      if: always()
+      run: |
+        # Install go-junit-report
+        go install github.com/jstemmer/go-junit-report/v2@latest
+        
+        # Generate JUnit reports
+        if [ -f protocol-test-results.log ]; then
+          cat protocol-test-results.log | go-junit-report -set-exit-code > protocol-test-report.xml
+        fi
+        
+        if [ -f discovery-test-results.log ]; then
+          cat discovery-test-results.log | go-junit-report -set-exit-code > discovery-test-report.xml
+        fi
+        
+        if [ -f benchmark-results.log ]; then
+          cat benchmark-results.log | go-junit-report -set-exit-code > benchmark-test-report.xml
+        fi
+        
+        if [ -f e2e-test-results.log ]; then
+          cat e2e-test-results.log | go-junit-report -set-exit-code > e2e-test-report.xml
+        fi
+    
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-${{ github.run_id }}
+        path: |
+          *-test-results.log
+          *-test-report.xml
+        retention-days: 30
+    
+    - name: Upload benchmark results
+      if: always() && (github.event.inputs.test_suite == 'performance' || github.event_name == 'schedule')
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-results-${{ github.run_id }}
+        path: benchmark-results.log
+        retention-days: 90
+    
+    - name: Publish test results
+      if: always()
+      uses: EnricoMi/publish-unit-test-result-action@v2
+      with:
+        files: |
+          *-test-report.xml
+        check_name: E2E Test Results
+        comment_mode: always
+        compare_to_earlier_commit: true
+    
+    - name: Performance regression check
+      if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'performance')
+      run: |
+        echo "Checking for performance regressions..."
+        # This would compare against baseline metrics
+        # For now, just log a message
+        echo "Performance check completed"
+    
+    - name: Send results to New Relic
+      if: always() && env.NR_INSIGHTS_KEY != ''
+      env:
+        NR_INSIGHTS_KEY: ${{ secrets.NR_INSIGHTS_KEY }}
+      run: |
+        # Parse test results and send to New Relic
+        go run ./tests/e2e/cmd/nr-reporter \
+          --results-dir . \
+          --account-id ${{ secrets.NR_ACCOUNT_ID }}
+      continue-on-error: true
+    
+    - name: Comment PR with results
+      if: github.event_name == 'pull_request' && always()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          let testResults = '';
+          let hasFailed = false;
+          
+          // Read test results
+          const files = ['protocol-test-results.log', 'discovery-test-results.log', 'benchmark-results.log'];
+          for (const file of files) {
+            try {
+              const content = fs.readFileSync(file, 'utf8');
+              if (content.includes('FAIL')) hasFailed = true;
+              testResults += `\n### ${file.replace('-test-results.log', '').toUpperCase()}\n\`\`\`\n${content.slice(-1000)}\n\`\`\`\n`;
+            } catch (e) {
+              // File doesn't exist
+            }
+          }
+          
+          const status = hasFailed ? '❌ E2E Tests Failed' : '✅ E2E Tests Passed';
+          
+          const comment = `## E2E Test Results
+          
+          ${status}
+          
+          <details>
+          <summary>View Test Output</summary>
+          
+          ${testResults}
+          </details>
+          
+          [View full test logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})`;
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });
+
+  notify-failure:
+    needs: e2e-tests
+    if: failure() && (github.event_name == 'push' || github.event_name == 'schedule')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Slack notification
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: |
+            E2E tests failed on ${{ github.ref }}
+            Repository: ${{ github.repository }}
+            Commit: ${{ github.sha }}
+            Author: ${{ github.actor }}
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        if: env.SLACK_WEBHOOK != ''

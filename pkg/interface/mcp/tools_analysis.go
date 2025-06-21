@@ -297,10 +297,7 @@ func (s *Server) handleAnalysisCalculateBaseline(ctx context.Context, params map
 	}
 
 	// Process results
-	baseline := processBaselineResults(result, metric, percentiles)
-	
-	// Add recommendations based on baseline
-	baseline["recommendations"] = generateBaselineRecommendations(baseline)
+	baseline := processBaselineResults(result, metric, percentiles, groupBy)
 
 	return baseline, nil
 }
@@ -362,48 +359,64 @@ func (s *Server) handleAnalysisFindCorrelations(ctx context.Context, params map[
 	
 	minCorrelation, _ := params["min_correlation"].(float64)
 	if minCorrelation == 0 {
-		minCorrelation = 0.7
+		minCorrelation = 0.5 // Lower default for better discovery
 	}
 
 	// Check mock mode
-	if s.nrClient == nil {
-		return s.mockAnalysisCorrelations(primaryMetric, eventType, timeRange, minCorrelation), nil
+	if s.isMockMode() {
+		return s.getMockData("analysis.find_correlations", params), nil
 	}
 
-	// If secondary metrics not specified, discover numeric attributes
-	secondaryMetrics, _ := params["secondary_metrics"].([]interface{})
-	if len(secondaryMetrics) == 0 {
-		// Auto-discover numeric attributes
-		secondaryMetrics = discoverNumericAttributes(ctx, s, eventType)
-	}
-
-	// Get time series data for all metrics
-	correlations := []map[string]interface{}{}
-	
-	for _, secondary := range secondaryMetrics {
-		secondaryStr, _ := secondary.(string)
-		if secondaryStr == primaryMetric {
-			continue
+	// Get candidate metrics
+	candidateMetrics := []string{}
+	if secondary, ok := params["secondary_metrics"].([]interface{}); ok && len(secondary) > 0 {
+		for _, m := range secondary {
+			if metric, ok := m.(string); ok {
+				candidateMetrics = append(candidateMetrics, metric)
+			}
 		}
+	} else {
+		// Auto-discover numeric attributes if not provided
+		// For now, use common metrics
+		candidateMetrics = []string{"duration", "errorCount", "throughput", "cpuPercent", "memoryPercent"}
+	}
 
-		correlation := calculateCorrelation(ctx, s, eventType, primaryMetric, secondaryStr, timeRange)
-		if math.Abs(correlation["coefficient"].(float64)) >= minCorrelation {
-			correlations = append(correlations, correlation)
+	// Use the new correlation analyzer
+	analyzer := &CorrelationAnalyzer{server: s}
+	result, err := analyzer.FindCorrelations(ctx, primaryMetric, candidateMetrics, eventType, timeRange)
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter by minimum correlation
+	filteredCorrelations := []MetricCorrelation{}
+	for _, corr := range result.Correlations {
+		if math.Abs(corr.Coefficient) >= minCorrelation {
+			filteredCorrelations = append(filteredCorrelations, corr)
 		}
 	}
 
-	// Sort by correlation strength
-	sort.Slice(correlations, func(i, j int) bool {
-		return math.Abs(correlations[i]["coefficient"].(float64)) > math.Abs(correlations[j]["coefficient"].(float64))
-	})
+	// Convert to response format
+	correlationMaps := []map[string]interface{}{}
+	for _, corr := range filteredCorrelations {
+		correlationMaps = append(correlationMaps, map[string]interface{}{
+			"metric":       corr.Metric,
+			"coefficient":  corr.Coefficient,
+			"lag":          corr.Lag,
+			"lagged_coeff": corr.LaggedCoeff,
+			"data_points":  corr.DataPoints,
+			"relationship": corr.Relationship,
+		})
+	}
 
 	return map[string]interface{}{
-		"primaryMetric":      primaryMetric,
-		"eventType":          eventType,
-		"timeRange":          timeRange,
-		"correlations":       correlations,
-		"strongCorrelations": len(correlations),
-		"insights":           generateCorrelationInsights(correlations),
+		"primary_metric":      primaryMetric,
+		"event_type":          eventType,
+		"time_range":          timeRange,
+		"correlations":        correlationMaps,
+		"strong_correlations": len(filteredCorrelations),
+		"summary":             result.Summary,
+		"insights":            generateCorrelationInsights(correlationMaps),
 	}, nil
 }
 
@@ -423,36 +436,70 @@ func (s *Server) handleAnalysisAnalyzeTrend(ctx context.Context, params map[stri
 		includeForecast = val
 	}
 
-	// Mock mode
+	// Check mock mode
 	if s.isMockMode() {
 		return s.mockAnalysisTrend(metric, eventType, timeRange, granularity, includeForecast), nil
 	}
 
-	// Build NRQL query for trend analysis
-	query := fmt.Sprintf(`
-		SELECT average(%s) as value, count(*) as count 
-		FROM %s 
-		TIMESERIES %s 
-		SINCE %s ago
-	`, metric, eventType, granularity, timeRange)
-
-	// Execute query
-	result, err := s.executeNRQL(ctx, query, nil)
+	// Use the new trend analyzer
+	analyzer := &TrendAnalyzer{server: s}
+	result, err := analyzer.AnalyzeTrends(ctx, metric, eventType, timeRange)
 	if err != nil {
-		return nil, fmt.Errorf("failed to analyze trend: %w", err)
+		return nil, err
 	}
 
-	// Analyze trend from results
-	trendData := analyzeTrendData(result)
-	
+	// Convert to response format
+	forecastValues := []map[string]interface{}{}
+	if includeForecast && len(result.Forecast.Values) > 0 {
+		for i, val := range result.Forecast.Values {
+			forecastValues = append(forecastValues, map[string]interface{}{
+				"timestamp": val.Timestamp.Unix(),
+				"value":     val.Value,
+				"lower":     result.Forecast.Confidence[i].Lower,
+				"upper":     result.Forecast.Confidence[i].Upper,
+			})
+		}
+	}
+
+	changePointMaps := []map[string]interface{}{}
+	for _, cp := range result.ChangePoints {
+		changePointMaps = append(changePointMaps, map[string]interface{}{
+			"timestamp":  cp.Timestamp.Unix(),
+			"old_value":  cp.OldValue,
+			"new_value":  cp.NewValue,
+			"confidence": cp.Confidence,
+			"type":       cp.Type,
+		})
+	}
+
 	return map[string]interface{}{
 		"metric":      metric,
-		"eventType":   eventType,
-		"timeRange":   timeRange,
+		"event_type":  eventType,
+		"time_range":  timeRange,
 		"granularity": granularity,
-		"trend":       trendData,
-		"forecast":    includeForecast && trendData["direction"] != nil,
-		"insights":    generateTrendInsights(trendData),
+		"trend": map[string]interface{}{
+			"direction":      result.LinearTrend.Direction,
+			"strength":       result.LinearTrend.Strength,
+			"slope":          result.LinearTrend.Slope,
+			"r_squared":      result.LinearTrend.RSquared,
+			"percent_change": result.LinearTrend.PercentChange,
+		},
+		"seasonality": map[string]interface{}{
+			"detected": result.Seasonality.Detected,
+			"period":   result.Seasonality.Period,
+			"strength": result.Seasonality.Strength,
+			"pattern":  result.Seasonality.Pattern,
+		},
+		"change_points": changePointMaps,
+		"forecast": map[string]interface{}{
+			"enabled": includeForecast,
+			"values":  forecastValues,
+		},
+		"summary": result.Summary,
+		"insights": []string{
+			fmt.Sprintf("Metric shows %s trend with %s fit", result.LinearTrend.Direction, result.LinearTrend.Strength),
+			fmt.Sprintf("%.1f%% change over the time period", result.LinearTrend.PercentChange),
+		},
 	}, nil
 }
 
@@ -468,38 +515,74 @@ func (s *Server) handleAnalysisAnalyzeDistribution(ctx context.Context, params m
 		buckets = int(val)
 	}
 
-	// Mock mode
+	// Check mock mode
 	if s.isMockMode() {
 		return s.mockAnalysisDistribution(metric, eventType, timeRange, buckets), nil
 	}
 
-	// Build NRQL query for distribution analysis
+	// Build NRQL query for all data points
 	query := fmt.Sprintf(`
-		SELECT histogram(%s, %d) as distribution,
-		       average(%s) as avg,
-		       stddev(%s) as stddev,
-		       min(%s) as min,
-		       max(%s) as max,
-		       percentile(%s, 50, 90, 95, 99) as percentiles
+		SELECT %s as value
 		FROM %s 
-		SINCE %s ago
-	`, metric, buckets, metric, metric, metric, metric, metric, eventType, timeRange)
+		SINCE %s
+		LIMIT MAX
+	`, metric, eventType, timeRange)
 
 	// Execute query
 	result, err := s.executeNRQL(ctx, query, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to analyze distribution: %w", err)
+		return nil, fmt.Errorf("failed to fetch distribution data: %w", err)
 	}
 
-	// Analyze distribution
-	distribution := analyzeDistribution(result)
-	
+	// Extract values from result
+	values := []float64{}
+	if results, ok := result["results"].([]interface{}); ok {
+		for _, r := range results {
+			if row, ok := r.(map[string]interface{}); ok {
+				if val, ok := row["value"].(float64); ok {
+					values = append(values, val)
+				}
+			}
+		}
+	}
+
+	if len(values) == 0 {
+		return nil, fmt.Errorf("no data found for distribution analysis")
+	}
+
+	// Calculate distribution statistics
+	sort.Float64s(values)
+	stats := calculateDistributionStats(values)
+	histogram := createHistogram(values, buckets)
+	distributionType := detectDistributionType(values, stats)
+
 	return map[string]interface{}{
-		"metric":       metric,
-		"eventType":    eventType,
-		"timeRange":    timeRange,
-		"distribution": distribution,
-		"insights":     generateDistributionInsights(distribution),
+		"metric":     metric,
+		"event_type": eventType,
+		"time_range": timeRange,
+		"statistics": map[string]interface{}{
+			"mean":       stats.Mean,
+			"median":     stats.Median,
+			"mode":       stats.Mode,
+			"stddev":     stats.StdDev,
+			"variance":   stats.Variance,
+			"skewness":   stats.Skewness,
+			"kurtosis":   stats.Kurtosis,
+			"min":        stats.Min,
+			"max":        stats.Max,
+			"count":      len(values),
+			"percentiles": map[string]float64{
+				"p25": percentile(values, 25),
+				"p50": stats.Median,
+				"p75": percentile(values, 75),
+				"p90": percentile(values, 90),
+				"p95": percentile(values, 95),
+				"p99": percentile(values, 99),
+			},
+		},
+		"histogram":        histogram,
+		"distribution_type": distributionType,
+		"insights":         generateDistributionInsights(stats, distributionType, histogram),
 	}, nil
 }
 
@@ -516,23 +599,25 @@ func (s *Server) handleAnalysisCompareSegments(ctx context.Context, params map[s
 		comparisonType = "relative"
 	}
 
-	// Mock mode
+	// Check mock mode
 	if s.isMockMode() {
 		return s.mockAnalysisSegments(metric, eventType, segmentBy, timeRange, comparisonType), nil
 	}
 
 	// Build NRQL query for segment comparison
 	query := fmt.Sprintf(`
-		SELECT average(%s) as avg,
-		       count(*) as count,
-		       stddev(%s) as stddev,
-		       min(%s) as min,
-		       max(%s) as max
+		SELECT 
+			average(%s) as avg,
+			count(*) as count,
+			stddev(%s) as stddev,
+			min(%s) as min,
+			max(%s) as max,
+			percentile(%s, 50, 90, 95) as percentiles
 		FROM %s 
 		FACET %s
-		SINCE %s ago
+		SINCE %s
 		LIMIT 50
-	`, metric, metric, metric, metric, eventType, segmentBy, timeRange)
+	`, metric, metric, metric, metric, metric, eventType, segmentBy, timeRange)
 
 	// Execute query
 	result, err := s.executeNRQL(ctx, query, nil)
@@ -540,17 +625,19 @@ func (s *Server) handleAnalysisCompareSegments(ctx context.Context, params map[s
 		return nil, fmt.Errorf("failed to compare segments: %w", err)
 	}
 
-	// Analyze segments
-	segments := analyzeSegments(result, comparisonType)
-	
+	// Process and analyze segments
+	segments := processSegmentResults(result, metric, segmentBy, comparisonType)
+	analysis := analyzeSegmentDifferences(segments, comparisonType)
+
 	return map[string]interface{}{
-		"metric":         metric,
-		"eventType":      eventType,
-		"segmentBy":      segmentBy,
-		"timeRange":      timeRange,
-		"comparisonType": comparisonType,
-		"segments":       segments,
-		"insights":       generateSegmentInsights(segments, comparisonType),
+		"metric":          metric,
+		"event_type":      eventType,
+		"segment_by":      segmentBy,
+		"time_range":      timeRange,
+		"comparison_type": comparisonType,
+		"segments":        segments,
+		"analysis":        analysis,
+		"insights":        generateSegmentInsights(segments, analysis, comparisonType),
 	}, nil
 }
 
@@ -672,30 +759,7 @@ func (s *Server) executeNRQL(ctx context.Context, query string, accountID interf
 	}, nil
 }
 
-func extractTimeSeries(result map[string]interface{}) []map[string]interface{} {
-	// Extract time series from NRQL result
-	return []map[string]interface{}{}
-}
-
-func detectAnomalies(timeSeries []map[string]interface{}, method string, sensitivity float64) []map[string]interface{} {
-	// Implement anomaly detection algorithms
-	return []map[string]interface{}{}
-}
-
-func calculateNormalRanges(timeSeries []map[string]interface{}, anomalies []map[string]interface{}) map[string]interface{} {
-	// Calculate normal ranges excluding anomalies
-	return map[string]interface{}{}
-}
-
-func generateAnomalyRecommendations(anomalies []map[string]interface{}) []string {
-	// Generate recommendations based on anomalies found
-	return []string{}
-}
-
-func generateCorrelationInsights(correlations []map[string]interface{}) []string {
-	// Generate insights from correlation analysis
-	return []string{}
-}
+// These helper functions are now implemented in analysis_helpers.go and analysis_algorithms.go
 
 func analyzeTrendData(result map[string]interface{}) map[string]interface{} {
 	// Analyze trend patterns from NRQL results
@@ -725,14 +789,7 @@ func analyzeDistribution(result map[string]interface{}) map[string]interface{} {
 	}
 }
 
-func generateDistributionInsights(distribution map[string]interface{}) []string {
-	// Generate insights from distribution analysis
-	return []string{
-		"Distribution is approximately normal",
-		"Low skewness indicates symmetric distribution",
-		"5 outliers detected beyond 3 standard deviations",
-	}
-}
+// generateDistributionInsights is now implemented in analysis_helpers.go
 
 func analyzeSegments(result map[string]interface{}, comparisonType string) []map[string]interface{} {
 	// Analyze segments from faceted query
@@ -752,14 +809,7 @@ func analyzeSegments(result map[string]interface{}, comparisonType string) []map
 	}
 }
 
-func generateSegmentInsights(segments []map[string]interface{}, comparisonType string) []string {
-	// Generate insights from segment comparison
-	return []string{
-		"app2 shows 20% higher values than baseline",
-		"app1 has the highest volume with 1000 data points",
-		"Consider investigating performance difference between segments",
-	}
-}
+// generateSegmentInsights is now implemented in analysis_helpers.go
 
 func (s *Server) mockAnalysisTrend(metric, eventType, timeRange, granularity string, includeForecast bool) interface{} {
 	return map[string]interface{}{
@@ -868,26 +918,12 @@ func (s *Server) mockAnalysisSegments(metric, eventType, segmentBy, timeRange, c
 	}
 }
 
-func processBaselineResults(result map[string]interface{}, metric string, percentiles []interface{}) map[string]interface{} {
-	// Process NRQL results into baseline format
-	return map[string]interface{}{}
-}
-
-func generateBaselineRecommendations(baseline map[string]interface{}) []string {
-	// Generate recommendations based on baseline
-	return []string{}
-}
+// processBaselineResults and generateBaselineRecommendations are now implemented in analysis_helpers.go
 
 func discoverNumericAttributes(ctx context.Context, s *Server, eventType string) []interface{} {
 	// Auto-discover numeric attributes
 	return []interface{}{}
 }
 
-func calculateCorrelation(ctx context.Context, s *Server, eventType, metric1, metric2, timeRange string) map[string]interface{} {
-	// Calculate correlation between two metrics
-	return map[string]interface{}{
-		"metric":      metric2,
-		"coefficient": 0.0,
-	}
-}
+// calculateCorrelation is now implemented in analysis_algorithms.go
 

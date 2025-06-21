@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -482,4 +483,717 @@ func generateTrendSummary(trend LinearTrend, seasonality Seasonality, changePoin
 	}
 
 	return summary
+}
+
+// generateAnomalyRecommendations creates actionable recommendations
+func generateAnomalyRecommendations(anomalies []Anomaly) []string {
+	recommendations := []string{}
+
+	if len(anomalies) == 0 {
+		return []string{"No anomalies detected. System appears to be operating normally."}
+	}
+
+	// Check severity
+	severeCount := 0
+	for _, a := range anomalies {
+		if a.Score > 0.8 {
+			severeCount++
+		}
+	}
+
+	if severeCount > 0 {
+		recommendations = append(recommendations, 
+			fmt.Sprintf("Found %d severe anomalies. Immediate investigation recommended.", severeCount))
+	}
+
+	// Check for patterns
+	if len(anomalies) > 5 {
+		// Check if anomalies are clustered in time
+		recommendations = append(recommendations,
+			"Multiple anomalies detected. Check for system-wide issues or cascading failures.")
+	}
+
+	// Add specific recommendations based on anomaly types
+	hasZScore := false
+	hasMovingAvg := false
+	for _, a := range anomalies {
+		if a.Type == "z-score" && !hasZScore {
+			hasZScore = true
+			recommendations = append(recommendations,
+				"Statistical outliers detected. Review system capacity and scaling policies.")
+		}
+		if a.Type == "moving-average" && !hasMovingAvg {
+			hasMovingAvg = true
+			recommendations = append(recommendations,
+				"Sudden changes detected. Check for recent deployments or configuration changes.")
+		}
+	}
+
+	// Add general recommendations
+	recommendations = append(recommendations,
+		"Create alerts based on these baseline thresholds to prevent future issues.",
+		"Review correlated metrics to understand root cause.")
+
+	return recommendations
+}
+
+// generateCorrelationInsights generates insights from correlation results
+func generateCorrelationInsights(correlations []map[string]interface{}) []string {
+	insights := []string{}
+
+	if len(correlations) == 0 {
+		return []string{"No significant correlations found. The metric appears to be independent."}
+	}
+
+	// Categorize correlations
+	veryStrong := []string{}
+	strong := []string{}
+	negative := []string{}
+
+	for _, corr := range correlations {
+		coeff := corr["coefficient"].(float64)
+		metric := corr["metric"].(string)
+		
+		if math.Abs(coeff) >= 0.9 {
+			veryStrong = append(veryStrong, fmt.Sprintf("%s (%.2f)", metric, coeff))
+		} else if math.Abs(coeff) >= 0.7 {
+			strong = append(strong, fmt.Sprintf("%s (%.2f)", metric, coeff))
+		}
+		
+		if coeff < -0.5 {
+			negative = append(negative, metric)
+		}
+	}
+
+	// Generate insights
+	if len(veryStrong) > 0 {
+		insights = append(insights, 
+			fmt.Sprintf("Very strong correlation with: %s. These metrics move together almost perfectly.", 
+				strings.Join(veryStrong, ", ")))
+	}
+
+	if len(strong) > 0 {
+		insights = append(insights,
+			fmt.Sprintf("Strong correlation with: %s. Consider monitoring these together.",
+				strings.Join(strong, ", ")))
+	}
+
+	if len(negative) > 0 {
+		insights = append(insights,
+			fmt.Sprintf("Negative correlation with: %s. These metrics move in opposite directions.",
+				strings.Join(negative, ", ")))
+	}
+
+	// Check for lag correlations
+	for _, corr := range correlations {
+		lag := 0
+		if l, ok := corr["lag"].(int); ok {
+			lag = l
+		}
+		if lag != 0 {
+			metric := corr["metric"].(string)
+			insights = append(insights,
+				fmt.Sprintf("%s shows strongest correlation with %d minute lag. This could indicate causation.",
+					metric, lag*5))
+			break // Just show one lag example
+		}
+	}
+
+	// Add actionable recommendations
+	insights = append(insights,
+		"Use these correlations to build composite alerts and dashboards.",
+		"Investigate causal relationships between strongly correlated metrics.")
+
+	return insights
+}
+
+// DistributionStats holds statistical measures for distribution analysis
+type DistributionStats struct {
+	Mean     float64
+	Median   float64
+	Mode     float64
+	StdDev   float64
+	Variance float64
+	Skewness float64
+	Kurtosis float64
+	Min      float64
+	Max      float64
+}
+
+// calculateDistributionStats computes comprehensive statistics for a dataset
+func calculateDistributionStats(values []float64) DistributionStats {
+	n := float64(len(values))
+	if n == 0 {
+		return DistributionStats{}
+	}
+
+	// Basic statistics
+	sum := 0.0
+	for _, v := range values {
+		sum += v
+	}
+	mean := sum / n
+
+	// Median (values must be sorted)
+	median := percentile(values, 50)
+
+	// Mode (simplified - most frequent value)
+	mode := calculateMode(values)
+
+	// Variance and standard deviation
+	sumSquares := 0.0
+	for _, v := range values {
+		diff := v - mean
+		sumSquares += diff * diff
+	}
+	variance := sumSquares / n
+	stdDev := math.Sqrt(variance)
+
+	// Skewness (3rd moment)
+	sumCubes := 0.0
+	for _, v := range values {
+		diff := v - mean
+		sumCubes += diff * diff * diff
+	}
+	skewness := 0.0
+	if stdDev > 0 {
+		skewness = (sumCubes / n) / math.Pow(stdDev, 3)
+	}
+
+	// Kurtosis (4th moment)
+	sumQuads := 0.0
+	for _, v := range values {
+		diff := v - mean
+		sumQuads += diff * diff * diff * diff
+	}
+	kurtosis := 0.0
+	if variance > 0 {
+		kurtosis = (sumQuads / n) / (variance * variance) - 3 // Excess kurtosis
+	}
+
+	return DistributionStats{
+		Mean:     mean,
+		Median:   median,
+		Mode:     mode,
+		StdDev:   stdDev,
+		Variance: variance,
+		Skewness: skewness,
+		Kurtosis: kurtosis,
+		Min:      values[0],          // Assumes sorted
+		Max:      values[len(values)-1], // Assumes sorted
+	}
+}
+
+// calculateMode finds the most frequent value
+func calculateMode(values []float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+
+	freq := make(map[float64]int)
+	maxFreq := 0
+	mode := values[0]
+
+	for _, v := range values {
+		freq[v]++
+		if freq[v] > maxFreq {
+			maxFreq = freq[v]
+			mode = v
+		}
+	}
+
+	return mode
+}
+
+// createHistogram creates histogram buckets from values
+func createHistogram(values []float64, numBuckets int) []map[string]interface{} {
+	if len(values) == 0 || numBuckets <= 0 {
+		return []map[string]interface{}{}
+	}
+
+	min := values[0]
+	max := values[len(values)-1]
+	bucketSize := (max - min) / float64(numBuckets)
+
+	histogram := make([]map[string]interface{}, numBuckets)
+	for i := 0; i < numBuckets; i++ {
+		start := min + float64(i)*bucketSize
+		end := start + bucketSize
+		if i == numBuckets-1 {
+			end = max + 0.001 // Include max value in last bucket
+		}
+
+		count := 0
+		for _, v := range values {
+			if v >= start && v < end {
+				count++
+			}
+		}
+
+		histogram[i] = map[string]interface{}{
+			"bucket_start": start,
+			"bucket_end":   end,
+			"count":        count,
+			"percentage":   float64(count) / float64(len(values)) * 100,
+		}
+	}
+
+	return histogram
+}
+
+// detectDistributionType analyzes the shape of the distribution
+func detectDistributionType(values []float64, stats DistributionStats) string {
+	// Simplified distribution detection based on skewness and kurtosis
+	absSkew := math.Abs(stats.Skewness)
+
+	if absSkew < 0.5 && math.Abs(stats.Kurtosis) < 0.5 {
+		return "normal"
+	} else if stats.Skewness > 1 {
+		return "right-skewed"
+	} else if stats.Skewness < -1 {
+		return "left-skewed"
+	} else if stats.Kurtosis > 1 {
+		return "leptokurtic" // Heavy tails
+	} else if stats.Kurtosis < -1 {
+		return "platykurtic" // Light tails
+	} else {
+		return "non-normal"
+	}
+}
+
+// generateDistributionInsights creates insights from distribution analysis
+func generateDistributionInsights(stats DistributionStats, distributionType string, histogram []map[string]interface{}) []string {
+	insights := []string{}
+
+	// Distribution type insight
+	switch distributionType {
+	case "normal":
+		insights = append(insights, "Distribution appears to be approximately normal (Gaussian).")
+	case "right-skewed":
+		insights = append(insights, "Distribution is right-skewed with a long tail of high values.")
+	case "left-skewed":
+		insights = append(insights, "Distribution is left-skewed with a long tail of low values.")
+	case "leptokurtic":
+		insights = append(insights, "Distribution has heavy tails with more extreme values than normal.")
+	case "platykurtic":
+		insights = append(insights, "Distribution has light tails with fewer extreme values than normal.")
+	}
+
+	// Spread insight
+	cv := stats.StdDev / stats.Mean * 100 // Coefficient of variation
+	if cv > 100 {
+		insights = append(insights, fmt.Sprintf("Very high variability (CV=%.1f%%). Values are highly dispersed.", cv))
+	} else if cv > 50 {
+		insights = append(insights, fmt.Sprintf("High variability (CV=%.1f%%). Consider investigating outliers.", cv))
+	} else if cv < 20 {
+		insights = append(insights, fmt.Sprintf("Low variability (CV=%.1f%%). Values are tightly clustered.", cv))
+	}
+
+	// Central tendency comparison
+	if math.Abs(stats.Mean-stats.Median) > stats.StdDev*0.2 {
+		if stats.Mean > stats.Median {
+			insights = append(insights, "Mean is significantly higher than median, indicating outliers on the high end.")
+		} else {
+			insights = append(insights, "Mean is significantly lower than median, indicating outliers on the low end.")
+		}
+	}
+
+	// Find most populated bucket
+	if len(histogram) > 0 {
+		maxBucket := histogram[0]
+		for _, bucket := range histogram {
+			if bucket["count"].(int) > maxBucket["count"].(int) {
+				maxBucket = bucket
+			}
+		}
+		insights = append(insights, 
+			fmt.Sprintf("Most values (%.1f%%) fall between %.2f and %.2f.", 
+				maxBucket["percentage"], maxBucket["bucket_start"], maxBucket["bucket_end"]))
+	}
+
+	// Actionable recommendations
+	if distributionType != "normal" {
+		insights = append(insights, "Consider using percentile-based thresholds instead of mean-based for alerting.")
+	}
+	if cv > 50 {
+		insights = append(insights, "High variability suggests need for adaptive thresholds or anomaly detection.")
+	}
+
+	return insights
+}
+
+// processSegmentResults converts NRQL faceted results into segment data
+func processSegmentResults(result map[string]interface{}, metric string, segmentBy string, comparisonType string) []map[string]interface{} {
+	segments := []map[string]interface{}{}
+	
+	// Extract facets from result
+	if facets, ok := result["facets"].([]interface{}); ok {
+		for _, f := range facets {
+			if facet, ok := f.(map[string]interface{}); ok {
+				name := ""
+				if nameList, ok := facet["name"].([]interface{}); ok && len(nameList) > 0 {
+					name = fmt.Sprintf("%v", nameList[0])
+				}
+				
+				if results, ok := facet["results"].([]interface{}); ok && len(results) > 0 {
+					if data, ok := results[0].(map[string]interface{}); ok {
+						segment := map[string]interface{}{
+							"name":    name,
+							"avg":     data["avg"],
+							"count":   data["count"],
+							"stddev":  data["stddev"],
+							"min":     data["min"],
+							"max":     data["max"],
+						}
+						
+						// Extract percentiles if available
+						if percentiles, ok := data["percentiles"].(map[string]interface{}); ok {
+							segment["p50"] = percentiles["50"]
+							segment["p90"] = percentiles["90"]
+							segment["p95"] = percentiles["95"]
+						}
+						
+						segments = append(segments, segment)
+					}
+				}
+			}
+		}
+	}
+	
+	// Sort segments by average value descending
+	sort.Slice(segments, func(i, j int) bool {
+		avg1, _ := segments[i]["avg"].(float64)
+		avg2, _ := segments[j]["avg"].(float64)
+		return avg1 > avg2
+	})
+	
+	// Add ranks and calculate relative values
+	if len(segments) > 0 {
+		baselineAvg, _ := segments[0]["avg"].(float64)
+		totalCount := 0.0
+		
+		for _, s := range segments {
+			if count, ok := s["count"].(float64); ok {
+				totalCount += count
+			}
+		}
+		
+		for i, segment := range segments {
+			segment["rank"] = i + 1
+			
+			// Calculate relative value
+			if avg, ok := segment["avg"].(float64); ok {
+				if comparisonType == "relative" && baselineAvg > 0 {
+					segment["relative"] = avg / baselineAvg
+				}
+			}
+			
+			// Calculate percentage of total
+			if count, ok := segment["count"].(float64); ok && totalCount > 0 {
+				segment["percent_of_total"] = (count / totalCount) * 100
+			}
+		}
+	}
+	
+	return segments
+}
+
+// analyzeSegmentDifferences performs statistical analysis on segments
+func analyzeSegmentDifferences(segments []map[string]interface{}, comparisonType string) map[string]interface{} {
+	if len(segments) == 0 {
+		return map[string]interface{}{}
+	}
+	
+	analysis := map[string]interface{}{}
+	
+	// Extract averages for analysis
+	averages := []float64{}
+	for _, s := range segments {
+		if avg, ok := s["avg"].(float64); ok {
+			averages = append(averages, avg)
+		}
+	}
+	
+	if len(averages) > 0 {
+		// Calculate overall statistics
+		sum := 0.0
+		for _, v := range averages {
+			sum += v
+		}
+		overallMean := sum / float64(len(averages))
+		
+		// Calculate coefficient of variation across segments
+		sumSquares := 0.0
+		for _, v := range averages {
+			diff := v - overallMean
+			sumSquares += diff * diff
+		}
+		stdDev := math.Sqrt(sumSquares / float64(len(averages)))
+		cv := (stdDev / overallMean) * 100
+		
+		analysis["overall_mean"] = overallMean
+		analysis["overall_stddev"] = stdDev
+		analysis["coefficient_of_variation"] = cv
+		
+		// Find outliers (segments significantly different from mean)
+		outliers := []string{}
+		for _, s := range segments {
+			if avg, ok := s["avg"].(float64); ok {
+				if stdDev > 0 && math.Abs(avg-overallMean) > 2*stdDev {
+					name, _ := s["name"].(string)
+					outliers = append(outliers, name)
+				}
+			}
+		}
+		analysis["outliers"] = outliers
+		
+		// Calculate range and spread
+		sort.Float64s(averages)
+		analysis["min_segment_avg"] = averages[0]
+		analysis["max_segment_avg"] = averages[len(averages)-1]
+		analysis["range"] = averages[len(averages)-1] - averages[0]
+		analysis["range_ratio"] = averages[len(averages)-1] / averages[0]
+	}
+	
+	return analysis
+}
+
+// generateSegmentInsights creates insights from segment comparison
+func generateSegmentInsights(segments []map[string]interface{}, analysis map[string]interface{}, comparisonType string) []string {
+	insights := []string{}
+	
+	if len(segments) == 0 {
+		return []string{"No segments found for comparison."}
+	}
+	
+	// Top performer insight
+	if len(segments) > 0 {
+		topName, _ := segments[0]["name"].(string)
+		topAvg, _ := segments[0]["avg"].(float64)
+		insights = append(insights, 
+			fmt.Sprintf("%s has the highest average value (%.2f).", topName, topAvg))
+	}
+	
+	// Bottom performer insight (if multiple segments)
+	if len(segments) > 1 {
+		bottomIdx := len(segments) - 1
+		bottomName, _ := segments[bottomIdx]["name"].(string)
+		bottomAvg, _ := segments[bottomIdx]["avg"].(float64)
+		topAvg, _ := segments[0]["avg"].(float64)
+		
+		if topAvg > 0 {
+			pctDiff := ((topAvg - bottomAvg) / topAvg) * 100
+			insights = append(insights,
+				fmt.Sprintf("%s has the lowest average (%.2f), which is %.1f%% lower than the top performer.",
+					bottomName, bottomAvg, pctDiff))
+		}
+	}
+	
+	// Variation insight
+	if cv, ok := analysis["coefficient_of_variation"].(float64); ok {
+		if cv > 50 {
+			insights = append(insights, 
+				fmt.Sprintf("High variation across segments (CV=%.1f%%). Performance is very inconsistent.", cv))
+		} else if cv < 20 {
+			insights = append(insights,
+				fmt.Sprintf("Low variation across segments (CV=%.1f%%). Performance is relatively consistent.", cv))
+		}
+	}
+	
+	// Outlier insights
+	if outliers, ok := analysis["outliers"].([]string); ok && len(outliers) > 0 {
+		insights = append(insights,
+			fmt.Sprintf("Outlier segments detected: %s. These require special attention.",
+				strings.Join(outliers, ", ")))
+	}
+	
+	// Volume distribution insight
+	totalVolume := 0.0
+	for _, s := range segments {
+		if count, ok := s["count"].(float64); ok {
+			totalVolume += count
+		}
+	}
+	
+	if totalVolume > 0 && len(segments) > 0 {
+		topCount, _ := segments[0]["count"].(float64)
+		topName, _ := segments[0]["name"].(string)
+		topPct := (topCount / totalVolume) * 100
+		
+		if topPct > 50 {
+			insights = append(insights,
+				fmt.Sprintf("%s accounts for %.1f%% of total volume, indicating concentration risk.",
+					topName, topPct))
+		}
+	}
+	
+	// Actionable recommendations
+	if rangeRatio, ok := analysis["range_ratio"].(float64); ok && rangeRatio > 2 {
+		insights = append(insights,
+			"Large performance gap between segments. Consider segment-specific optimization strategies.")
+	}
+	
+	if len(segments) > 10 {
+		insights = append(insights,
+			"Many segments detected. Consider grouping or filtering to focus on key segments.")
+	}
+	
+	return insights
+}
+
+// processBaselineResults converts NRQL baseline query results into structured format
+func processBaselineResults(result map[string]interface{}, metric string, percentiles []interface{}, groupBy string) map[string]interface{} {
+	baseline := map[string]interface{}{
+		"metric": metric,
+	}
+	
+	// Handle results based on whether it's grouped or not
+	if groupBy != "" {
+		// Faceted results
+		baseline["grouped_by"] = groupBy
+		groups := []map[string]interface{}{}
+		
+		if facets, ok := result["facets"].([]interface{}); ok {
+			for _, f := range facets {
+				if facet, ok := f.(map[string]interface{}); ok {
+					groupName := ""
+					if nameList, ok := facet["name"].([]interface{}); ok && len(nameList) > 0 {
+						groupName = fmt.Sprintf("%v", nameList[0])
+					}
+					
+					if results, ok := facet["results"].([]interface{}); ok && len(results) > 0 {
+						if data, ok := results[0].(map[string]interface{}); ok {
+							group := map[string]interface{}{
+								"name":   groupName,
+								"avg":    data["average"],
+								"stddev": data["stddev"],
+								"min":    data["min"],
+								"max":    data["max"],
+								"count":  data["count"],
+							}
+							
+							// Add percentiles
+							for i, p := range percentiles {
+								key := fmt.Sprintf("p%v", p)
+								if val, ok := data[key]; ok {
+									group[key] = val
+								} else if i < len(percentiles) {
+									// Try alternate format
+									altKey := fmt.Sprintf("percentile_%v", p)
+									if val, ok := data[altKey]; ok {
+										group[key] = val
+									}
+								}
+							}
+							
+							groups = append(groups, group)
+						}
+					}
+				}
+			}
+		}
+		baseline["groups"] = groups
+	} else {
+		// Single result
+		if results, ok := result["results"].([]interface{}); ok && len(results) > 0 {
+			if data, ok := results[0].(map[string]interface{}); ok {
+				baseline["avg"] = data["average"]
+				baseline["stddev"] = data["stddev"]
+				baseline["min"] = data["min"]
+				baseline["max"] = data["max"]
+				baseline["count"] = data["count"]
+				
+				// Add percentiles
+				for _, p := range percentiles {
+					key := fmt.Sprintf("p%v", p)
+					if val, ok := data[key]; ok {
+						baseline[key] = val
+					}
+				}
+			}
+		}
+	}
+	
+	// Add recommendations based on the baseline
+	baseline["recommendations"] = generateBaselineRecommendations(baseline)
+	
+	return baseline
+}
+
+// generateBaselineRecommendations creates actionable recommendations from baseline data
+func generateBaselineRecommendations(baseline map[string]interface{}) []string {
+	recommendations := []string{}
+	
+	metric, _ := baseline["metric"].(string)
+	
+	// Check if grouped or single baseline
+	if groups, ok := baseline["groups"].([]map[string]interface{}); ok && len(groups) > 0 {
+		// Analyze grouped baselines
+		avgValues := []float64{}
+		for _, g := range groups {
+			if avg, ok := g["avg"].(float64); ok {
+				avgValues = append(avgValues, avg)
+			}
+		}
+		
+		if len(avgValues) > 1 {
+			// Calculate variation
+			sum := 0.0
+			for _, v := range avgValues {
+				sum += v
+			}
+			mean := sum / float64(len(avgValues))
+			
+			maxDiff := 0.0
+			for _, v := range avgValues {
+				diff := math.Abs(v - mean)
+				if diff > maxDiff {
+					maxDiff = diff
+				}
+			}
+			
+			if mean > 0 && maxDiff/mean > 0.5 {
+				recommendations = append(recommendations,
+					fmt.Sprintf("High variation across groups for %s. Consider group-specific thresholds.", metric))
+			}
+		}
+	} else {
+		// Single baseline recommendations
+		if avg, ok := baseline["avg"].(float64); ok {
+			if stddev, ok := baseline["stddev"].(float64); ok {
+				cv := stddev / avg * 100
+				
+				if cv > 50 {
+					recommendations = append(recommendations,
+						fmt.Sprintf("High variability in %s (CV=%.1f%%). Use percentile-based thresholds.", metric, cv))
+				}
+				
+				// Alert threshold recommendations
+				if p95, ok := baseline["p95"].(float64); ok {
+					recommendations = append(recommendations,
+						fmt.Sprintf("Consider setting warning threshold at %.2f (p95)", p95))
+				}
+				if p99, ok := baseline["p99"].(float64); ok {
+					recommendations = append(recommendations,
+						fmt.Sprintf("Consider setting critical threshold at %.2f (p99)", p99))
+				}
+			}
+			
+			// Normal range recommendation
+			if p10, ok := baseline["p10"].(float64); ok {
+				if p90, ok := baseline["p90"].(float64); ok {
+					recommendations = append(recommendations,
+						fmt.Sprintf("Normal range for %s is %.2f-%.2f (p10-p90)", metric, p10, p90))
+				}
+			}
+		}
+	}
+	
+	// General recommendations
+	if count, ok := baseline["count"].(float64); ok && count < 100 {
+		recommendations = append(recommendations,
+			"Low sample size. Consider expanding time range for more reliable baseline.")
+	}
+	
+	return recommendations
 }
