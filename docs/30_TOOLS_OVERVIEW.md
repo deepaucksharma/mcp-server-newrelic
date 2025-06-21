@@ -1,496 +1,243 @@
-# MCP Server Tools Overview
+# Tools Overview
 
-This document provides a comprehensive catalog of tools available in the New Relic MCP Server, organized by category and functionality.
+This document provides a comprehensive overview of all available tools in the Enhanced MCP Server New Relic.
 
 ## Tool Categories
 
-The MCP server provides tools across 8 functional categories:
+### Enhanced Existing Tools
+These are improved versions of standard New Relic tools with discovery-first intelligence:
 
-| Category | Purpose |
-|----------|---------|
-| Discovery | Explore data schemas, attributes, and relationships |
-| Query | Execute NRQL queries with various optimizations |
-| Alerts | Create, manage, and optimize alert policies |
-| Dashboards | Build and manage custom dashboards |
-| Analysis | Statistical analysis and pattern detection |
-| Governance | Usage analysis, cost optimization, compliance |
-| Workflow | Orchestrate complex multi-tool operations |
-| Session | Manage stateful sessions |
+- **`run_nrql_query`** - Execute NRQL queries with schema validation and caching
+- **`search_entities`** - Search entities with enhanced filtering and caching  
+- **`get_entity_details`** - Get entity details with golden metrics and patterns
+- **`discover_schemas`** - Comprehensive schema discovery (typically run first)
 
-## Discovery Tools
+### Composite Intelligence Tools
+High-level tools that combine multiple operations for complex workflows:
 
-Discovery tools help explore your New Relic data landscape without prior knowledge of its structure.
+- **`discover.environment`** - One-call comprehensive environment discovery
+- **`generate.golden_dashboard`** - Intelligent dashboard generation with adaptation
+- **`compare.similar_entities`** - Performance comparison and benchmarking
 
-### discovery.explore_event_types
-**Description**: List available event types in your account
+### Platform Analysis Tools
+Advanced tools for platform governance and analysis:
 
-**Parameters**:
-- `limit` (integer, optional): Maximum number to return (default: 100)
-- `search` (string, optional): Filter event types by name
+- **`dashboard_generate`** - Adaptive dashboard creation with templates
+- **`platform_analyze_adoption`** - Cross-account platform usage analysis
 
-**Example**:
-```json
-{
-  "name": "discovery.explore_event_types",
-  "arguments": {
-    "limit": 10
+### Cache Management Tools
+Tools for monitoring and managing the intelligent caching system:
+
+- **`cache.stats`** - Monitor cache performance and health
+- **`cache.clear`** - Clear cache entries with pattern-based filtering
+
+## Tool Usage Patterns
+
+### 1. Discovery-First Workflow
+
+```typescript
+// Always start with environment discovery
+const env = await mcp.call('discover.environment', {
+  includeHealth: true,
+  maxEntities: 50
+});
+
+// Then work with specific entities
+const dashboard = await mcp.call('generate.golden_dashboard', {
+  entity_guid: env.entities[0].guid,
+  create_dashboard: false  // preview first
+});
+```
+
+### 2. Performance Analysis Workflow
+
+```typescript
+// Compare entities for optimization opportunities
+const comparison = await mcp.call('compare.similar_entities', {
+  comparison_strategy: 'by_type',
+  entity_type: 'APPLICATION',
+  max_entities: 10
+});
+
+// Generate dashboards for top performers and outliers
+for (const entity of comparison.entities) {
+  if (entity.rank.overall <= 2 || entity.rank.overall >= 4) {
+    await mcp.call('generate.golden_dashboard', {
+      entity_guid: entity.entity.guid,
+      dashboard_name: `${entity.entity.name} - Performance Analysis`
+    });
   }
 }
 ```
 
-**Returns**: List of event types with counts and metadata
+### 3. Schema Discovery Workflow
 
----
+```typescript
+// Discover what's available before querying
+const schemas = await mcp.call('discover_schemas', {
+  account_id: 12345,
+  include_attributes: true,
+  include_metrics: true
+});
 
-### discovery.explore_attributes
-**Description**: Explore all attributes for a specific event type
+// Use discovered schemas for informed querying
+const query = `SELECT count(*) FROM ${schemas.event_types[0].name} 
+               WHERE ${schemas.summary.service_identifier_field} = 'my-service'
+               SINCE 1 hour ago`;
 
-**Parameters**:
-- `event_type` (string, required): The event type to explore
-- `time_range` (string, optional): Time range to analyze (default: "1 hour")
-- `sample_size` (integer, optional): Number of events to sample (default: 1000)
+const results = await mcp.call('run_nrql_query', {
+  account_id: 12345,
+  query: query,
+  validate_schema: true
+});
+```
 
-**Example**:
-```json
+## Tool Capabilities Matrix
+
+| Tool | Read | Write | Cache | Validation | Analytics |
+|------|------|-------|-------|------------|-----------|
+| `run_nrql_query` | ✅ | ❌ | ✅ | ✅ | ❌ |
+| `search_entities` | ✅ | ❌ | ✅ | ✅ | ❌ |
+| `get_entity_details` | ✅ | ❌ | ✅ | ✅ | ✅ |
+| `discover_schemas` | ✅ | ❌ | ✅ | ❌ | ✅ |
+| `discover.environment` | ✅ | ❌ | ✅ | ❌ | ✅ |
+| `generate.golden_dashboard` | ✅ | ✅ | ❌ | ✅ | ✅ |
+| `compare.similar_entities` | ✅ | ❌ | ❌ | ❌ | ✅ |
+| `dashboard_generate` | ✅ | ✅ | ❌ | ✅ | ❌ |
+| `platform_analyze_adoption` | ✅ | ❌ | ❌ | ❌ | ✅ |
+| `cache.stats` | ✅ | ❌ | ❌ | ❌ | ✅ |
+| `cache.clear` | ❌ | ✅ | ✅ | ❌ | ❌ |
+
+## Performance Characteristics
+
+### Latency Expectations
+- **Enhanced Tools**: 100-500ms (with caching)
+- **Composite Tools**: 1-5 seconds (multiple operations)
+- **Platform Analysis**: 5-30 seconds (cross-account)
+- **Cache Operations**: <50ms
+
+### Caching Behavior
+- **discovery**: 5 minutes TTL (high priority, adaptive)
+- **goldenMetrics**: 2 minutes TTL (critical priority, adaptive)
+- **entityDetails**: 10 minutes TTL (medium priority, static)
+- **dashboards**: 15 minutes TTL (low priority, static)
+- **analytics**: 30 minutes TTL (medium priority, adaptive)
+
+## Error Handling
+
+All tools implement consistent error handling:
+
+### Common Error Types
+- **Invalid credentials**: API key or account access issues
+- **Unknown schemas**: Attempting to query non-existent event types
+- **Rate limiting**: New Relic API rate limit exceeded
+- **Cache issues**: Memory or performance problems
+
+### Error Response Format
+```typescript
 {
-  "name": "discovery.explore_attributes", 
-  "arguments": {
-    "event_type": "Transaction"
-  }
+  error: string,           // Human-readable error message
+  suggestion: string,      // Actionable suggestion for resolution
+  available_types?: [],    // Alternative options when applicable
+  cached?: boolean,        // Whether response came from cache
+  freshness?: string       // Data freshness indicator
 }
 ```
 
-**Returns**: List of attributes with data types, cardinality, and sample values
-
----
-
-### discovery.list_schemas
-**Description**: List all available schemas with their structures
-
-**Parameters**:
-- `filter` (string, optional): Filter schemas by pattern
-- `include_quality` (boolean, optional): Include quality metrics (default: false)
-
-**Example**:
-```json
-{
-  "name": "discovery.list_schemas",
-  "arguments": {
-    "filter": "Transaction*"
-  }
-}
-```
-
-**Returns**: Schema definitions with field information
-
----
-
-### discovery.profile_attribute
-**Description**: Deep analysis of a specific data attribute
-
-**Parameters**:
-- `schema` (string, required): Schema name
-- `attribute` (string, required): Attribute to profile
-- `time_range` (string, optional): Analysis time range
-
-**Example**:
-```json
-{
-  "name": "discovery.profile_attribute",
-  "arguments": {
-    "schema": "Transaction",
-    "attribute": "duration"
-  }
-}
-```
-
-**Returns**: Statistical profile including min, max, avg, percentiles, distribution
-
----
-
-### discovery.find_relationships
-**Description**: Discover relationships between different event types
-
-**Parameters**:
-- `source_type` (string, required): Source event type
-- `target_type` (string, optional): Target event type
-- `time_range` (string, optional): Time range for analysis
-
-**Example**:
-```json
-{
-  "name": "discovery.find_relationships",
-  "arguments": {
-    "source_type": "Transaction",
-    "target_type": "TransactionError"
-  }
-}
-```
-
-**Returns**: Discovered relationships with correlation strength
-
-## Query Tools
-
-Query tools execute NRQL queries with various optimization and adaptation strategies.
-
-### query_nrdb
-**Description**: Execute a standard NRQL query
-
-**Parameters**:
-- `query` (string, required): The NRQL query to execute
-- `account_id` (string, optional): Target account ID
-- `timeout` (integer, optional): Query timeout in seconds (default: 30)
-
-**Example**:
-```json
-{
-  "name": "query_nrdb",
-  "arguments": {
-    "query": "SELECT average(duration) FROM Transaction SINCE 1 hour ago"
-  }
-}
-```
-
-**Returns**: Query results with data and metadata
-
----
-
-### query.execute_adaptive
-**Description**: Execute NRQL with automatic optimization
-
-**Parameters**:
-- `query` (string, required): The NRQL query
-- `optimization_hints` (object, optional): Hints for optimization
-- `max_retries` (integer, optional): Maximum optimization retries (default: 3)
-
-**Returns**: Optimized query results with performance metrics
-
----
-
-### query.validate_nrql
-**Description**: Validate NRQL syntax before execution
-
-**Parameters**:
-- `query` (string, required): The NRQL query to validate
-
-**Returns**: Validation result with error details if invalid
-
----
-
-### query.explain_nrql
-**Description**: Explain query execution plan and optimization opportunities
-
-**Parameters**:
-- `query` (string, required): The NRQL query to explain
-
-**Returns**: Execution plan with optimization suggestions
-
-## Alert Tools
-
-Alert tools manage intelligent alerting based on discovered baselines and patterns.
-
-### alert.create_from_baseline
-**Description**: Create an alert based on automatically discovered baselines
-
-**Parameters**:
-- `name` (string, required): Alert policy name
-- `event_type` (string, required): Event type to monitor
-- `metric` (string, required): Metric to alert on
-- `sensitivity` (string, optional): Sensitivity level (default: "medium")
-- `notification_channels` (array, optional): Notification channel IDs
-
-**Returns**: Created alert policy with calculated thresholds
-
----
-
-### alert.create_custom
-**Description**: Create a custom alert with specified conditions
-
-**Parameters**:
-- `name` (string, required): Alert policy name
-- `query` (string, required): NRQL query for the condition
-- `threshold` (number, required): Alert threshold value
-- `comparison` (string, required): Comparison operator
-- `duration` (integer, optional): Duration in minutes (default: 5)
-
-**Returns**: Created alert policy details
-
----
-
-### list_alerts
-**Description**: List all alert policies with filtering
-
-**Parameters**:
-- `limit` (integer, optional): Number of alerts to return (default: 100)
-- `filter` (object, optional): Filter criteria
-- `include_conditions` (boolean, optional): Include condition details (default: false)
-
-**Returns**: List of alert policies
-
-## Dashboard Tools
-
-Dashboard tools create and manage visualization dashboards.
-
-### dashboard.create_from_discovery
-**Description**: Create a dashboard based on discovered data patterns
-
-**Parameters**:
-- `name` (string, required): Dashboard name
-- `event_types` (array, required): Event types to include
-- `layout` (string, optional): Layout strategy (default: "auto")
-- `time_range` (string, optional): Default time range
-
-**Returns**: Created dashboard with auto-generated widgets
-
----
-
-### dashboard.create_custom
-**Description**: Create a custom dashboard with specified widgets
-
-**Parameters**:
-- `name` (string, required): Dashboard name
-- `widgets` (array, required): Widget configurations
-- `layout` (object, optional): Layout configuration
-
-**Returns**: Created dashboard details
-
----
-
-### find_usage
-**Description**: Find dashboards using specific metrics or event types
-
-**Parameters**:
-- `search_term` (string, required): Metric, attribute, or event type to search
-- `search_type` (string, optional): Search type (default: "any")
-- `include_widgets` (boolean, optional): Include widget details
-
-**Returns**: Dashboards and widgets using the search term
-
-## Analysis Tools
-
-Analysis tools provide statistical analysis and pattern detection capabilities.
-
-### analysis.calculate_baseline
-**Description**: Calculate statistical baseline for a metric
-
-**Parameters**:
-- `metric` (string, required): Metric to analyze
-- `event_type` (string, required): Event type containing the metric
-- `time_range` (string, optional): Time range for baseline
-- `percentiles` (array, optional): Percentiles to calculate
-
-**Returns**: Baseline statistics with confidence intervals
-
----
-
-### analysis.detect_anomalies
-**Description**: Detect anomalies in time series data
-
-**Parameters**:
-- `metric` (string, required): Metric to analyze
-- `event_type` (string, required): Event type containing the metric
-- `time_range` (string, optional): Time range to analyze
-- `sensitivity` (number, optional): Detection sensitivity
-
-**Returns**: Detected anomalies with timestamps and severity
-
----
-
-### analysis.find_correlations
-**Description**: Find correlations between metrics
-
-**Parameters**:
-- `event_type` (string, required): Event type
-- `metrics` (array, required): Metrics to correlate
-- `time_range` (string, optional): Time range for analysis
-- `min_correlation` (number, optional): Minimum correlation threshold
-
-**Returns**: Correlation matrix with significance values
-
----
-
-### analysis.analyze_trend
-**Description**: Analyze trends and patterns in metric data
-
-**Parameters**:
-- `metric` (string, required): Metric to analyze
-- `event_type` (string, required): Event type containing the metric
-- `time_range` (string, optional): Time range for analysis
-- `forecast_periods` (integer, optional): Periods to forecast
-
-**Returns**: Trend analysis with direction and strength
-
----
-
-### analysis.analyze_distribution
-**Description**: Analyze the distribution characteristics of a metric
-
-**Parameters**:
-- `metric` (string, required): Metric to analyze
-- `event_type` (string, required): Event type containing the metric
-- `time_range` (string, optional): Time range to analyze
-- `buckets` (integer, optional): Number of histogram buckets
-
-**Returns**: Distribution statistics including skewness and kurtosis
-
----
-
-### analysis.compare_segments
-**Description**: Compare metrics across different segments
-
-**Parameters**:
-- `metric` (string, required): Metric to compare
-- `event_type` (string, required): Event type containing the metric
-- `segment_by` (string, required): Attribute to segment by
-- `time_range` (string, optional): Time range for comparison
-
-**Returns**: Segment comparison with statistical significance
-
-## Governance Tools
-
-Governance tools help manage usage, costs, and compliance.
-
-### governance.analyze_usage
-**Description**: Analyze data ingest usage patterns
-
-**Parameters**:
-- `time_range` (string, optional): Analysis period (default: "7 days")
-- `group_by` (string, optional): Grouping strategy
-
-**Returns**: Usage analysis with volume and cost breakdown
-
----
-
-### governance.optimize_costs
-**Description**: Get cost optimization recommendations
-
-**Parameters**:
-- `target_reduction` (number, optional): Target reduction percentage
-- `preserve_critical` (boolean, optional): Preserve critical data
-
-**Returns**: Optimization recommendations with impact analysis
-
----
-
-### governance.check_compliance
-**Description**: Check data retention and compliance status
-
-**Parameters**:
-- `compliance_type` (string, optional): Type of compliance check
-- `detailed` (boolean, optional): Include detailed findings
-
-**Returns**: Compliance status with violations if any
-
-## Workflow Tools
-
-Workflow tools orchestrate complex multi-step operations.
-
-### workflow.execute_investigation
-**Description**: Execute a complete investigation workflow
-
-**Parameters**:
-- `issue_description` (string, required): Description of the issue
-- `time_range` (string, optional): Investigation time range
-- `auto_create_dashboard` (boolean, optional): Auto-create dashboard
-
-**Returns**: Investigation results with findings and recommendations
-
----
-
-### workflow.optimize_account
-**Description**: Run complete account optimization workflow
-
-**Parameters**:
-- `optimization_goals` (array, optional): Optimization goals
-- `aggressive` (boolean, optional): Use aggressive optimizations
-
-**Returns**: Optimization plan with expected impact
-
----
-
-### workflow.generate_report
-**Description**: Generate comprehensive report
-
-**Parameters**:
-- `report_type` (string, required): Type of report
-- `time_range` (string, required): Report period
-- `format` (string, optional): Output format
-
-**Returns**: Generated report in requested format
-
-## Session Tools
-
-Session tools manage stateful operations across multiple tool calls.
-
-### session.create
-**Description**: Create a new session for stateful operations
-
-**Parameters**:
-- `session_id` (string, optional): Custom session ID
-- `ttl` (integer, optional): Session TTL in seconds
-
-**Returns**: Session details with ID
-
----
-
-### session.end
-**Description**: End an active session
-
-**Parameters**:
-- `session_id` (string, required): Session ID to end
-
-**Returns**: Session closure confirmation
-
-## Tool Composition Patterns
-
-Tools are designed to compose into powerful workflows. Here are common patterns:
-
-### Discovery → Query → Action
-1. Use discovery tools to understand data structure
-2. Build queries based on discovered attributes
-3. Take action (create alerts/dashboards) based on query results
-
-**Example Flow**:
-```
-discovery.explore_event_types
-  → discovery.explore_attributes
-    → query_nrdb
-      → alert.create_from_baseline
-```
-
-### Analysis → Optimization
-1. Analyze current state with analysis tools
-2. Identify optimization opportunities
-3. Apply optimizations with governance tools
-
-**Example Flow**:
-```
-analysis.calculate_baseline
-  → analysis.detect_anomalies
-    → governance.optimize_costs
-      → workflow.optimize_account
-```
-
-### Investigation Workflow
-1. Start with symptoms in query tools
-2. Use analysis to find patterns
-3. Discover related data
-4. Create monitoring for future
-
-**Example Flow**:
-```
-query_nrdb (identify issue)
-  → analysis.find_correlations
-    → discovery.find_relationships
-      → dashboard.create_from_discovery
-```
+## Security Considerations
+
+### API Key Usage
+- All tools use the configured API key from environment variables
+- No API keys are logged or stored in cache
+- Supports both US and EU regions
+
+### Data Privacy
+- No customer data is permanently stored
+- Cache uses memory only (no disk persistence)
+- Automatic cache cleanup and TTL enforcement
+
+### Rate Limiting
+- Intelligent request throttling based on New Relic limits
+- Background refresh to minimize real-time API calls
+- Cache-first strategy to reduce API load
 
 ## Best Practices
 
-1. **Always Start with Discovery**: Don't assume data structures
-2. **Use Appropriate Time Ranges**: Longer for baselines, shorter for real-time
-3. **Leverage Tool Metadata**: Each tool includes examples and guidance
-4. **Compose Tools**: Combine simple tools for complex operations
-5. **Handle Errors Gracefully**: Tools provide detailed error messages
-6. **Use Sessions for Complex Workflows**: Maintain state across operations
-7. **Validate Before Executing**: Use validation tools before expensive operations
+### 1. Always Start with Discovery
+```typescript
+// ✅ Good - discover before querying
+const env = await mcp.call('discover.environment', {});
+const results = await mcp.call('run_nrql_query', {
+  query: `SELECT count(*) FROM ${env.eventTypes[0].name}`
+});
+
+// ❌ Bad - hardcoded assumptions
+const results = await mcp.call('run_nrql_query', {
+  query: 'SELECT count(*) FROM Transaction WHERE appName = "myapp"'
+});
+```
+
+### 2. Use Preview Mode for Destructive Operations
+```typescript
+// ✅ Good - preview first
+const preview = await mcp.call('generate.golden_dashboard', {
+  entity_guid: guid,
+  create_dashboard: false
+});
+// Review the dashboard JSON, then create
+const created = await mcp.call('generate.golden_dashboard', {
+  entity_guid: guid,
+  create_dashboard: true
+});
+```
+
+### 3. Monitor Cache Performance
+```typescript
+// Regular cache health monitoring
+const stats = await mcp.call('cache.stats', {});
+if (stats.hitRate < 0.5) {
+  // Consider adjusting TTL or query patterns
+}
+```
+
+### 4. Handle Errors Gracefully
+```typescript
+try {
+  const result = await mcp.call('discover.environment', {});
+} catch (error) {
+  if (error.message.includes('credentials')) {
+    // Handle authentication issues
+  } else if (error.message.includes('rate limit')) {
+    // Handle rate limiting
+  }
+}
+```
+
+## Tool Selection Guide
+
+### When to Use Each Tool
+
+**For Initial Setup:**
+1. `discover.environment` - Get complete overview
+2. `discover_schemas` - Deep schema analysis
+
+**For Regular Monitoring:**
+1. `get_entity_details` - Entity health and metrics
+2. `run_nrql_query` - Custom queries
+3. `cache.stats` - Performance monitoring
+
+**For Analysis and Optimization:**
+1. `compare.similar_entities` - Performance benchmarking
+2. `platform_analyze_adoption` - Platform governance
+3. `generate.golden_dashboard` - Visualization
+
+**For Development and Troubleshooting:**
+1. `cache.clear` - Reset cache state
+2. `discover_schemas` - Debug schema issues
+
+## Next Steps
+
+- **[31_TOOLS_COMPOSITE.md](31_TOOLS_COMPOSITE.md)** - Deep dive into composite tools
+- **[32_TOOLS_ENHANCED.md](32_TOOLS_ENHANCED.md)** - Enhanced existing tools reference
+- **[33_TOOLS_ANALYTICS.md](33_TOOLS_ANALYTICS.md)** - Analytics and caching tools
+- **[50_EXAMPLES_OVERVIEW.md](50_EXAMPLES_OVERVIEW.md)** - Real-world usage examples

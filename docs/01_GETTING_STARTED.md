@@ -1,319 +1,219 @@
-# Getting Started with New Relic MCP Server
+# Getting Started
 
-This guide will help you get the MCP Server running and executing your first New Relic queries in less than 5 minutes.
+This guide will get you up and running with the Enhanced MCP Server New Relic in 5 minutes.
 
-## 🎯 Prerequisites
+## Prerequisites
 
-### Required
-- **Go 1.21+** or **Docker**
-- **New Relic Account** with:
-  - User API Key (starts with "NRAK")
-  - Account ID
-  - Query permissions
+- **Node.js 20+** or **Bun 1.0+**
+- **New Relic account** with API access
+- **API Key** with NRQL query permissions
 
-### Optional
-- Redis (for distributed state management)
-- Claude Desktop (for AI assistant integration)
+## Quick Setup
 
-## ⚡ Quick Start (< 5 minutes)
-
-### Option 1: Docker (Fastest)
+### 1. Clone and Install
 
 ```bash
-# 1. Clone and configure
-git clone https://github.com/deepaucksharma/mcp-server-newrelic.git
+git clone <repository-url>
 cd mcp-server-newrelic
-cp .env.example .env
-
-# 2. Edit .env with your credentials
-# NEW_RELIC_API_KEY=NRAK-your-key-here
-# NEW_RELIC_ACCOUNT_ID=your-account-id
-
-# 3. Run with Docker
-docker-compose up
-
-# 4. Test it works
-curl http://localhost:8080/health
+npm install
 ```
 
-### Option 2: From Source
+### 2. Configure New Relic Credentials
+
+Create your environment configuration:
 
 ```bash
-# 1. Clone repository
-git clone https://github.com/deepaucksharma/mcp-server-newrelic.git
-cd mcp-server-newrelic
+# Required
+export NEW_RELIC_API_KEY="NRAK-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+export NEW_RELIC_ACCOUNT_ID="1234567"
 
-# 2. Copy and edit configuration
-cp .env.example .env
-# Edit .env with your New Relic credentials
-
-# 3. Build
-make build
-
-# 4. Run server
-./bin/mcp-server
+# Optional
+export NEW_RELIC_REGION="US"  # or "EU"
+export DEBUG="true"           # Enable debug logging
 ```
 
-## 🔑 Finding Your New Relic Credentials
-
-### API Key
-1. Log into [New Relic](https://one.newrelic.com)
-2. Click your name (bottom left) → **API Keys**
-3. Click **Create key**
-4. Select **User** key type
-5. Name it (e.g., "MCP Server")
-6. Copy the key (starts with `NRAK-`)
-
-### Account ID
-- Found in the browser URL: `https://one.newrelic.com/nr1-core?account=YOUR_ACCOUNT_ID`
-- Or go to: **Administration** → **Organization and access** → **Accounts**
-
-## 🚦 First Steps
-
-### 1. Verify Installation
+### 3. Test Your Configuration
 
 ```bash
-# Check server health
-curl http://localhost:8080/health
+# Test discovery functionality
+npm run discover
 
-# Expected response:
-{
-  "status": "healthy",
-  "components": {
-    "discovery": {"status": "healthy"},
-    "state": {"status": "healthy"}
-  }
-}
+# Run E2E tests (requires valid credentials)
+npm run test:e2e:quick
+
+# Run specific E2E test suites
+npm run test:e2e:discovery
+npm run test:e2e:tools
 ```
 
-### 2. Discover Your Data
-
-Let's explore what data you have in New Relic:
+### 4. Start the MCP Server
 
 ```bash
-# List all event types in your account
-echo '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"discovery.explore_event_types"},"id":1}' | ./bin/mcp-server
+# Development mode with hot reload
+npm run dev
 
-# Example response shows your available event types:
-# - Transaction
-# - SystemSample
-# - ProcessSample
-# - NetworkSample
-# - etc.
+# Production mode
+npm start
 ```
 
-### 3. Run Your First Query
+## First Steps with the Enhanced Server
 
-```bash
-# Simple count query
-cat << EOF | ./bin/mcp-server
-{
-  "jsonrpc": "2.0",
-  "method": "tools/call",
-  "params": {
-    "name": "query_nrdb",
-    "arguments": {
-      "query": "SELECT count(*) FROM Transaction SINCE 1 hour ago"
-    }
-  },
-  "id": 2
-}
-EOF
+### 1. Environment Discovery
+
+Start by discovering your New Relic environment:
+
+```typescript
+// This should be your first call with any new account
+const environment = await mcp.call('discover.environment', {
+  includeHealth: true,
+  maxEntities: 50,
+  forceRefresh: false
+});
 ```
 
-### 4. Explore Event Attributes
+**What you'll get:**
+- Complete inventory of monitored entities
+- Available telemetry event types and characteristics
+- OpenTelemetry vs APM instrumentation detection
+- Schema guidance for optimal queries
+- Observability gaps and recommendations
 
-```bash
-# See what fields are available in Transaction events
-cat << EOF | ./bin/mcp-server
-{
-  "jsonrpc": "2.0",
-  "method": "tools/call",
-  "params": {
-    "name": "discovery.explore_attributes",
-    "arguments": {
-      "event_type": "Transaction"
-    }
-  },
-  "id": 3
-}
-EOF
+### 2. Generate Golden Signals Dashboard
+
+Create an intelligent dashboard for your key service:
+
+```typescript
+// Generate adaptive golden signals dashboard
+const dashboard = await mcp.call('generate.golden_dashboard', {
+  entity_guid: 'MXxBUE18QVBQTElDQVRJT058MTIzNDU2',  // From environment discovery
+  dashboard_name: 'My Service - Golden Signals',
+  timeframe_hours: 1,
+  create_dashboard: false  // Preview first
+});
 ```
 
-## 🤖 Claude Desktop Integration
+**What you'll get:**
+- Automatically adapted queries for your instrumentation type
+- Latency (P50, P95, P99), Traffic, Errors, and Saturation monitoring
+- Multi-page dashboard with overview and detailed analysis
+- Alert threshold overlays where applicable
 
-### Step 1: Configure Claude Desktop
+### 3. Compare Entity Performance
 
-Find your Claude configuration file:
-- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-- **Linux**: `~/.config/Claude/claude_desktop_config.json`
+Find optimization opportunities across similar entities:
 
-### Step 2: Add MCP Server Configuration
-
-```json
-{
-  "mcpServers": {
-    "newrelic": {
-      "command": "docker",
-      "args": [
-        "run", "-i", "--rm",
-        "--env-file", "/path/to/your/.env",
-        "mcp-server-newrelic:latest"
-      ]
-    }
-  }
-}
+```typescript
+// Compare all APPLICATION entities
+const comparison = await mcp.call('compare.similar_entities', {
+  comparison_strategy: 'by_type',
+  entity_type: 'APPLICATION',
+  max_entities: 10,
+  sort_by: 'overall_performance'
+});
 ```
 
-Or if running from binary:
+**What you'll get:**
+- Performance rankings with benchmarks
+- Outlier identification (top performers and those needing attention)
+- Best practices from high-performing entities
+- Specific optimization recommendations
 
-```json
-{
-  "mcpServers": {
-    "newrelic": {
-      "command": "/path/to/mcp-server",
-      "env": {
-        "NEW_RELIC_API_KEY": "NRAK-your-key",
-        "NEW_RELIC_ACCOUNT_ID": "your-account-id"
-      }
-    }
-  }
-}
-```
+## Understanding the Enhanced Tools
 
-### Step 3: Restart Claude and Test
+### Composite Tools (New)
+- **`discover.environment`** - Comprehensive environment analysis
+- **`generate.golden_dashboard`** - Intelligent dashboard generation
+- **`compare.similar_entities`** - Performance comparison and analysis
 
-1. Completely quit Claude Desktop
-2. Start Claude Desktop again
-3. Test with: "What event types are available in my New Relic account?"
+### Enhanced Existing Tools
+- **`run_nrql_query`** - Now with schema validation and caching
+- **`search_entities`** - Enhanced with discovery insights
+- **`get_entity_details`** - Enriched with golden metrics
+- **`discover_schemas`** - Comprehensive schema discovery
 
-## 🧪 Using Mock Mode
+### Cache Management Tools
+- **`cache.stats`** - Monitor cache performance
+- **`cache.clear`** - Manage cache contents
 
-Perfect for development and testing without a New Relic account:
+## Configuration Options
 
-```bash
-# Run in mock mode
-./bin/mcp-server -mock
+### Environment Variables
 
-# Or with Docker
-docker run -i --rm mcp-server-newrelic:latest -mock
-```
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `NEW_RELIC_API_KEY` | ✅ | - | New Relic API key (NRAK-...) |
+| `NEW_RELIC_ACCOUNT_ID` | ✅ | - | Primary account ID |
+| `NEW_RELIC_REGION` | ❌ | `US` | Data center region (US/EU) |
+| `DEBUG` | ❌ | `false` | Enable debug logging |
+| `CACHE_TTL_MULTIPLIER` | ❌ | `1.0` | Adjust cache TTL (0.5-2.0) |
 
-Mock mode provides realistic sample data for:
-- All discovery operations
-- NRQL query results
-- Alert and dashboard operations
-- Analysis tools
+### Advanced Configuration
 
-## 📊 Example Workflows
+For multiple accounts or complex setups, see [03_CONFIGURATION.md](03_CONFIGURATION.md).
 
-### Performance Investigation
-```bash
-# 1. Find transaction event types
-# 2. Explore transaction attributes
-# 3. Query slow transactions
-# 4. Analyze patterns
-```
-
-### Infrastructure Monitoring
-```bash
-# 1. Discover SystemSample events
-# 2. Check available metrics
-# 3. Query high CPU hosts
-# 4. Create alerts
-```
-
-## 🔧 Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
-**"Authentication failed"**
-```bash
-# Verify your API key
-echo $NEW_RELIC_API_KEY
-# Should start with NRAK-
+**❌ "Invalid API credentials"**
+- Verify your API key format (starts with `NRAK-`)
+- Check account ID is correct
+- Ensure API key has NRQL query permissions
 
-# Check it's a User key, not License key
-# User keys have query permissions
-```
+**❌ "No entities found"**
+- Verify entities are reporting data
+- Check account ID is correct
+- Try running `discover.environment` first
 
-**"No data returned"**
-```bash
-# Try a wider time range
-"SELECT count(*) FROM Transaction SINCE 7 days ago"
+**❌ "Unknown event types"**
+- Run `discover_schemas` before writing custom NRQL
+- Use `discover.environment` for schema guidance
+- Check if data exists in the specified time window
 
-# Verify account ID
-echo $NEW_RELIC_ACCOUNT_ID
-```
+### Debug Mode
 
-**"Connection error"**
-```bash
-# Check region setting
-NEW_RELIC_REGION=EU  # if using EU datacenter
-
-# Enable debug logging
-LOG_LEVEL=debug ./bin/mcp-server
-```
-
-### Diagnostics Tool
+Enable detailed logging:
 
 ```bash
-# Run built-in diagnostics
-make diagnose
-
-# Checks:
-# ✓ Environment configuration
-# ✓ API key format
-# ✓ Network connectivity
-# ✓ New Relic API access
+export DEBUG="true"
+npm run dev
 ```
 
-## 📚 What's Next?
+This will show:
+- Discovery process details
+- Cache hit/miss information
+- Query execution timings
+- Error details and suggestions
 
-### 1. Explore Available Tools
-See [Tools Overview](30_TOOLS_OVERVIEW.md) for the complete catalog of 40+ tools:
-- Discovery tools for exploring your data
-- Query tools for NRQL execution
-- Alert management tools
-- Dashboard creation tools
-- Analysis and insights tools
+### Cache Issues
 
-### 2. Learn Core Concepts
-Read [Concepts Guide](04_CONCEPTS.md) to understand:
-- Discovery-first philosophy
-- Tool composition patterns
-- State management
-- Error handling
+Monitor and manage cache performance:
 
-### 3. Try Advanced Features
-- [Discovery Workflows](43_GUIDE_DISCOVERY_WORKFLOWS.md) - Advanced exploration patterns
-- [Mock Mode Guide](48_GUIDE_MOCK_MODE.md) - Development without credentials
-- [Examples](50_EXAMPLES_OVERVIEW.md) - Real-world scenarios
+```typescript
+// Check cache health
+const stats = await mcp.call('cache.stats', {});
 
-### 4. Configuration Options
-See [Configuration Guide](03_CONFIGURATION.md) for:
-- Advanced authentication options
-- Performance tuning
-- Caching configuration
-- Transport selection
+// Clear problematic cache entries
+const cleared = await mcp.call('cache.clear', {
+  pattern: 'discovery:',  // Clear discovery cache
+  confirm: false
+});
+```
 
-## 🎉 Success Checklist
+## Next Steps
 
-- [ ] Server running and healthy
-- [ ] First query executed successfully
-- [ ] Event types discovered
-- [ ] Attributes explored
-- [ ] (Optional) Claude Desktop integrated
-- [ ] (Optional) Mock mode tested
+1. **Explore Tools**: Read [30_TOOLS_OVERVIEW.md](30_TOOLS_OVERVIEW.md) for complete tool documentation
+2. **Learn Workflows**: See [42_GUIDE_DISCOVERY_WORKFLOWS.md](42_GUIDE_DISCOVERY_WORKFLOWS.md) for patterns
+3. **View Examples**: Check [50_EXAMPLES_OVERVIEW.md](50_EXAMPLES_OVERVIEW.md) for real scenarios
+4. **Understand Architecture**: Read [10_ARCHITECTURE_OVERVIEW.md](10_ARCHITECTURE_OVERVIEW.md) for deeper insights
 
-## 💡 Tips
+## Support
 
-1. **Start with discovery** - Don't assume data structures
-2. **Use mock mode** for development and testing
-3. **Check the logs** with `LOG_LEVEL=debug` for issues
-4. **Join the community** for help and updates
+- **Documentation**: Browse the complete docs in this directory
+- **Examples**: See the `examples/` directory for code samples
+- **Issues**: Report problems via the issue tracker
+- **Community**: Join discussions in the community forum
 
 ---
 
-**Need help?** Check the [FAQ](09_FAQ.md) or [open an issue](https://github.com/deepaucksharma/mcp-server-newrelic/issues).
+**Next**: [02_INSTALLATION.md](02_INSTALLATION.md) for detailed installation options

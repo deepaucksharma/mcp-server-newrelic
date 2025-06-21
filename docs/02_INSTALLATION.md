@@ -1,257 +1,190 @@
 # Installation Guide
 
-This comprehensive guide covers all installation methods for the New Relic MCP Server.
+Complete installation instructions for the Enhanced MCP Server New Relic across different platforms and deployment scenarios.
 
-## 📋 Table of Contents
+## Prerequisites
 
-1. [System Requirements](#system-requirements)
-2. [Installation Methods](#installation-methods)
-3. [Docker Installation](#docker-installation)
-4. [Binary Installation](#binary-installation)
-5. [From Source](#from-source)
-6. [Claude Desktop Integration](#claude-desktop-integration)
-7. [Configuration](#configuration)
-8. [Verification](#verification)
-9. [Upgrading](#upgrading)
-10. [Uninstallation](#uninstallation)
-
-## 🖥️ System Requirements
-
-### Minimum Requirements
-- **CPU**: 2 cores
-- **RAM**: 1GB
-- **Disk**: 100MB for binaries
-- **OS**: Linux, macOS, Windows (with WSL)
-- **Network**: Internet access to New Relic APIs
-
-### Software Requirements
-- **For Docker**: Docker 20.10+ and Docker Compose 2.0+
-- **For Source Build**: Go 1.21+
-- **For Binary**: None (standalone executable)
+### System Requirements
+- **Node.js**: 20.0.0 or higher
+- **npm**: 9.0.0 or higher (or yarn/pnpm equivalent)
+- **Memory**: 512MB minimum, 2GB recommended
+- **Platform**: Linux, macOS, Windows (with WSL2)
 
 ### New Relic Requirements
-- Active New Relic account
-- User API Key with query permissions
-- Account ID
+- **New Relic Account** with active APM, Infrastructure, or Logs data
+- **API Key** with the following permissions:
+  - NRQL Query access
+  - Entity search access
+  - Dashboard read access (optional, for validation)
 
-## 🚀 Installation Methods
+## Installation Methods
 
-Choose the method that best fits your needs:
+### Method 1: From Source (Recommended for Development)
 
-| Method | Best For | Complexity | Updates |
-|--------|----------|------------|---------|
-| Docker | Production, Quick Start | Easy | Automated |
-| Binary | Simple deployments | Easy | Manual |
-| Source | Development, Customization | Medium | Manual |
-
-## 🐳 Docker Installation
-
-### Prerequisites
 ```bash
-# Check Docker version
-docker --version  # Should be 20.10+
-docker-compose --version  # Should be 2.0+
-```
-
-### Step 1: Clone Repository
-```bash
-git clone https://github.com/deepaucksharma/mcp-server-newrelic.git
+# Clone the repository
+git clone <repository-url>
 cd mcp-server-newrelic
-```
 
-### Step 2: Configure Environment
-```bash
-# Copy example configuration
-cp .env.example .env
+# Install dependencies
+npm install
 
-# Edit with your credentials
-nano .env  # or your preferred editor
-```
-
-Required settings in `.env`:
-```env
-NEW_RELIC_API_KEY=NRAK-your-key-here
-NEW_RELIC_ACCOUNT_ID=your-account-id
-NEW_RELIC_REGION=US  # or EU
-```
-
-### Step 3: Build and Run
-
-#### Option A: Simple Mode (MCP Server only)
-```bash
-# Use simple compose file
-docker-compose -f docker-compose.simple.yml up -d
-
-# Check status
-docker-compose -f docker-compose.simple.yml ps
-```
-
-#### Option B: Full Stack (with monitoring)
-```bash
-# Build and start all services
-docker-compose up -d
-
-# View logs
-docker-compose logs -f mcp-server
-```
-
-### Docker Commands Reference
-```bash
-# Start services
-docker-compose up -d
-
-# Stop services
-docker-compose down
-
-# View logs
-docker-compose logs -f [service-name]
-
-# Restart a service
-docker-compose restart mcp-server
-
-# Update and rebuild
-docker-compose pull
-docker-compose up -d --build
-```
-
-## 📦 Binary Installation
-
-### Step 1: Download Binary
-
-Download the appropriate binary for your platform:
-
-```bash
-# Linux (amd64)
-wget https://github.com/deepaucksharma/mcp-server-newrelic/releases/latest/download/mcp-server-linux-amd64
-chmod +x mcp-server-linux-amd64
-mv mcp-server-linux-amd64 /usr/local/bin/mcp-server
-
-# macOS (Intel)
-wget https://github.com/deepaucksharma/mcp-server-newrelic/releases/latest/download/mcp-server-darwin-amd64
-chmod +x mcp-server-darwin-amd64
-mv mcp-server-darwin-amd64 /usr/local/bin/mcp-server
-
-# macOS (Apple Silicon)
-wget https://github.com/deepaucksharma/mcp-server-newrelic/releases/latest/download/mcp-server-darwin-arm64
-chmod +x mcp-server-darwin-arm64
-mv mcp-server-darwin-arm64 /usr/local/bin/mcp-server
-
-# Windows (use WSL or download manually)
-```
-
-### Step 2: Create Configuration
-
-```bash
-# Create config directory
-mkdir -p ~/.config/mcp-newrelic
-
-# Create environment file
-cat > ~/.config/mcp-newrelic/.env << EOF
-NEW_RELIC_API_KEY=NRAK-your-key-here
-NEW_RELIC_ACCOUNT_ID=your-account-id
-NEW_RELIC_REGION=US
-EOF
-```
-
-### Step 3: Run Binary
-
-```bash
-# Run with config file
-mcp-server --env-file ~/.config/mcp-newrelic/.env
-
-# Or export environment variables
-export NEW_RELIC_API_KEY=NRAK-your-key-here
-export NEW_RELIC_ACCOUNT_ID=your-account-id
-mcp-server
-```
-
-## 🔨 From Source
-
-### Prerequisites
-```bash
-# Install Go 1.21+
-# macOS
-brew install go
-
-# Linux
-wget https://go.dev/dl/go1.21.5.linux-amd64.tar.gz
-sudo tar -C /usr/local -xzf go1.21.5.linux-amd64.tar.gz
-export PATH=$PATH:/usr/local/go/bin
+# Build the project
+npm run build
 
 # Verify installation
-go version  # Should show 1.21+
+npm run type-check
 ```
 
-### Build Steps
+### Method 2: Binary Installation (Coming Soon)
 
 ```bash
-# 1. Clone repository
-git clone https://github.com/deepaucksharma/mcp-server-newrelic.git
-cd mcp-server-newrelic
+# Install globally via npm (when published)
+npm install -g mcp-server-newrelic
 
-# 2. Download dependencies
-go mod download
-
-# 3. Build the server
-make build
-
-# 4. Verify build
-./bin/mcp-server --version
-
-# 5. Install to system (optional)
-sudo make install  # Installs to /usr/local/bin
+# Or download binary release
+curl -L https://github.com/.../releases/latest/download/mcp-newrelic-linux -o mcp-newrelic
+chmod +x mcp-newrelic
 ```
 
-### Development Build
+### Method 3: Docker (Coming Soon)
+
 ```bash
-# Build with debug symbols
-make build-debug
+# Pull the official image
+docker pull mcp-server-newrelic:latest
 
-# Build for all platforms
-make build-all
-
-# Run tests before building
-make test && make build
+# Run with environment variables
+docker run -e NEW_RELIC_API_KEY=your_key mcp-server-newrelic:latest
 ```
 
-## 🤖 Claude Desktop Integration
+## Configuration
 
-### Step 1: Locate Configuration File
+### Environment Variables
 
-Find your Claude Desktop configuration:
+Create a `.env` file or set environment variables:
 
-| OS | Location |
-|----|----------|
-| macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
-| Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
-| Linux | `~/.config/Claude/claude_desktop_config.json` |
+```bash
+# Required Configuration
+NEW_RELIC_API_KEY="NRAK-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+NEW_RELIC_ACCOUNT_ID="1234567"
 
-### Step 2: Configure MCP Server
+# Optional Configuration
+NEW_RELIC_REGION="US"                    # or "EU"
+DEBUG="false"                            # Enable debug logging
+CACHE_TTL_MULTIPLIER="1.0"              # Adjust cache TTL (0.5-2.0)
+```
 
-#### Docker Configuration
+### API Key Setup
+
+1. **Log into New Relic** at [one.newrelic.com](https://one.newrelic.com)
+2. **Navigate to API Keys**: User menu → API keys
+3. **Create API Key**:
+   - Type: "User API Key"
+   - Name: "MCP Server"
+   - Copy the key (starts with "NRAK-")
+
+### Multiple Account Configuration
+
+For multi-account setups, you can configure additional accounts:
+
+```bash
+# Additional accounts for platform analysis
+E2E_ACCOUNT_LEGACY_APM="1234567"
+E2E_API_KEY_LEGACY="NRAK-..."
+
+E2E_ACCOUNT_MODERN_OTEL="2345678"
+E2E_API_KEY_OTEL="NRAK-..."
+
+E2E_ACCOUNT_MIXED_DATA="3456789"
+E2E_API_KEY_MIXED="NRAK-..."
+```
+
+## Verification
+
+### 1. Test Installation
+
+```bash
+# Check TypeScript compilation
+npm run type-check
+
+# Run unit tests
+npm test
+
+# Test discovery functionality
+npm run discover
+```
+
+### 2. Test New Relic Connection
+
+```bash
+# Test with your credentials
+NEW_RELIC_API_KEY="your_key" NEW_RELIC_ACCOUNT_ID="your_account" npm run discover
+```
+
+Expected output:
+```
+🔍 Starting discovery process...
+📊 Discovery Results:
+===================
+Account ID: 1234567
+Confidence: 95.2%
+Schemas discovered: 8
+Attributes profiled: 156
+Error indicators: 3
+Metrics available: 42
+```
+
+### 3. Run E2E Tests
+
+```bash
+# Quick E2E test (requires valid credentials)
+npm run test:e2e:quick
+
+# Full E2E test suite
+npm run test:e2e
+```
+
+## Development Setup
+
+### IDE Configuration
+
+For **Visual Studio Code**:
+
 ```json
+// .vscode/settings.json
 {
-  "mcpServers": {
-    "newrelic": {      "command": "docker",
-      "args": [
-        "run", "-i", "--rm",
-        "-v", "/path/to/.env:/app/.env:ro",
-        "mcp-server-newrelic:latest"
-      ]
-    }
-  }
+  "typescript.preferences.importModuleSpecifier": "relative",
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": true
+  },
+  "editor.formatOnSave": true
 }
 ```
 
-#### Binary Configuration
+### Git Hooks
+
+```bash
+# Install pre-commit hooks
+npm install husky --save-dev
+npx husky install
+npx husky add .husky/pre-commit "npm run type-check && npm run lint"
+```
+
+## Deployment Options
+
+### MCP Client Integration (Claude Desktop)
+
+Add to your Claude Desktop configuration:
+
 ```json
 {
   "mcpServers": {
     "newrelic": {
-      "command": "/usr/local/bin/mcp-server",
+      "command": "node",
+      "args": ["/path/to/mcp-server-newrelic/dist/index.js"],
       "env": {
-        "NEW_RELIC_API_KEY": "NRAK-your-key-here",
-        "NEW_RELIC_ACCOUNT_ID": "your-account-id",
+        "NEW_RELIC_API_KEY": "NRAK-...",
+        "NEW_RELIC_ACCOUNT_ID": "1234567",
         "NEW_RELIC_REGION": "US"
       }
     }
@@ -259,209 +192,162 @@ Find your Claude Desktop configuration:
 }
 ```
 
-#### Development Configuration
+### Systemd Service (Linux)
+
+```ini
+# /etc/systemd/system/mcp-newrelic.service
+[Unit]
+Description=MCP Server New Relic
+After=network.target
+
+[Service]
+Type=simple
+User=mcp
+WorkingDirectory=/opt/mcp-server-newrelic
+ExecStart=/usr/bin/node dist/index.js
+Environment=NODE_ENV=production
+Environment=NEW_RELIC_API_KEY=NRAK-...
+Environment=NEW_RELIC_ACCOUNT_ID=1234567
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### PM2 (Process Manager)
+
 ```json
-{
-  "mcpServers": {
-    "newrelic": {
-      "command": "go",
-      "args": ["run", "/path/to/mcp-server-newrelic/cmd/server/main.go"],
-      "env": {
-        "NEW_RELIC_API_KEY": "NRAK-your-key-here",
-        "NEW_RELIC_ACCOUNT_ID": "your-account-id"
-      }
-    }
-  }
-}
-```
-## ⚙️ Configuration
-
-### Environment Variables
-
-Create a `.env` file with required settings:
-
-```env
-# Required
-NEW_RELIC_API_KEY=NRAK-your-key-here
-NEW_RELIC_ACCOUNT_ID=your-account-id
-
-# Optional
-NEW_RELIC_REGION=US          # US or EU (default: US)
-LOG_LEVEL=info               # debug, info, warn, error (default: info)
-MCP_TRANSPORT=stdio          # stdio, http, sse (default: stdio)
-HTTP_PORT=8080               # HTTP server port (default: 8080)
-STATE_STORE=memory           # memory or redis (default: memory)
-REDIS_URL=redis://localhost  # If using Redis state store
-CACHE_TTL=300                # Cache TTL in seconds (default: 300)
-MOCK_MODE=false              # Enable mock mode (default: false)
+// ecosystem.config.js
+module.exports = {
+  apps: [{
+    name: 'mcp-newrelic',
+    script: 'dist/index.js',
+    env: {
+      NODE_ENV: 'production',
+      NEW_RELIC_API_KEY: 'NRAK-...',
+      NEW_RELIC_ACCOUNT_ID: '1234567'
+    },
+    instances: 1,
+    autorestart: true,
+    max_memory_restart: '1G'
+  }]
+};
 ```
 
-### Configuration File Locations
+## Troubleshooting
 
-The server checks for configuration in this order:
-1. Command line flags
-2. Environment variables
-3. `.env` file in current directory
-4. `~/.config/mcp-newrelic/.env`
-5. `/etc/mcp-newrelic/.env`
+### Common Installation Issues
 
-## ✅ Verification
-
-### Health Check
+**❌ Node.js version error**
 ```bash
-# HTTP mode
-curl http://localhost:8080/health
+# Check version
+node --version  # Should be 20.0.0+
 
-# STDIO mode
-echo '{"jsonrpc":"2.0","method":"health","id":1}' | mcp-server
-```
-### Diagnostics
-```bash
-# Run built-in diagnostics
-make diagnose
-
-# Or with binary
-mcp-server --diagnose
+# Install/update Node.js via nvm
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+nvm install 20
+nvm use 20
 ```
 
-### Test Query
+**❌ TypeScript compilation errors**
 ```bash
-# Test basic functionality
-echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | mcp-server
-```
-
-## 🔄 Upgrading
-
-### Docker Upgrade
-```bash
-# Pull latest image
-docker-compose pull
-
-# Recreate containers
-docker-compose up -d
-```
-
-### Binary Upgrade
-```bash
-# Download new version
-wget https://github.com/deepaucksharma/mcp-server-newrelic/releases/latest/download/mcp-server-linux-amd64
-
-# Replace old binary
-sudo mv mcp-server-linux-amd64 /usr/local/bin/mcp-server
-sudo chmod +x /usr/local/bin/mcp-server
-
-# Verify version
-mcp-server --version
-```
-
-### Source Upgrade
-```bash
-# Pull latest changes
-git pull origin main
+# Clear node_modules and reinstall
+rm -rf node_modules package-lock.json
+npm install
 
 # Rebuild
-make clean
-make build
+npm run build
 ```
-## 🗑️ Uninstallation
 
-### Docker Uninstall
+**❌ Missing dependencies**
 ```bash
-# Stop and remove containers
-docker-compose down
-
-# Remove images
-docker rmi mcp-server-newrelic:latest
-
-# Remove volumes (caution: deletes data)
-docker volume prune
+# Install peer dependencies
+npm install graphql-request@^7.0.0 zod@^3.23.0
 ```
 
-### Binary Uninstall
+### Connection Issues
+
+**❌ "Invalid API credentials"**
+- Verify API key format (starts with `NRAK-`)
+- Check API key permissions in New Relic UI
+- Ensure account ID is correct (numeric)
+
+**❌ "No data found"**
+- Verify account has active data ingestion
+- Check time range (data may be older)
+- Try with a different account ID
+
+**❌ "Rate limit exceeded"**
+- Wait 1-2 minutes and retry
+- Reduce concurrent requests
+- Check cache configuration
+
+### Performance Issues
+
+**❌ High memory usage**
 ```bash
-# Remove binary
-sudo rm /usr/local/bin/mcp-server
+# Monitor cache statistics
+npm run discover  # Check "Memory Usage" in output
 
-# Remove configuration
-rm -rf ~/.config/mcp-newrelic
+# Clear cache if needed
+# (programmatically via cache.clear tool)
 ```
 
-### Source Uninstall
+**❌ Slow query responses**
 ```bash
-# If installed with make install
-sudo make uninstall
+# Enable debug logging
+DEBUG=true npm run dev
 
-# Remove repository
-cd ..
-rm -rf mcp-server-newrelic
+# Check for schema validation overhead
+# Consider disabling for known queries
 ```
 
-## 🔧 Troubleshooting Installation
+## Security Considerations
 
-### Docker Issues
+### API Key Management
+- **Never commit API keys** to version control
+- Use environment variables or secure secret management
+- Rotate API keys regularly
+- Use least-privilege permissions
 
-**"Cannot connect to Docker daemon"**
+### Network Security
+- Server runs on localhost by default
+- No external network listeners
+- All data in-memory only (no persistence)
+
+### Data Privacy
+- No customer data is logged or stored permanently
+- Cache is memory-only with automatic cleanup
+- Supports EU region for GDPR compliance
+
+## Update Procedures
+
+### Minor Updates
 ```bash
-# Start Docker service
-sudo systemctl start docker
-
-# Add user to docker group
-sudo usermod -aG docker $USER
-# Log out and back in
+git pull origin main
+npm install
+npm run build
 ```
 
-**"Port already in use"**
-```bash
-# Find process using port
-lsof -i :8080
+### Major Version Updates
+1. Review changelog for breaking changes
+2. Update environment variables if needed
+3. Run full test suite
+4. Update client configurations
 
-# Change port in docker-compose.yml
-```
+## Support
 
-### Binary Issues
+### Self-Help Resources
+- **Documentation**: Browse the `/docs` directory
+- **Examples**: Check `/examples` for usage patterns
+- **Tests**: Review test files for implementation details
 
-**"Permission denied"**
-```bash
-# Make executable
-chmod +x mcp-server
-
-# Check file permissions
-ls -la mcp-server
-```
-
-**"Command not found"**
-```bash
-# Add to PATH
-export PATH=$PATH:/path/to/mcp-server
-
-# Or move to standard location
-sudo mv mcp-server /usr/local/bin/
-```
-
-### Build Issues
-
-**"Go version too old"**
-```bash
-# Update Go
-brew upgrade go  # macOS
-# Or download from https://go.dev/dl/
-```
-
-**"Missing dependencies"**
-```bash
-# Clear module cache
-go clean -modcache
-
-# Re-download dependencies
-go mod download
-```
-
-## 📚 Next Steps
-
-- [Configuration Guide](03_CONFIGURATION.md) - Detailed configuration options
-- [Getting Started](01_GETTING_STARTED.md) - First queries
-- [Claude Integration](41_GUIDE_CLAUDE_INTEGRATION.md) - AI assistant setup
+### Getting Help
+- **Issues**: Report bugs via the issue tracker
+- **Discussions**: Community discussions in the forum
+- **Documentation**: Submit documentation improvements
 
 ---
 
-**Need help?** Check the [FAQ](09_FAQ.md) or [open an issue](https://github.com/deepaucksharma/mcp-server-newrelic/issues).
+**Next**: [03_CONFIGURATION.md](03_CONFIGURATION.md) for advanced configuration options

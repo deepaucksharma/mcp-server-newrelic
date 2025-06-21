@@ -1,0 +1,62 @@
+{
+  "name": "mcp-server-newrelic",
+  "version": "2.0.0",
+  "description": "Platform-Native MCP Server for New Relic - Zero Hardcoded Schemas with Enhanced Tools",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --clean",
+    "dev": "tsx watch src/index.ts",
+    "test": "vitest",
+    "test:watch": "vitest --watch",
+    "test:e2e": "vitest run tests/e2e --config vitest.e2e.config.ts",
+    "test:e2e:discovery": "vitest run tests/e2e/discovery-engine.test.ts --config vitest.e2e.config.ts",
+    "test:e2e:tools": "vitest run tests/e2e --config vitest.e2e.config.ts --grep='Enhanced Tools'",
+    "test:e2e:dashboards": "vitest run tests/e2e --config vitest.e2e.config.ts --grep='Dashboard'",
+    "test:e2e:performance": "vitest run tests/e2e --config vitest.e2e.config.ts --grep='Performance'",
+    "test:e2e:quick": "vitest run tests/e2e/discovery-engine.test.ts --config vitest.e2e.config.ts --bail=1",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src --ext .ts --fix",
+    "discover": "tsx src/cli.ts discover"
+  },
+  "keywords": [
+    "mcp", 
+    "new-relic", 
+    "observability", 
+    "discovery", 
+    "typescript", 
+    "zero-assumptions",
+    "adaptive-queries"
+  ],
+  "author": "MCP New Relic Contributors",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "graphql-request": "^7.0.0",
+    "zod": "^3.23.0",
+    "lru-cache": "^10.0.0",
+    "keyv": "^4.5.0",
+    "@keyv/redis": "^3.0.0",
+    "fastify": "^5.0.0",
+    "js-yaml": "^4.1.0",
+    "nanoid": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/js-yaml": "^4.0.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.0.0",
+    "tsup": "^8.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.3.0",
+    "vitest": "^2.0.0",
+    "msw": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "bin": {
+    "mcp-newrelic": "./dist/cli.js"
+  }
+}

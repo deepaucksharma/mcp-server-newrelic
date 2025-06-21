@@ -1,444 +1,425 @@
 # Configuration Reference
 
-Complete configuration reference for the New Relic MCP Server. Configuration can be provided through environment variables, configuration files, or command-line flags.
+Complete configuration guide for the Enhanced MCP Server New Relic, covering all environment variables, caching strategies, and advanced options.
 
-## 📋 Table of Contents
+## Configuration Overview
 
-1. [Configuration Methods](#configuration-methods)
-2. [Required Settings](#required-settings)
-3. [Server Configuration](#server-configuration)
-4. [New Relic Settings](#new-relic-settings)
-5. [Security Configuration](#security-configuration)
-6. [Discovery Engine](#discovery-engine)
-7. [State Management](#state-management)
-8. [Performance Tuning](#performance-tuning)
-9. [Monitoring & Logging](#monitoring--logging)
-10. [Development Options](#development-options)
-11. [Environment Examples](#environment-examples)
-12. [Troubleshooting](#troubleshooting)
+The server uses a hierarchical configuration system:
+1. **Environment Variables** (highest priority)
+2. **Configuration File** (if provided)
+3. **Default Values** (lowest priority)
 
-## 🔧 Configuration Methods
+## Environment Variables
 
-Configuration is loaded in order of precedence:
+### Required Configuration
 
-1. **Command-line flags** (highest priority)
-2. **Environment variables**
-3. **Configuration file** (.env)
-4. **Default values** (lowest priority)
+| Variable | Type | Description | Example |
+|----------|------|-------------|---------|
+| `NEW_RELIC_API_KEY` | string | New Relic API key (NRAK-...) | `NRAK-ABCD1234...` |
+| `NEW_RELIC_ACCOUNT_ID` | number | Primary New Relic account ID | `1234567` |
 
-### Environment Variables (.env)
+### Optional Configuration
 
-The primary configuration method:
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `NEW_RELIC_REGION` | `US\|EU` | `US` | New Relic data center region |
+| `DEBUG` | boolean | `false` | Enable debug logging |
+| `CACHE_TTL_MULTIPLIER` | number | `1.0` | Adjust all cache TTL values (0.5-2.0) |
+| `NODE_ENV` | string | `development` | Runtime environment |
 
-```bash
-# Create from example
-cp .env.example .env
+### E2E Testing Configuration
 
-# Edit with your settings
-nano .env
+For comprehensive testing with multiple accounts:
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `E2E_ACCOUNT_LEGACY_APM` | number | Legacy APM account for testing |
+| `E2E_API_KEY_LEGACY` | string | API key for legacy account |
+| `E2E_ACCOUNT_MODERN_OTEL` | number | OpenTelemetry account for testing |
+| `E2E_API_KEY_OTEL` | string | API key for OTEL account |
+| `E2E_ACCOUNT_MIXED_DATA` | number | Mixed telemetry account |
+| `E2E_API_KEY_MIXED` | string | API key for mixed account |
+
+## Caching Configuration
+
+The server implements intelligent caching with adaptive TTL strategies. You can tune these via environment variables or the configuration object.
+
+### Cache Strategy Types
+
+```typescript
+interface CacheStrategy {
+  name: string;
+  ttl: number;          // Base TTL in milliseconds
+  adaptiveTtl: boolean; // Whether to adjust TTL based on access patterns
+  maxAge: number;       // Absolute maximum age before forced refresh
+  refreshThreshold: number; // 0-1, when to trigger background refresh
+  priority: 'low' | 'medium' | 'high' | 'critical';
+}
 ```
 
-### Configuration File Locations
+### Default Cache Strategies
 
-The server checks these locations in order:
-1. `./.env` (current directory)
-2. `~/.config/mcp-newrelic/.env`
-3. `/etc/mcp-newrelic/.env`
-
-### Command-line Flags
-
-Override any setting at runtime:
-
-```bash
-# Examples
-./mcp-server --transport=http --port=9090
-./mcp-server --mock --log-level=debug
-./mcp-server --env-file=/custom/path/.env
+```typescript
+const defaultStrategies = {
+  discovery: {
+    ttl: 5 * 60 * 1000,        // 5 minutes base
+    adaptiveTtl: true,
+    maxAge: 30 * 60 * 1000,    // 30 minutes max
+    refreshThreshold: 0.8,      // Refresh when 80% of TTL elapsed
+    priority: 'high',
+  },
+  goldenMetrics: {
+    ttl: 2 * 60 * 1000,        // 2 minutes base
+    adaptiveTtl: true,
+    maxAge: 10 * 60 * 1000,    // 10 minutes max
+    refreshThreshold: 0.7,      // Refresh when 70% of TTL elapsed
+    priority: 'critical',
+  },
+  entityDetails: {
+    ttl: 10 * 60 * 1000,       // 10 minutes base
+    adaptiveTtl: false,
+    maxAge: 60 * 60 * 1000,    // 1 hour max
+    refreshThreshold: 0.9,      // Refresh when 90% of TTL elapsed
+    priority: 'medium',
+  },
+  dashboards: {
+    ttl: 15 * 60 * 1000,       // 15 minutes base
+    adaptiveTtl: false,
+    maxAge: 4 * 60 * 60 * 1000, // 4 hours max
+    refreshThreshold: 0.8,
+    priority: 'low',
+  },
+  analytics: {
+    ttl: 30 * 60 * 1000,       // 30 minutes base
+    adaptiveTtl: true,
+    maxAge: 2 * 60 * 60 * 1000, // 2 hours max
+    refreshThreshold: 0.75,
+    priority: 'medium',
+  },
+};
 ```
 
-## ⚠️ Required Settings
+### Cache Environment Variables
 
-These MUST be configured for production use:
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CACHE_TTL_MULTIPLIER` | `1.0` | Multiply all TTL values (0.5-2.0) |
+| `CACHE_MAX_ENTRIES` | `500` | Maximum cache entries before LRU eviction |
+| `CACHE_DISABLE` | `false` | Disable all caching (for debugging) |
+| `CACHE_BACKGROUND_REFRESH` | `true` | Enable background cache refresh |
 
-### NEW_RELIC_API_KEY
-- **Type**: String
-- **Required**: Yes (unless MOCK_MODE=true)
-- **Description**: New Relic User API key
-- **Format**: Must start with "NRAK-"
-- **Example**: `NRAK-XXXXXXXXXXXXXXXXXXXXXXXXXXXXX`
+### Cache Tuning Examples
 
-**How to obtain**:
-1. Log into [New Relic](https://one.newrelic.com)
-2. Click your name → **API Keys**
-3. Create **User** key with permissions:
-   - NRQL query
-   - APM/Infrastructure read
-   - Dashboards/Alerts (if using those tools)
+```bash
+# Aggressive caching (longer TTL)
+export CACHE_TTL_MULTIPLIER="2.0"
 
-### NEW_RELIC_ACCOUNT_ID
-- **Type**: String (numeric)
-- **Required**: Yes (unless MOCK_MODE=true)
-- **Description**: Your New Relic account ID
-- **Example**: `1234567`
+# Conservative caching (shorter TTL)
+export CACHE_TTL_MULTIPLIER="0.5"
 
-**How to find**:
-- In New Relic URL: `https://one.newrelic.com/nr1-core?account=YOUR_ACCOUNT_ID`
-- Or: Administration → Organization → Accounts
+# Disable caching for debugging
+export CACHE_DISABLE="true"
 
-## 🖥️ Server Configuration
+# Large environment with more cache
+export CACHE_MAX_ENTRIES="1000"
+```
 
-### MCP_TRANSPORT
-- **Type**: String
-- **Default**: `stdio`
-- **Options**: `stdio`, `http`, `sse`
-- **Description**: Transport protocol
-  - `stdio`: For Claude Desktop integration
-  - `http`: REST API for programmatic access
-  - `sse`: Server-Sent Events for streaming
+## Discovery Configuration
 
-### SERVER_HOST
-- **Type**: String
-- **Default**: `0.0.0.0`
-- **Description**: Server bind address
-- **Security**: Use `127.0.0.1` for localhost only
+The discovery engine can be tuned for different account sizes and data patterns.
 
-### SERVER_PORT
-- **Type**: Integer
-- **Default**: `8080`
-- **Description**: HTTP server port
+### Discovery Settings
 
-### HTTP_PORT
-- **Type**: Integer
-- **Default**: `8081`
-- **Description**: MCP HTTP transport port
+```typescript
+interface DiscoveryConfig {
+  cache: {
+    type: 'memory';
+    ttl: {
+      schemas: number;      // Schema discovery TTL
+      attributes: number;   // Attribute profiling TTL  
+      serviceId: number;    // Service identifier TTL
+      errors: number;       // Error pattern TTL
+    };
+  };
+  confidence: {
+    minimum: number;        // Minimum confidence threshold
+    optimal: number;        // Optimal confidence target
+  };
+}
+```
 
-### REQUEST_TIMEOUT
-- **Type**: Duration
-- **Default**: `30s`
-- **Description**: Default request timeout
-- **Format**: Go duration (e.g., `30s`, `5m`, `1h`)
+### Discovery Environment Variables
 
-### MAX_CONCURRENT_REQUESTS
-- **Type**: Integer
-- **Default**: `100`
-- **Description**: Max concurrent requests
-- **Performance**: Adjust based on resources
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DISCOVERY_CONFIDENCE_MIN` | `0.7` | Minimum confidence threshold |
+| `DISCOVERY_CONFIDENCE_OPT` | `0.9` | Optimal confidence target |
+| `DISCOVERY_SCHEMA_TTL` | `14400000` | Schema cache TTL (4 hours) |
+| `DISCOVERY_ATTR_TTL` | `1800000` | Attribute cache TTL (30 min) |
 
-## 🌍 New Relic Settings
+## Regional Configuration
 
-### NEW_RELIC_REGION
-- **Type**: String
-- **Default**: `US`
-- **Options**: `US`, `EU`
-- **Description**: Data center region
+### US Region (Default)
+```bash
+export NEW_RELIC_REGION="US"
+# Uses: https://api.newrelic.com/graphql
+```
 
-### NEW_RELIC_LICENSE_KEY
-- **Type**: String
-- **Optional**: Yes
-- **Description**: For monitoring the MCP server itself
-- **Format**: Starts with "NRLK-"
+### EU Region
+```bash
+export NEW_RELIC_REGION="EU"
+# Uses: https://api.eu.newrelic.com/graphql
+```
 
-### NEW_RELIC_APP_NAME
-- **Type**: String
-- **Default**: `mcp-server-newrelic`
-- **Description**: APM application name
+### Custom GraphQL Endpoint
+```bash
+export NEW_RELIC_GRAPHQL_URL="https://custom.newrelic.endpoint/graphql"
+```
 
-## 🔐 Security Configuration
+## MCP Protocol Configuration
 
-### AUTH_ENABLED
-- **Type**: Boolean
-- **Default**: `false`
-- **Description**: Enable API authentication
-- **Recommendation**: Enable for production
+### Transport Settings
 
-### JWT_SECRET
-- **Type**: String
-- **Required**: If AUTH_ENABLED=true
-- **Description**: Secret for JWT tokens
-- **Generation**: `openssl rand -base64 32`
+The server supports STDIO transport (required for MCP):
 
-### API_KEY_SALT
-- **Type**: String
-- **Required**: If AUTH_ENABLED=true
-- **Description**: Salt for API key hashing
-- **Generation**: `openssl rand -base64 16`
+```typescript
+interface MCPConfig {
+  transport: 'stdio';
+  http?: {
+    port: number;
+    cors: string[];
+  };
+}
+```
 
-### RATE_LIMIT_ENABLED
-- **Type**: Boolean
-- **Default**: `true`
-- **Description**: Enable rate limiting
+### Protocol Capabilities
 
-### RATE_LIMIT_PER_MIN
-- **Type**: Integer
-- **Default**: `60`
-- **Description**: Requests per minute per client
+```typescript
+const capabilities = {
+  tools: {},           // Tool calling capability
+  resources: {},       // Resource access capability
+};
+```
 
-### TLS_ENABLED
-- **Type**: Boolean
-- **Default**: `false`
-- **Description**: Enable HTTPS
-- **Required**: For production
+## Advanced Configuration
 
-### TLS_CERT_FILE / TLS_KEY_FILE
-- **Type**: String
-- **Required**: If TLS_ENABLED=true
-- **Description**: Paths to TLS certificate and key
+### Performance Tuning
 
-## 🔍 Discovery Engine
+```bash
+# Node.js performance options
+export NODE_OPTIONS="--max-old-space-size=2048"
 
-### DISCOVERY_CACHE_TTL
-- **Type**: Duration
-- **Default**: `3600s` (1 hour)
-- **Description**: Cache duration for discovery results
+# V8 garbage collection tuning
+export NODE_OPTIONS="--gc-interval=100"
 
-### DISCOVERY_MAX_WORKERS
-- **Type**: Integer
-- **Default**: `10`
-- **Description**: Parallel discovery workers
-- **Performance**: Higher = faster but more load
+# Enable source maps for debugging
+export NODE_OPTIONS="--enable-source-maps"
+```
 
-### DISCOVERY_SAMPLE_SIZE
-- **Type**: Integer
-- **Default**: `1000`
-- **Description**: Default attribute analysis sample size
+### Logging Configuration
 
-### DISCOVERY_PATTERN_MIN_CONFIDENCE
-- **Type**: Float
-- **Default**: `0.7`
-- **Range**: 0.0 - 1.0
-- **Description**: Pattern detection threshold
+```bash
+# Enable debug logging
+export DEBUG="true"
 
-## 💾 State Management
+# Log level (if using structured logging)
+export LOG_LEVEL="info"  # debug, info, warn, error
 
-### STATE_STORE
-- **Type**: String
-- **Default**: `memory`
-- **Options**: `memory`, `redis`
-- **Description**: State storage backend
+# Log format
+export LOG_FORMAT="text"  # text, json
+```
 
-### REDIS_URL
-- **Type**: String
-- **Required**: If STATE_STORE=redis
-- **Format**: `redis://[user:password@]host:port/db`
-- **Example**: `redis://localhost:6379/0`
+### Security Configuration
 
-### SESSION_TTL
-- **Type**: Duration
-- **Default**: `1800s` (30 minutes)
-- **Description**: Session expiration time
+```bash
+# Disable telemetry collection
+export TELEMETRY_DISABLED="true"
 
-### CACHE_TTL
-- **Type**: Duration
-- **Default**: `300s` (5 minutes)
-- **Description**: Default cache TTL
+# Custom user agent
+export USER_AGENT="MCP-NewRelic/2.0.0 (Custom)"
+```
 
-## ⚡ Performance Tuning
+## Configuration File (Optional)
 
-### QUERY_CACHE_ENABLED
-- **Type**: Boolean
-- **Default**: `true`
-- **Description**: Cache NRQL query results
+You can provide configuration via a file:
 
-### QUERY_CACHE_TTL
-- **Type**: Duration
-- **Default**: `300s`
-- **Description**: Query result cache duration
+```yaml
+# config.yaml
+newrelic:
+  apiKey: "${NEW_RELIC_API_KEY}"
+  accountId: "${NEW_RELIC_ACCOUNT_ID}"
+  region: "US"
+  graphqlUrl: "https://api.newrelic.com/graphql"
 
-### BATCH_SIZE
-- **Type**: Integer
-- **Default**: `100`
-- **Description**: Default batch operation size
+discovery:
+  cache:
+    type: "memory"
+    ttl:
+      schemas: 14400000      # 4 hours
+      attributes: 1800000    # 30 minutes
+      serviceId: 7200000     # 2 hours
+      errors: 1800000        # 30 minutes
+  confidence:
+    minimum: 0.7
+    optimal: 0.9
 
-### WORKER_POOL_SIZE
-- **Type**: Integer
-- **Default**: `20`
-- **Description**: Size of worker pool for concurrent operations
+mcp:
+  transport: "stdio"
+  http:
+    port: 3000
+    cors: ["*"]
 
-## 📊 Monitoring & Logging
+telemetry:
+  enabled: true
+```
 
-### LOG_LEVEL
-- **Type**: String
-- **Default**: `info`
-- **Options**: `debug`, `info`, `warn`, `error`
-- **Description**: Logging verbosity
+Load with:
+```bash
+export CONFIG_FILE="./config.yaml"
+node dist/index.js
+```
 
-### LOG_FORMAT
-- **Type**: String
-- **Default**: `text`
-- **Options**: `text`, `json`
-- **Description**: Log output format
+## Environment-Specific Configurations
 
-### METRICS_ENABLED
-- **Type**: Boolean
-- **Default**: `true`
-- **Description**: Enable Prometheus metrics
+### Development Environment
 
-### METRICS_PORT
-- **Type**: Integer
-- **Default**: `9090`
-- **Description**: Prometheus metrics port
-
-### TRACE_ENABLED
-- **Type**: Boolean
-- **Default**: `false`
-- **Description**: Enable distributed tracing
-
-## 🧪 Development Options
-
-### MOCK_MODE
-- **Type**: Boolean
-- **Default**: `false`
-- **Description**: Use mock data (no New Relic connection)
-- **Use Case**: Development and testing
-
-### DEV_MODE
-- **Type**: Boolean
-- **Default**: `false`
-- **Description**: Development mode (verbose errors)
-- **Warning**: Never use in production
-
-### DEBUG
-- **Type**: Boolean
-- **Default**: `false`
-- **Description**: Enable debug output
-
-### ENABLE_PROFILING
-- **Type**: Boolean
-- **Default**: `false`
-- **Description**: Enable pprof endpoints
-
-## 📝 Environment Examples
-
-### Minimal Development
-```env
-# .env.dev
-NEW_RELIC_API_KEY=NRAK-XXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-NEW_RELIC_ACCOUNT_ID=1234567
+```bash
+# .env.development
+NODE_ENV=development
+DEBUG=true
+CACHE_TTL_MULTIPLIER=0.5
 LOG_LEVEL=debug
-```
-### Claude Desktop Integration
-```env
-# .env.claude
-NEW_RELIC_API_KEY=NRAK-XXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-NEW_RELIC_ACCOUNT_ID=1234567
-MCP_TRANSPORT=stdio
-LOG_LEVEL=warn
-DISCOVERY_CACHE_TTL=3600s
+TELEMETRY_DISABLED=true
 ```
 
-### Production Configuration
-```env
-# .env.prod
-# New Relic
-NEW_RELIC_API_KEY=NRAK-XXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-NEW_RELIC_ACCOUNT_ID=1234567
-NEW_RELIC_REGION=US
+### Production Environment
 
-# Security
-AUTH_ENABLED=true
-JWT_SECRET=<generate-unique-value>
-API_KEY_SALT=<generate-unique-value>
-TLS_ENABLED=true
-TLS_CERT_FILE=/etc/ssl/certs/server.crt
-TLS_KEY_FILE=/etc/ssl/private/server.key
-
-# Performance
-MCP_TRANSPORT=http
-STATE_STORE=redis
-REDIS_URL=redis://redis:6379/0
-DISCOVERY_CACHE_TTL=7200s
-QUERY_CACHE_TTL=600s
-MAX_CONCURRENT_REQUESTS=500
-
-# Monitoring
+```bash
+# .env.production
+NODE_ENV=production
+DEBUG=false
+CACHE_TTL_MULTIPLIER=1.0
 LOG_LEVEL=info
-LOG_FORMAT=json
-METRICS_ENABLED=true
-TRACE_ENABLED=true
-```
-### Mock Mode Development
-```env
-# .env.mock
-MOCK_MODE=true
-LOG_LEVEL=debug
-MCP_TRANSPORT=stdio
+TELEMETRY_DISABLED=false
 ```
 
-## 🔧 Troubleshooting
+### Testing Environment
 
-### Invalid API Key
+```bash
+# .env.test
+NODE_ENV=test
+DEBUG=false
+CACHE_DISABLE=true
+DISCOVERY_CONFIDENCE_MIN=0.5
 ```
-Error: API key validation failed
+
+## Validation
+
+The server validates configuration on startup:
+
+```typescript
+// Configuration schema validation
+const ConfigSchema = z.object({
+  newrelic: z.object({
+    apiKey: z.string().min(1, "API key is required"),
+    accountId: z.string().min(1, "Account ID is required"), 
+    region: z.enum(['US', 'EU']).default('US'),
+    graphqlUrl: z.string().url().optional(),
+  }),
+  // ... additional schema validation
+});
 ```
-**Solution**: 
-- Verify key starts with "NRAK-"
-- Check key has correct permissions
-- Ensure using User key, not License key
 
-### Missing Account ID
+### Validation Errors
+
+Common validation errors and solutions:
+
+**❌ "API key is required"**
+- Set `NEW_RELIC_API_KEY` environment variable
+- Ensure the key starts with "NRAK-"
+
+**❌ "Account ID is required"**
+- Set `NEW_RELIC_ACCOUNT_ID` environment variable
+- Ensure it's a numeric value
+
+**❌ "Invalid region"**
+- Use "US" or "EU" for `NEW_RELIC_REGION`
+
+## Configuration Best Practices
+
+### 1. Use Environment Variables for Secrets
+```bash
+# ✅ Good
+export NEW_RELIC_API_KEY="NRAK-..."
+
+# ❌ Bad - don't hardcode in files
+apiKey: "NRAK-hardcoded-key"
 ```
-Error: NEW_RELIC_ACCOUNT_ID is required
+
+### 2. Tune Cache for Your Environment
+```bash
+# Large accounts with lots of entities
+export CACHE_TTL_MULTIPLIER="1.5"
+export CACHE_MAX_ENTRIES="1000"
+
+# Small accounts with frequent changes
+export CACHE_TTL_MULTIPLIER="0.5"
+export CACHE_MAX_ENTRIES="200"
 ```
-**Solution**:
-- Find in New Relic UI under Administration
-- Check URL when logged in
 
-### Connection Issues
+### 3. Enable Debug Mode for Troubleshooting
+```bash
+# Temporary debugging
+DEBUG=true npm run dev
+
+# Production debugging (logs to stderr)
+DEBUG=true node dist/index.js 2>debug.log
 ```
-Error: Failed to connect to New Relic API
+
+### 4. Monitor Cache Performance
+```typescript
+// Regular cache monitoring
+const stats = await mcp.call('cache.stats', {});
+console.log(`Cache hit rate: ${stats.hitRate}`);
+
+// Adjust TTL if hit rate is low
+if (stats.hitRate < 0.6) {
+  // Consider increasing CACHE_TTL_MULTIPLIER
+}
 ```
-**Solution**:
-- Check NEW_RELIC_REGION (US vs EU)
-- Verify network connectivity
-- Check firewall/proxy settings
 
-### Performance Issues
+## Troubleshooting Configuration
+
+### Common Issues
+
+**❌ "Configuration validation failed"**
+- Check environment variable names and values
+- Ensure required variables are set
+- Validate data types (numbers vs strings)
+
+**❌ "Cache performance issues"**
+- Monitor with `cache.stats` tool
+- Adjust `CACHE_TTL_MULTIPLIER`
+- Check memory usage
+
+**❌ "Discovery confidence too low"**
+- Reduce `DISCOVERY_CONFIDENCE_MIN`
+- Check data availability in account
+- Verify time ranges
+
+### Debug Configuration Loading
+
+```bash
+# Show configuration on startup
+DEBUG=true node dist/index.js
+
+# Should show:
+# [MCP-NR] INFO: Platform services initialized {
+#   "region": "US",
+#   "accountId": "1234567"
+# }
 ```
-Warning: High memory usage detected
-```
-**Solution**:
-- Reduce MAX_CONCURRENT_REQUESTS
-- Lower DISCOVERY_MAX_WORKERS
-- Enable caching with longer TTLs
-
-## 🛡️ Security Best Practices
-
-1. **Generate unique secrets for production**
-   ```bash
-   # Generate JWT_SECRET
-   openssl rand -base64 32
-   
-   # Generate API_KEY_SALT
-   openssl rand -base64 16
-   ```
-
-2. **Use environment-specific files**
-   - `.env.dev` for development
-   - `.env.prod` for production
-   - Never commit .env files to git
-
-3. **Enable security features in production**
-   - Always set AUTH_ENABLED=true
-   - Always set TLS_ENABLED=true
-   - Configure proper rate limiting
-
-4. **Restrict API key permissions**
-   - Only grant necessary permissions
-   - Use different keys per environment
-   - Rotate keys regularly
-
-5. **Monitor configuration**
-   - Log configuration on startup (excluding secrets)
-   - Alert on configuration changes
-   - Audit access regularly
-
-## 📚 Related Documentation
-
-- [Installation Guide](02_INSTALLATION.md) - Setup instructions
-- [Security Architecture](14_ARCHITECTURE_SECURITY.md) - Security details
-- [Operations Guide](75_OPERATIONS_MONITORING.md) - Monitoring setup
-- [Troubleshooting](79_OPERATIONS_TROUBLESHOOTING.md) - Common issues
 
 ---
 
-**Configuration Help**: Run `./mcp-server --help` for all command-line options.
+**Next**: [10_ARCHITECTURE_OVERVIEW.md](10_ARCHITECTURE_OVERVIEW.md) for architecture details

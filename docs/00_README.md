@@ -1,308 +1,167 @@
-# New Relic MCP Server
+# MCP Server New Relic: Enhanced Platform Intelligence
 
-A **Discovery-First** Model Context Protocol (MCP) server that provides AI assistants with intelligent access to New Relic observability data. Built in Go with production-grade reliability, this server enables sophisticated data exploration, analysis, and management through carefully designed tools.
+> 🚀 **Advanced MCP Server with Golden Signals Intelligence & OpenTelemetry Awareness**  
+> Built with **official `@modelcontextprotocol/sdk` + TypeScript 5.3+**  
+> **Zero Hardcoded Schemas** + **Intelligent Caching** + **Anomaly Detection**  
+> **Composite Tools** for advanced observability workflows
 
-## 🚀 Quick Links
+## Executive Summary
 
-- [Getting Started](01_GETTING_STARTED.md) - 5-minute setup guide
-- [Installation](02_INSTALLATION.md) - Detailed installation instructions
-- [Configuration](03_CONFIGURATION.md) - Configuration reference
-- [Tools Catalog](30_TOOLS_OVERVIEW.md) - Complete list of available tools
-- [Examples](50_EXAMPLES_OVERVIEW.md) - Real-world usage examples
+This Enhanced MCP Server provides sophisticated New Relic platform intelligence through composite tools, analytical metadata, and intelligent caching. The server implements a "discover-first, assume-nothing" approach with advanced capabilities for golden signals monitoring, entity comparison, and adaptive dashboard generation.
 
 ## 🎯 Key Features
 
-### Discovery-First Architecture
-- **Never assumes data structures** - Always explores your actual NRDB landscape first
-- **Intelligent data profiling** - Understands your custom attributes and event types
-- **Relationship mapping** - Discovers connections between different data sources
-- **Quality assessment** - Evaluates data completeness and reliability
+### **Composite Intelligence Tools**
+- **`discover.environment`** - One-call comprehensive environment discovery with OpenTelemetry awareness
+- **`generate.golden_dashboard`** - Intelligent dashboard generation with automatic query adaptation
+- **`compare.similar_entities`** - Performance benchmarking and outlier detection across entities
 
-### Comprehensive Tool Suite
-Provides **40+ tools** across 8 categories:
+### **Golden Signals Intelligence**
+- **Latency, Traffic, Errors, Saturation** monitoring with automatic instrumentation detection
+- **Anomaly Detection** using statistical analysis and baseline establishment
+- **Seasonality Detection** with confidence scoring
+- **Data Quality Assessment** with completeness and consistency metrics
 
-- **Discovery Tools** - Explore schemas, attributes, and relationships
-- **Query Tools** - Execute NRQL queries with adaptive optimization
-- **Alert Tools** - Create, update, and manage intelligent alerts
-- **Dashboard Tools** - Build and manage custom dashboards
-- **Analysis Tools** - Statistical analysis, anomaly detection, correlations
-- **Governance Tools** - Usage analysis, cost optimization, compliance
-- **Workflow Tools** - Orchestrate complex operations
-- **Bulk Operations** - Efficient batch processing
+### **Intelligent Caching System**
+- **Adaptive TTL** strategies based on data type and access patterns
+- **Background Refresh** for critical data
+- **Freshness Indicators** (fresh/recent/stale/expired)
+- **Cache Health Monitoring** with optimization recommendations
 
-### Production-Ready Infrastructure
-- **Multi-Transport Support** - STDIO (for Claude), HTTP, and Server-Sent Events
-- **Enterprise Security** - JWT authentication, API key management, audit logging
-- **High Performance** - Concurrent processing, intelligent caching, query optimization
-- **Resilient Design** - Circuit breakers, retries, graceful degradation
-- **Mock Mode** - Full functionality without New Relic connection for development
+## 🏗️ Architecture Highlights
 
-### AI-Optimized Design
-- **Rich Tool Metadata** - Detailed descriptions guide intelligent tool selection
-- **Contextual Examples** - Each tool includes usage examples
-- **Error Guidance** - Helpful error messages with resolution suggestions
-- **Progressive Disclosure** - Tools compose from simple to complex workflows
+- **OpenTelemetry Awareness**: Automatic detection and optimization for OTEL vs APM instrumentation
+- **Platform-Native Discovery**: Zero assumptions about data schemas or attribute names
+- **Analytical Metadata**: Rich insights with trend analysis and pattern detection
+- **Performance Optimization**: Intelligent caching with context-aware freshness strategies
 
-## 📋 Requirements
+## 📚 Documentation Index
 
-- **Go 1.21+** or **Docker**
-- **New Relic Account** with:
-  - User API Key (for authentication)
-  - Account ID
-  - Appropriate permissions for desired operations
-- **Optional**: Redis for distributed state management
+### Core Documentation (00-09)
+- **[00_README.md](00_README.md)** - This overview document
+- **[01_GETTING_STARTED.md](01_GETTING_STARTED.md)** - Quick start guide and first steps
+- **[02_INSTALLATION.md](02_INSTALLATION.md)** - Detailed installation instructions
+- **[03_CONFIGURATION.md](03_CONFIGURATION.md)** - Complete configuration reference
+
+### Architecture & Design (10-19)
+- **[10_ARCHITECTURE_OVERVIEW.md](10_ARCHITECTURE_OVERVIEW.md)** - High-level architecture and components
+- **[11_ARCHITECTURE_DISCOVERY_FIRST.md](11_ARCHITECTURE_DISCOVERY_FIRST.md)** - Discovery-first design philosophy
+- **[12_ARCHITECTURE_INTELLIGENT_CACHING.md](12_ARCHITECTURE_INTELLIGENT_CACHING.md)** - Caching strategies and freshness policies
+
+### Tools Documentation (30-39)
+- **[30_TOOLS_OVERVIEW.md](30_TOOLS_OVERVIEW.md)** - Complete tools catalog
+- **[31_TOOLS_COMPOSITE.md](31_TOOLS_COMPOSITE.md)** - Composite tools reference
+- **[32_TOOLS_ENHANCED.md](32_TOOLS_ENHANCED.md)** - Enhanced existing tools
+- **[33_TOOLS_ANALYTICS.md](33_TOOLS_ANALYTICS.md)** - Analytical and caching tools
+
+### User Guides (40-49)
+- **[40_GUIDE_QUICKSTART.md](40_GUIDE_QUICKSTART.md)** - 5-minute quickstart tutorial
+- **[41_GUIDE_GOLDEN_SIGNALS.md](41_GUIDE_GOLDEN_SIGNALS.md)** - Golden signals monitoring guide
+- **[42_GUIDE_DISCOVERY_WORKFLOWS.md](42_GUIDE_DISCOVERY_WORKFLOWS.md)** - Discovery-first workflow patterns
+
+### Examples & Workflows (50-59)
+- **[50_EXAMPLES_OVERVIEW.md](50_EXAMPLES_OVERVIEW.md)** - Example scenarios index
+- **[51_EXAMPLES_COMPOSITE_TOOLS.md](51_EXAMPLES_COMPOSITE_TOOLS.md)** - Composite tool usage examples
+
+### Testing & Quality (60-69)
+- **[60_TESTING_STRATEGY.md](60_TESTING_STRATEGY.md)** - Overall testing approach
+- **[63_TESTING_E2E.md](63_TESTING_E2E.md)** - End-to-end testing with NRDB
 
 ## 🚀 Quick Start
 
-### Option 1: Docker (Recommended)
+### 1. Installation
 ```bash
-# Clone repository
-git clone https://github.com/deepaucksharma/mcp-server-newrelic.git
+git clone <repository>
 cd mcp-server-newrelic
-
-# Configure credentials
-cp .env.example .env
-# Edit .env with your New Relic credentials
-
-# Start server
-docker-compose up -d
-
-# Verify
-curl http://localhost:8080/health
+npm install
 ```
 
-### Option 2: From Source
+### 2. Configuration
 ```bash
-# Clone and configure
-git clone https://github.com/deepaucksharma/mcp-server-newrelic.git
-cd mcp-server-newrelic
-
-# Set up environment
-cp .env.example .env
-# Edit .env with your credentials
-
-# Build
-make build
-
-# Run diagnostics
-make diagnose
-
-# Start server
-make run
+export NEW_RELIC_API_KEY="NRAK-..."
+export NEW_RELIC_ACCOUNT_ID="12345"
+export NEW_RELIC_REGION="US"  # or "EU"
 ```
 
-### Claude Desktop Integration
-Add to your `claude_desktop_config.json`:
-```json
-{
-  "mcpServers": {
-    "newrelic": {
-      "command": "docker",
-      "args": ["run", "-i", "--rm", "--env-file", ".env", "mcp-newrelic:latest"]
-    }
-  }
-}
+### 3. Usage Examples
+
+**Environment Discovery:**
+```typescript
+// Get complete environment overview
+const env = await mcp.call('discover.environment', {
+  includeHealth: true,
+  maxEntities: 50
+});
 ```
 
-## 🔍 Discovery-First Example
-
-Experience the discovery-first approach:
-
-```bash
-# 1. Discover what event types you have
-echo '{"jsonrpc":"2.0","method":"discovery.explore_event_types","id":1}' | ./bin/mcp-server
-
-# 2. Explore attributes for a specific event type
-echo '{"jsonrpc":"2.0","method":"discovery.explore_attributes","params":{"event_type":"Transaction"},"id":2}' | ./bin/mcp-server
-
-# 3. Profile a specific attribute
-echo '{"jsonrpc":"2.0","method":"discovery.profile_attribute","params":{"event_type":"Transaction","attribute":"duration"},"id":3}' | ./bin/mcp-server
-
-# 4. Query with discovered knowledge
-echo '{"jsonrpc":"2.0","method":"query_nrdb","params":{"query":"SELECT average(duration) FROM Transaction FACET appName SINCE 1 hour ago"},"id":4}' | ./bin/mcp-server
+**Golden Dashboard Generation:**
+```typescript
+// Generate adaptive golden signals dashboard
+const dashboard = await mcp.call('generate.golden_dashboard', {
+  entity_guid: 'MXxBUE18QVBQTElDQVRJT058MTIzNDU2',
+  timeframe_hours: 1,
+  create_dashboard: false  // preview first
+});
 ```
 
-## 📚 Common Use Cases
-
-### Performance Troubleshooting
-"Find the slowest transactions in the last 24 hours and analyze their patterns"
-- Uses: `discovery.explore_event_types` → `query_nrdb` → `analysis.detect_anomalies`
-
-### Infrastructure Monitoring
-"Show me hosts with high CPU usage and their associated applications"
-- Uses: `discovery.explore_attributes` → `query_nrdb` → `dashboard.create_from_discovery`
-
-### Alert Management
-"Create intelligent alerts for all my critical services based on their baselines"
-- Uses: `analysis.calculate_baseline` → `alert.create_from_baseline`
-
-### Cost Optimization
-"Analyze my data ingest patterns and suggest optimization opportunities"
-- Uses: `governance.analyze_usage` → `governance.optimize_costs`
-
-## 🏗️ Architecture
-
-The MCP server follows a modular, layered architecture:
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    MCP Clients (Claude, etc.)               │
-└─────────────────────────────────────────────────────────────┘
-                                │
-┌─────────────────────────────────────────────────────────────┐
-│                     Transport Layer                          │
-│                 (STDIO, HTTP, SSE)                          │
-├─────────────────────────────────────────────────────────────┤
-│                    Protocol Handler                          │
-│                  (JSON-RPC 2.0 + MCP)                       │
-├─────────────────────────────────────────────────────────────┤
-│                     Tool Registry                            │
-│              (40+ Registered Tools)                          │
-├─────────────────────────────────────────────────────────────┤
-│                    Core Services                             │
-│  ┌─────────────┬──────────────┬────────────┬─────────────┐ │
-│  │  Discovery  │    Query     │  Analysis  │ Governance  │ ││  │   Engine    │   Engine     │  Engine    │   Engine    │ │
-│  └─────────────┴──────────────┴────────────┴─────────────┘ │
-├─────────────────────────────────────────────────────────────┤
-│                  Infrastructure Layer                        │
-│  ┌─────────────┬──────────────┬────────────┬─────────────┐ │
-│  │    Auth     │    State     │   Cache    │   Logger    │ │
-│  │  Manager    │   Manager    │  Manager   │             │ │
-│  └─────────────┴──────────────┴────────────┴─────────────┘ │
-├─────────────────────────────────────────────────────────────┤
-│                   New Relic Client                           │
-│                    (API + NRDB)                              │
-└─────────────────────────────────────────────────────────────┘
+**Entity Performance Comparison:**
+```typescript
+// Compare similar entities for optimization opportunities
+const comparison = await mcp.call('compare.similar_entities', {
+  comparison_strategy: 'by_type',
+  entity_type: 'APPLICATION',
+  max_entities: 10
+});
 ```
 
-## 🧪 Development
+## 🎨 Key Design Principles
 
-### Mock Mode
-Run without New Relic connection for development:
-```bash
-make run-mock
+1. **Discover-First, Assume-Nothing**: All schemas and patterns discovered at runtime
+2. **Composite Intelligence**: High-level tools that combine multiple operations
+3. **OpenTelemetry Awareness**: Automatic adaptation for modern instrumentation
+4. **Analytical Depth**: Rich metadata with anomaly detection and trends
+5. **Performance Optimization**: Intelligent caching with adaptive freshness
+6. **AI-Optimized**: Tools designed for LLM agent workflows
+
+## 🛠️ Technology Stack
+
+```yaml
+Runtime: Node.js 20+ / Bun 1.0+
+Language: TypeScript 5.3+
+MCP SDK: @modelcontextprotocol/sdk 1.0+
+GraphQL: NerdGraph API integration
+Caching: Intelligent memory cache with adaptive TTL
+Analytics: Statistical analysis and anomaly detection
+Testing: Vitest + comprehensive E2E testing
 ```
 
-### Running Tests
-```bash
-# Unit tests
-make test
+## 📊 Enhanced Capabilities
 
-# Integration tests
-make test-integration
+### **Golden Signals Intelligence Engine**
+- Automatic instrumentation detection (OpenTelemetry vs APM)
+- Statistical analysis with baseline establishment
+- Anomaly detection with confidence scoring
+- Trend analysis and seasonality detection
 
-# E2E tests
-make test-e2e
+### **Intelligent Caching System**
+- Context-aware TTL strategies
+- Background refresh for critical data
+- Cache health monitoring and optimization
+- Memory usage optimization with LRU eviction
 
-# All tests
-make test-all
-```
+### **Composite Tool Architecture**
+- High-level workflows combining multiple operations
+- Intelligent error handling and fallback strategies
+- Rich metadata for LLM agent decision-making
+- Performance optimization with parallel execution
 
-### Adding New Tools
-See [Contributing Tools Guide](87_CONTRIBUTING_TOOLS.md) for detailed instructions.
+## 🔗 Related Resources
 
-## 📖 Documentation Index
-
-### Core Documentation (00-09)
-- [Getting Started](01_GETTING_STARTED.md) - Quick start guide
-- [Installation](02_INSTALLATION.md) - Detailed setup instructions
-- [Configuration](03_CONFIGURATION.md) - Configuration reference
-- [Concepts](04_CONCEPTS.md) - Core concepts explained
-- [Features](05_FEATURES.md) - Feature overview
-- [Requirements](06_REQUIREMENTS.md) - System requirements
-- [Changelog](07_CHANGELOG.md) - Version history
-- [Roadmap](08_ROADMAP.md) - Future plans
-- [FAQ](09_FAQ.md) - Frequently asked questions
-
-### Architecture & Design (10-19)
-- [Architecture Overview](10_ARCHITECTURE_OVERVIEW.md) - System design
-- [Discovery-First Design](11_ARCHITECTURE_DISCOVERY_FIRST.md) - Discovery philosophy
-- [State Management](12_ARCHITECTURE_STATE_MANAGEMENT.md) - State and caching
-- [Transport Layers](13_ARCHITECTURE_TRANSPORT_LAYERS.md) - STDIO, HTTP, SSE
-
-### API & Tools (20-39)
-- [API Overview](20_API_OVERVIEW.md) - API structure
-- [Tools Overview](30_TOOLS_OVERVIEW.md) - Complete tool catalog
-- [Discovery Tools](31_TOOLS_DISCOVERY.md) - Discovery tool reference
-- [Query Tools](32_TOOLS_QUERY.md) - Query tool reference
-
-### User Guides & Examples (40-59)
-- [Quick Start Guide](40_GUIDE_QUICKSTART.md) - 5-minute tutorial
-- [Claude Integration](41_GUIDE_CLAUDE_INTEGRATION.md) - Claude Desktop setup
-- [Discovery Workflows](43_GUIDE_DISCOVERY_WORKFLOWS.md) - Discovery patterns
-- [Examples Overview](50_EXAMPLES_OVERVIEW.md) - Example scenarios
-
-### Development & Operations (60-89)
-- [Testing Strategy](60_TESTING_STRATEGY.md) - Testing approach
-- [Deployment Overview](70_DEPLOYMENT_OVERVIEW.md) - Deployment options
-- [Development Setup](80_DEVELOPMENT_SETUP.md) - Dev environment
-- [Contributing](86_CONTRIBUTING.md) - Contribution guide
-
-## 🤝 Contributing
-
-We welcome contributions! See our [Contributing Guide](86_CONTRIBUTING.md) for:
-- Development setup
-- Coding standards
-- Testing requirements
-- Pull request process
-
-## 📊 Project Status
-
-### ✅ Current Implementation
-- Core MCP protocol with multi-transport support
-- 40+ production-ready tools across 8 categories
-- Discovery engine with intelligent data exploration
-- Advanced query optimization and caching
-- Comprehensive error handling and resilience
-- Mock mode for development and testing
-
-### 🚧 In Progress
-- Kubernetes deployment manifests
-- Advanced caching strategies
-- Distributed state management
-- Additional analysis algorithms
-
-### 🗺️ Roadmap
-See [Project Roadmap](08_ROADMAP.md) for detailed future plans.
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-**Authentication Failed**
-- Verify your API key has necessary permissions
-- Check account ID is correct
-- Ensure API key type matches configuration
-
-**No Data Returned**
-- Verify data exists in the specified time range
-- Check event type names are correct (case-sensitive)
-- Use discovery tools to explore available data
-
-**Performance Issues**
-- Enable caching for repeated queries
-- Use time range filters to limit data
-- Consider bulk operations for multiple queries
-
-See [Troubleshooting Guide](79_OPERATIONS_TROUBLESHOOTING.md) for comprehensive solutions.
-
-## 📞 Support
-
-- **Issues**: [GitHub Issues](https://github.com/deepaucksharma/mcp-server-newrelic/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/deepaucksharma/mcp-server-newrelic/discussions)
-- **Documentation**: This repository's `/docs` folder
-- **Community**: [MCP Discord](https://discord.gg/mcp-community)
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](../LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- Built on the [Model Context Protocol](https://modelcontextprotocol.org/) specification
-- Powered by [New Relic](https://newrelic.com/) APIs
-- Inspired by the AI community's need for better observability tools
+- **New Relic Documentation**: [docs.newrelic.com](https://docs.newrelic.com)
+- **MCP Protocol**: [modelcontextprotocol.io](https://modelcontextprotocol.io)
+- **OpenTelemetry**: [opentelemetry.io](https://opentelemetry.io)
 
 ---
 
-For detailed information on any topic, explore our comprehensive documentation using the index above.
+**License**: MIT  
+**Code of Conduct**: We welcome all contributors following our discovery-first philosophy.
