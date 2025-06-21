@@ -196,6 +196,7 @@ NEW_RELIC_REGION=US  # or EU (both regions supported)
 # Optional: New Relic APM (for monitoring the server itself)
 NEW_RELIC_LICENSE_KEY=your-license-key
 NEW_RELIC_APP_NAME=mcp-server-newrelic
+NEW_RELIC_MONITOR_MODE=true
 
 # Server Configuration
 MCP_TRANSPORT=stdio  # stdio, http, or sse

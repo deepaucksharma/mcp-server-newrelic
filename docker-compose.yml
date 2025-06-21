@@ -62,6 +62,7 @@ services:
       - NEW_RELIC_ACCOUNT_ID=${NEW_RELIC_ACCOUNT_ID}
       - NEW_RELIC_LICENSE_KEY=${NEW_RELIC_LICENSE_KEY}
       - NEW_RELIC_APP_NAME=${NEW_RELIC_APP_NAME:-mcp-server-newrelic}
+      - NEW_RELIC_MONITOR_MODE=${NEW_RELIC_MONITOR_MODE:-true}
       - NEW_RELIC_REGION=${NEW_RELIC_REGION:-US}
       - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-mcp-server-newrelic}
       # Server Configuration
