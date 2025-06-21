@@ -3,11 +3,10 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
-
-	"github.com/deepaucksharma/mcp-server-newrelic/pkg/newrelic"
 )
 
 // handleDiscoveryExploreAttributes discovers attributes for an event type
@@ -38,11 +37,7 @@ func (s *Server) handleDiscoveryExploreAttributesImpl(ctx context.Context, param
 		return s.getMockData("discovery.explore_attributes", params), nil
 	}
 
-	// Cast to proper client type
-	client, ok := s.nrClient.(*newrelic.Client)
-	if !ok {
-		return nil, fmt.Errorf("invalid New Relic client type")
-	}
+	// No need to get client directly - we'll use executeNRQLQuery
 
 	// Step 1: Get sample events to extract keyset
 	keysetQuery := fmt.Sprintf(`
@@ -52,15 +47,36 @@ func (s *Server) handleDiscoveryExploreAttributesImpl(ctx context.Context, param
 		SINCE 1 hour ago
 	`, eventType, int(sampleSize))
 
-	keysetResult, err := client.QueryNRQL(ctx, keysetQuery)
+	keysetResult, err := s.executeNRQLQuery(ctx, keysetQuery, "")
 	if err != nil {
 		return nil, fmt.Errorf("failed to query keyset: %w", err)
 	}
 
 	// Extract unique attributes from all samples
 	attributeMap := make(map[string]bool)
-	if keysetResult != nil && len(keysetResult.Results) > 0 {
-		results := keysetResult.Results
+	
+	// Handle the result based on type (similar to tools_discovery_event_types.go)
+	var results []map[string]interface{}
+	switch v := keysetResult.(type) {
+	case map[string]interface{}:
+		if r, ok := v["results"].([]map[string]interface{}); ok {
+			results = r
+		}
+	default:
+		// Use reflection for *newrelic.NRQLResult
+		resultValue := reflect.ValueOf(keysetResult)
+		if resultValue.Kind() == reflect.Ptr {
+			resultValue = resultValue.Elem()
+		}
+		resultsField := resultValue.FieldByName("Results")
+		if resultsField.IsValid() {
+			if r, ok := resultsField.Interface().([]map[string]interface{}); ok {
+				results = r
+			}
+		}
+	}
+	
+	if len(results) > 0 {
 		for _, result := range results {
 			res := result
 			if keyset, ok := res["keyset"].([]interface{}); ok {
@@ -100,16 +116,39 @@ func (s *Server) handleDiscoveryExploreAttributesImpl(ctx context.Context, param
 				SINCE 1 hour ago
 			`, attr, attr, eventType, int(sampleSize))
 
-			detailResult, err := client.QueryNRQL(ctx, detailQuery)
-			if err == nil && detailResult != nil && len(detailResult.Results) > 0 {
-				res := detailResult.Results[0]
+			detailResult, err := s.executeNRQLQuery(ctx, detailQuery, "")
+			if err == nil && detailResult != nil {
+				// Parse result
+				var detailResults []map[string]interface{}
+				switch v := detailResult.(type) {
+				case map[string]interface{}:
+					if r, ok := v["results"].([]map[string]interface{}); ok {
+						detailResults = r
+					}
+				default:
+					// Use reflection for *newrelic.NRQLResult
+					resultValue := reflect.ValueOf(detailResult)
+					if resultValue.Kind() == reflect.Ptr {
+						resultValue = resultValue.Elem()
+					}
+					resultsField := resultValue.FieldByName("Results")
+					if resultsField.IsValid() {
+						if r, ok := resultsField.Interface().([]map[string]interface{}); ok {
+							detailResults = r
+						}
+					}
+				}
+				
+				if len(detailResults) > 0 {
+					res := detailResults[0]
 				total := getFloat64(res, "total")
 				nonNull := getFloat64(res, "nonNullCount")
 				cardinality := getFloat64(res, "cardinality")
 
-				if showCoverage && total > 0 {
-					detail["coverage"] = nonNull / total
-					detail["cardinality"] = int(cardinality)
+					if showCoverage && total > 0 {
+						detail["coverage"] = nonNull / total
+						detail["cardinality"] = int(cardinality)
+					}
 				}
 			}
 
@@ -123,11 +162,34 @@ func (s *Server) handleDiscoveryExploreAttributesImpl(ctx context.Context, param
 					SINCE 1 hour ago
 				`, attr, eventType, attr)
 
-				exampleResult, err := client.QueryNRQL(ctx, exampleQuery)
-				if err == nil && exampleResult != nil && len(exampleResult.Results) > 0 {
-					res := exampleResult.Results[0]
-					if examples, ok := res["examples"].([]interface{}); ok {
-						detail["examples"] = examples
+				exampleResult, err := s.executeNRQLQuery(ctx, exampleQuery, "")
+				if err == nil && exampleResult != nil {
+					// Parse result
+					var exampleResults []map[string]interface{}
+					switch v := exampleResult.(type) {
+					case map[string]interface{}:
+						if r, ok := v["results"].([]map[string]interface{}); ok {
+							exampleResults = r
+						}
+					default:
+						// Use reflection for *newrelic.NRQLResult
+						resultValue := reflect.ValueOf(exampleResult)
+						if resultValue.Kind() == reflect.Ptr {
+							resultValue = resultValue.Elem()
+						}
+						resultsField := resultValue.FieldByName("Results")
+						if resultsField.IsValid() {
+							if r, ok := resultsField.Interface().([]map[string]interface{}); ok {
+								exampleResults = r
+							}
+						}
+					}
+					
+					if len(exampleResults) > 0 {
+						res := exampleResults[0]
+						if examples, ok := res["examples"].([]interface{}); ok {
+							detail["examples"] = examples
+						}
 					}
 				}
 			}

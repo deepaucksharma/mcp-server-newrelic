@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 )
 
@@ -47,14 +48,52 @@ func (s *Server) handleDiscoveryExploreEventTypes(ctx context.Context, params ma
 		return nil, fmt.Errorf("failed to discover event types: %w", err)
 	}
 
-	// Parse the results
-	nrqlResult, ok := result.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("unexpected result format")
+	// Parse the results based on the type returned by executeNRQLQuery
+	var results []map[string]interface{}
+	
+	// Handle both direct map result (from mock) and *newrelic.NRQLResult (from real API)
+	switch v := result.(type) {
+	case map[string]interface{}:
+		// Mock result format
+		if r, ok := v["results"].([]map[string]interface{}); ok {
+			results = r
+		} else {
+			return nil, fmt.Errorf("no results found in response")
+		}
+	case interface{ GetResults() []map[string]interface{} }:
+		// Real NRQLResult has a GetResults method or Results field
+		// Use reflection to access Results field
+		resultValue := reflect.ValueOf(result)
+		if resultValue.Kind() == reflect.Ptr {
+			resultValue = resultValue.Elem()
+		}
+		resultsField := resultValue.FieldByName("Results")
+		if resultsField.IsValid() {
+			if r, ok := resultsField.Interface().([]map[string]interface{}); ok {
+				results = r
+			}
+		}
+	default:
+		// Try direct reflection as last resort for *newrelic.NRQLResult
+		resultValue := reflect.ValueOf(result)
+		if resultValue.Kind() == reflect.Ptr && !resultValue.IsNil() {
+			resultValue = resultValue.Elem()
+			resultsField := resultValue.FieldByName("Results")
+			if resultsField.IsValid() && resultsField.Kind() == reflect.Slice {
+				if r, ok := resultsField.Interface().([]map[string]interface{}); ok {
+					results = r
+				} else {
+					return nil, fmt.Errorf("Results field has unexpected type: %T", resultsField.Interface())
+				}
+			} else {
+				return nil, fmt.Errorf("no Results field found in %T", result)
+			}
+		} else {
+			return nil, fmt.Errorf("unexpected result format: got %T", result)
+		}
 	}
-
-	results, ok := nrqlResult["results"].([]map[string]interface{})
-	if !ok {
+	
+	if results == nil {
 		return nil, fmt.Errorf("no results found")
 	}
 

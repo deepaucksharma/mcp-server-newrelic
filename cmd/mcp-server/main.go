@@ -66,9 +66,13 @@ func main() {
 
 	// Create MCP server
 	mcpConfig := mcp.ServerConfig{
-		TransportType: mcp.TransportType(cfg.Server.MCPTransport),
-		HTTPHost:      cfg.Server.Host,
-		HTTPPort:      *port,
+		TransportType:    mcp.TransportType(cfg.Server.MCPTransport),
+		HTTPHost:         cfg.Server.Host,
+		HTTPPort:         *port,
+		RequestTimeout:   30 * time.Second,  // Default 30 second timeout
+		MaxConcurrent:    10,
+		StreamingEnabled: true,
+		MockMode:         *mockMode,
 	}
 	
 	server := mcp.NewServer(mcpConfig)

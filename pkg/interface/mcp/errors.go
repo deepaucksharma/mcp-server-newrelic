@@ -92,6 +92,7 @@ func NewParseError(message string) *MCPError {
 		Type:    ErrorTypeParseError,
 		Code:    ParseErrorCode,
 		Message: message,
+		Details: make(map[string]interface{}),
 	}
 }
 
@@ -161,6 +162,7 @@ func NewTimeoutError(toolName string, timeout time.Duration) *MCPError {
 		Message:  fmt.Sprintf("Tool execution timed out after %v", timeout),
 		ToolName: toolName,
 		Hint:     "Try reducing the query complexity or time range",
+		Details:  make(map[string]interface{}),
 	}
 }
 
@@ -307,6 +309,7 @@ func WrapError(err error, errorType ErrorType, toolName string) *MCPError {
 		Code:     InternalErrorCode,
 		Message:  err.Error(),
 		ToolName: toolName,
+		Details:  make(map[string]interface{}),
 	}
 }
 
