@@ -4,7 +4,7 @@
 
 **Key Features:**
 - 🔍 **Discovery-First**: Never assumes data structures, always explores first
-- 🧩 **120+ Granular Tools** *(Planned - Currently ~10-15)*: Atomic operations that compose into workflows
+- 🧩 **70+ Granular Tools**: Atomic operations for discovery, query, action, and workflow tasks *(analysis and governance still in progress)*
 - 🚀 **Production-Ready**: Built in Go with resilience, caching, and monitoring
 - 🤖 **AI-Optimized**: Rich metadata guides intelligent tool usage
 - 🔄 **Multi-Transport**: STDIO, HTTP, and SSE support
@@ -108,12 +108,12 @@ echo '{"jsonrpc":"2.0","method":"discovery.explore_event_types","id":1}' | ./bin
 
 ### Technical Capabilities
 - **Full MCP Compliance**: Implements MCP DRAFT-2025 specification with JSON-RPC 2.0
-- **100+ Granular Tools** *(Goal - Currently ~10-15 basic tools)*: Atomic tools design for sophisticated workflows
+- **70+ Granular Tools** *(goal is 120+)*: Atomic tools for discovery, query, action and workflows; analysis and governance still maturing
 - **Workflow Orchestration**: Sequential, parallel, conditional, and saga patterns
 - **Production-Ready**: Built-in resilience with circuit breakers, retries, and rate limiting
 - **Flexible Deployment**: Support for STDIO, HTTP, and SSE transports
 - **State Management**: Session tracking with pluggable storage (Memory/Redis)
-- **Mock Mode**: Comprehensive development mode with realistic responses for all 100+ tools without New Relic connection
+- **Mock Mode**: Development mode with realistic responses for all implemented tools
 - **Cross-Account Support**: Query and manage resources across multiple New Relic accounts without reconfiguration
 
 ## 🎯 Why Discovery-First?
@@ -128,15 +128,15 @@ Traditional tools fail when they assume data structures exist. Our discovery-fir
 
 ## 🛠️ Tool Categories
 
-The server is designed for 120+ granular tools across categories:
+The server currently exposes around 70 tools across categories (with more planned):
 
-- **Discovery Tools**: Basic event type exploration *(limited implementation)*
-- **Query Tools**: Basic NRQL execution *(no validation or dynamic building yet)*
-- **Analysis Tools**: *Not yet implemented* - Will detect anomalies, correlations, trends
-- **Action Tools**: *Not yet implemented* - Will create dashboards, alerts, configurations
-- **Governance Tools**: *Not yet implemented* - Will analyze usage, costs, resources
+- **Discovery Tools**: Event type and attribute exploration
+- **Query Tools**: NRQL execution and helper utilities *(dynamic building still evolving)*
+- **Analysis Tools**: Early support for baselines and anomaly detection *(incomplete)*
+- **Action Tools**: Dashboard and alert management *(additional features planned)*
+- **Governance Tools**: Usage analysis and audit utilities *(incomplete)*
 
-**Current Status**: Only basic discovery and query tools are functional. See [Implementation Gaps](docs/IMPLEMENTATION_GAPS_ANALYSIS.md) for details.
+**Current Status**: Discovery, query, and workflow tools work today. Analysis and governance categories remain incomplete. See [Implementation Gaps](docs/IMPLEMENTATION_GAPS_ANALYSIS.md) for details.
 
 Example discovery-first workflow (partially implemented):
 ```json
