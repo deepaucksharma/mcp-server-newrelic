@@ -3,7 +3,6 @@ package e2e
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"testing"
 	"time"
 
@@ -26,8 +25,8 @@ type BenchmarkResult struct {
 	ThroughputRPS float64
 }
 
-// TestPerformanceBenchmarks runs performance benchmarks against real New Relic API
-func TestPerformanceBenchmarks(t *testing.T) {
+// TestMCPPerformanceBenchmarks runs performance benchmarks against real New Relic API
+func TestMCPPerformanceBenchmarks(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping performance benchmarks in short mode")
 	}

@@ -251,7 +251,7 @@ make test-benchmarks
 
 ### Quick Links
 - **[Documentation Index](./docs/README.md)** - Complete documentation listing
-- **[Development Guide](./docs/DEVELOPMENT.md)** - Contributing guidelines
+- **[Development Guide](./docs/guides/development.md)** - Contributing guidelines
 - **[Roadmap 2025](./ROADMAP_2025.md)** - Development roadmap
 
 ## 🚀 Deployment
@@ -283,7 +283,7 @@ kubectl create secret generic newrelic-creds \
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our [Development Guide](./docs/DEVELOPMENT.md) for:
+We welcome contributions! Please see our [Development Guide](./docs/guides/development.md) for:
 - Code style guidelines
 - Testing requirements
 - Pull request process

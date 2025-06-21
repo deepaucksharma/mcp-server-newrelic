@@ -18,7 +18,7 @@ We're building more than tools—we're creating an **ecosystem** where:
 These documents establish our foundational thinking:
 
 - **[NO_ASSUMPTIONS_MANIFESTO.md](philosophy/NO_ASSUMPTIONS_MANIFESTO.md)** - Our radical commitment to zero assumptions
-- **[DISCOVERY_PHILOSOPHY.md](philosophy/DISCOVERY_PHILOSOPHY.md)** - The deep philosophical foundations
+- **[Discovery-First Architecture](discovery-first.md)** - The deep philosophical foundations
 - **[DISCOVERY_FIRST_ARCHITECTURE.md](architecture/discovery-first.md)** - How philosophy becomes architecture
 
 **Key Insight**: We treat every system as unique and let it reveal itself rather than imposing our assumptions.
@@ -27,11 +27,11 @@ These documents establish our foundational thinking:
 
 These documents show how we build the technology:
 
-- **[TECHNICAL_PLATFORM_SPEC.md](TECHNICAL_PLATFORM_SPEC.md)** - Unified build-ready blueprint
+- **[Technical Platform Spec](../technical/platform-spec.md)** - Unified build-ready blueprint
 - **[ZERO_ASSUMPTIONS_EXAMPLES.md](philosophy/ZERO_ASSUMPTIONS_EXAMPLES.md)** - Real code that assumes nothing
 - **[DISCOVERY_FIRST_CODE_EXAMPLE.md](examples/DISCOVERY_FIRST_CODE_EXAMPLE.md)** - Concrete implementation patterns
 - **[API_REFERENCE.md](api/reference.md)** - All 120+ granular tools documented
-- **[ARCHITECTURE_COMPLETE.md](ARCHITECTURE_COMPLETE.md)** - Comprehensive system architecture
+- **[Complete Architecture Reference](complete-reference.md)** - Comprehensive system architecture
 
 **Key Pattern**: Every tool discovers before acting, adapts to findings, and explains its reasoning.
 
@@ -83,9 +83,9 @@ These documents address enterprise needs:
 
 These documents guide the transformation:
 
-- **[REFACTORING_GUIDE.md](REFACTORING_GUIDE.md)** - 10-week implementation plan
-- **[MIGRATION_GUIDE.md](MIGRATION_GUIDE.md)** - Moving from assumptions to discovery
-- **[DEVELOPMENT.md](DEVELOPMENT.md)** - Developer workflow
+- **[Refactoring Guide](../guides/refactoring.md)** - 10-week implementation plan
+- **[Migration Guide](../guides/migration.md)** - Moving from assumptions to discovery
+- **[Development Guide](../guides/development.md)** - Developer workflow
 - **[Deployment Guide](guides/deployment.md)** - Production rollout
 
 **Key Approach**: Incremental transformation with immediate value at each step.
@@ -291,7 +291,7 @@ Create an observability ecosystem where:
 ## 📖 Continue Your Journey
 
 - Start with **[Quick Start Guide](../guides/quickstart.md)** for immediate value
-- Explore **[DISCOVERY_PHILOSOPHY.md](docs/DISCOVERY_PHILOSOPHY.md)** to understand why
+- Explore **[Discovery-First Architecture](discovery-first.md)** to understand why
 - Try **[INTERACTIVE_DISCOVERY_EXPERIENCES.md](docs/INTERACTIVE_DISCOVERY_EXPERIENCES.md)** to learn by doing
 - Read **[WOW_EXPERIENCE_SUMMARY.md](docs/WOW_EXPERIENCE_SUMMARY.md)** to create magic
 
