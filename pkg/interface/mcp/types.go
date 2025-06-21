@@ -50,14 +50,6 @@ type Tool struct {
 	Metadata      *ToolMetadata // Enhanced metadata for AI guidance
 }
 
-// EnhancedTool extends Tool with additional metadata
-type EnhancedTool struct {
-	Tool
-	Category    string                 `json:"category"`
-	Safety      string                 `json:"safety"`
-	Performance map[string]interface{} `json:"performance"`
-	Examples    []string               `json:"examples"`
-}
 
 type ToolParameters struct {
 	Type       string               `json:"type"`
@@ -159,17 +151,3 @@ type SessionManager interface {
 	GetClientInfo(id string) interface{}
 }
 
-// Cache interface for caching tool results
-type Cache interface {
-	Get(key string) (interface{}, bool)
-	Set(key string, value interface{}, ttl time.Duration)
-	Delete(key string)
-	Clear()
-}
-
-// Metrics interface for tracking performance
-type Metrics interface {
-	RecordToolExecution(toolName string, duration time.Duration, success bool)
-	RecordRequest(method string, duration time.Duration)
-	GetStats() map[string]interface{}
-}

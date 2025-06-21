@@ -30,4 +30,7 @@ type Metrics interface {
 	
 	// RecordGauge records a gauge metric
 	RecordGauge(name string, value float64, tags map[string]string)
+	
+	// RecordToolExecution records a tool execution
+	RecordToolExecution(toolName string, duration time.Duration, success bool)
 }

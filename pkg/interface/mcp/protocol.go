@@ -433,7 +433,7 @@ func (h *ProtocolHandler) handleStreamingToolCall(ctx context.Context, execCtx *
 		var results []interface{}
 		for chunk := range stream {
 			if chunk.Error != nil {
-				return h.errorResponse(execCtx.RequestID, InternalError, chunk.Error.Error(), nil)
+				return h.errorResponse(execCtx.RequestID, InternalErrorCode, chunk.Error.Error(), nil)
 			}
 			if chunk.Type == "result" || chunk.Type == "complete" {
 				results = append(results, chunk.Data)
@@ -517,12 +517,12 @@ func (h *ProtocolHandler) handleSessionGet(ctx context.Context, req Request) ([]
 	}
 	
 	if err := json.Unmarshal(req.Params, &params); err != nil {
-		return h.errorResponse(req.ID, InvalidParams, "Invalid parameters", err)
+		return h.errorResponse(req.ID, InvalidParamsCode, "Invalid parameters", err)
 	}
 	
 	session, exists := h.server.sessions.Get(params.SessionID)
 	if !exists {
-		return h.errorResponse(req.ID, InvalidParams, "Session not found", nil)
+		return h.errorResponse(req.ID, InvalidParamsCode, "Session not found", nil)
 	}
 	
 	result := map[string]interface{}{
@@ -660,7 +660,7 @@ func (h *ProtocolHandler) getToolCompletions(tool *Tool, argName, value string) 
 	// If enum is defined, return enum values
 	if len(prop.Enum) > 0 {
 		for _, enumVal := range prop.Enum {
-			if value == "" || contains(enumVal, value) {
+			if value == "" || strings.Contains(enumVal, value) {
 				completions = append(completions, map[string]interface{}{
 					"value": enumVal,
 					"label": enumVal,
@@ -718,9 +718,6 @@ func formatToolResult(result interface{}) string {
 	return string(bytes)
 }
 
-func contains(str, substr string) bool {
-	return len(substr) > 0 && len(str) >= len(substr) && str[:len(substr)] == substr
-}
 
 // Additional helper methods for enhanced protocol
 
@@ -735,7 +732,7 @@ func (h *ProtocolHandler) untrackRequest(id interface{}) {
 
 func (h *ProtocolHandler) cancelRequest(id interface{}) {
 	// TODO: Implement request cancellation
-	if execCtx, ok := h.requests.Load(id); ok {
+	if _, ok := h.requests.Load(id); ok {
 		// Cancel the context if possible
 		logger.Debug("Cancelling request: %v", id)
 		h.requests.Delete(id)
@@ -792,7 +789,7 @@ func (h *ProtocolHandler) executeToolWithInstrumentation(ctx context.Context, ex
 	
 	// Check cache if applicable
 	if cache, ok := h.server.getCache(); ok && !params.NoCache {
-		if cached, exists := cache.Get(h.getCacheKey(params)); exists {
+		if cached, exists := cache.Get(ctx, h.getCacheKey(params)); exists {
 			execCtx.Metadata["cached"] = true
 			return cached, nil
 		}
@@ -804,7 +801,7 @@ func (h *ProtocolHandler) executeToolWithInstrumentation(ctx context.Context, ex
 	// Cache successful results
 	if err == nil {
 		if cache, ok := h.server.getCache(); ok {
-			cache.Set(h.getCacheKey(params), result, 5*time.Minute)
+			cache.Set(ctx, h.getCacheKey(params), result, 5*time.Minute)
 		}
 	}
 	

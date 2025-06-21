@@ -304,7 +304,7 @@ func (c *Client) SearchDashboards(ctx context.Context, searchTerm string) ([]Das
 	`
 	
 	// Build search query
-	searchQuery := fmt.Sprintf("accountId = %d AND type = 'DASHBOARD' AND name LIKE '%%%s%%'", 
+	searchQuery := fmt.Sprintf("accountId = %s AND type = 'DASHBOARD' AND name LIKE '%%%s%%'", 
 		c.accountID, searchTerm)
 	
 	variables := map[string]interface{}{

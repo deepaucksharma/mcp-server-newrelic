@@ -59,10 +59,8 @@ func NewAssessor(config Config) *Assessor {
 // AssessSchema performs comprehensive quality assessment
 func (a *Assessor) AssessSchema(ctx context.Context, schema discovery.Schema, sample discovery.DataSample) discovery.QualityReport {
 	report := discovery.QualityReport{
-		SchemaName:    schema.Name,
-		AssessmentTime: time.Now(),
-		SampleSize:    sample.SampleSize,
-		TimeRange:     sample.TimeRange,
+		SchemaName: schema.Name,
+		Timestamp:  time.Now(),
 	}
 	
 	// Assess each quality dimension
@@ -82,18 +80,17 @@ func (a *Assessor) AssessSchema(ctx context.Context, schema discovery.Schema, sa
 	report.Recommendations = a.generateRecommendations(report.Issues)
 	
 	// Add ML predictions if available
-	if a.shouldUsePredictions() {
-		report.Predictions = a.generatePredictions(schema, report)
-	}
+	// TODO: Implement predictions when QualityReport supports it
+	// if a.shouldUsePredictions() {
+	//     report.Predictions = a.generatePredictions(schema, report)
+	// }
 	
 	return report
 }
 
 // assessCompleteness measures data completeness
-func (a *Assessor) assessCompleteness(schema discovery.Schema, sample discovery.DataSample) discovery.QualityDimension {
-	dim := discovery.QualityDimension{
-		Name: "Completeness",
-	}
+func (a *Assessor) assessCompleteness(schema discovery.Schema, sample discovery.DataSample) discovery.DimensionScore {
+	dim := discovery.DimensionScore{}
 	
 	// Calculate null/missing value ratio for each attribute
 	attributeScores := make(map[string]float64)
@@ -129,21 +126,15 @@ func (a *Assessor) assessCompleteness(schema discovery.Schema, sample discovery.
 		}
 	}
 	
-	dim.Details = map[string]interface{}{
-		"missing_values":     missingCount,
-		"total_fields":       totalFields,
-		"attribute_scores":   attributeScores,
-		"problematic_fields": issues,
-	}
+	dim.Details = fmt.Sprintf("Missing values: %d/%d, Problematic fields: %d", 
+		missingCount, totalFields, len(issues))
 	
 	return dim
 }
 
 // assessConsistency measures data consistency
-func (a *Assessor) assessConsistency(schema discovery.Schema, sample discovery.DataSample) discovery.QualityDimension {
-	dim := discovery.QualityDimension{
-		Name: "Consistency",
-	}
+func (a *Assessor) assessConsistency(schema discovery.Schema, sample discovery.DataSample) discovery.DimensionScore {
+	dim := discovery.DimensionScore{}
 	
 	inconsistencies := 0
 	totalChecks := 0
@@ -177,20 +168,15 @@ func (a *Assessor) assessConsistency(schema discovery.Schema, sample discovery.D
 		dim.Score = 1.0
 	}
 	
-	dim.Details = map[string]interface{}{
-		"inconsistencies": inconsistencies,
-		"total_checks":    totalChecks,
-		"check_types":     []string{"format_consistency", "numeric_ranges"},
-	}
+	dim.Details = fmt.Sprintf("Inconsistencies: %d/%d checks, Types: format_consistency, numeric_ranges",
+		inconsistencies, totalChecks)
 	
 	return dim
 }
 
 // assessTimeliness measures data freshness
-func (a *Assessor) assessTimeliness(schema discovery.Schema, sample discovery.DataSample) discovery.QualityDimension {
-	dim := discovery.QualityDimension{
-		Name: "Timeliness",
-	}
+func (a *Assessor) assessTimeliness(schema discovery.Schema, sample discovery.DataSample) discovery.DimensionScore {
+	dim := discovery.DimensionScore{}
 	
 	// Find timestamp attribute
 	var timestampAttr *discovery.Attribute
@@ -204,9 +190,7 @@ func (a *Assessor) assessTimeliness(schema discovery.Schema, sample discovery.Da
 	
 	if timestampAttr == nil {
 		dim.Score = 0.5 // Can't assess without timestamp
-		dim.Details = map[string]interface{}{
-			"error": "No timestamp attribute found",
-		}
+		dim.Details = "Error: No timestamp attribute found"
 		return dim
 	}
 	
@@ -247,21 +231,15 @@ func (a *Assessor) assessTimeliness(schema discovery.Schema, sample discovery.Da
 		dim.Score = float64(a.config.TimelinessThreshold) / float64(avgDelay)
 	}
 	
-	dim.Details = map[string]interface{}{
-		"average_delay": avgDelay.String(),
-		"max_delay":     maxDelay.String(),
-		"threshold":     a.config.TimelinessThreshold.String(),
-		"sample_count":  len(delays),
-	}
+	dim.Details = fmt.Sprintf("Avg delay: %s, Max delay: %s, Threshold: %s, Samples: %d",
+		avgDelay, maxDelay, a.config.TimelinessThreshold, len(delays))
 	
 	return dim
 }
 
 // assessUniqueness measures duplicate detection
-func (a *Assessor) assessUniqueness(schema discovery.Schema, sample discovery.DataSample) discovery.QualityDimension {
-	dim := discovery.QualityDimension{
-		Name: "Uniqueness",
-	}
+func (a *Assessor) assessUniqueness(schema discovery.Schema, sample discovery.DataSample) discovery.DimensionScore {
+	dim := discovery.DimensionScore{}
 	
 	// Find potential unique identifiers
 	uniqueAttrs := []string{}
@@ -274,9 +252,7 @@ func (a *Assessor) assessUniqueness(schema discovery.Schema, sample discovery.Da
 	
 	if len(uniqueAttrs) == 0 {
 		dim.Score = 1.0 // No unique constraints to check
-		dim.Details = map[string]interface{}{
-			"note": "No identifier attributes found",
-		}
+		dim.Details = "Note: No identifier attributes found"
 		return dim
 	}
 	
@@ -306,20 +282,15 @@ func (a *Assessor) assessUniqueness(schema discovery.Schema, sample discovery.Da
 		dim.Score = 1.0
 	}
 	
-	dim.Details = map[string]interface{}{
-		"unique_attributes": uniqueAttrs,
-		"duplicates_found":  totalDuplicates,
-		"attributes_checked": len(uniqueAttrs),
-	}
+	dim.Details = fmt.Sprintf("Duplicates: %d found, Checked %d unique attributes",
+		totalDuplicates, len(uniqueAttrs))
 	
 	return dim
 }
 
 // assessValidity measures data validity
-func (a *Assessor) assessValidity(schema discovery.Schema, sample discovery.DataSample) discovery.QualityDimension {
-	dim := discovery.QualityDimension{
-		Name: "Validity",
-	}
+func (a *Assessor) assessValidity(schema discovery.Schema, sample discovery.DataSample) discovery.DimensionScore {
+	dim := discovery.DimensionScore{}
 	
 	invalidCount := 0
 	totalValidations := 0
@@ -357,11 +328,8 @@ func (a *Assessor) assessValidity(schema discovery.Schema, sample discovery.Data
 		dim.Score = 1.0
 	}
 	
-	dim.Details = map[string]interface{}{
-		"invalid_values":    invalidCount,
-		"total_validations": totalValidations,
-		"validation_types":  []string{"type_check", "range_check", "format_check"},
-	}
+	dim.Details = fmt.Sprintf("Invalid values: %d/%d, Validation types: type_check, range_check, format_check",
+		invalidCount, totalValidations)
 	
 	return dim
 }
@@ -524,51 +492,51 @@ func (a *Assessor) identifyIssues(dims discovery.QualityDimensions) []discovery.
 	// Check each dimension against thresholds
 	if dims.Completeness.Score < a.config.CompletenessThreshold {
 		issues = append(issues, discovery.QualityIssue{
-			Dimension:   "Completeness",
+			Type:        "completeness",
 			Severity:    a.getSeverity(dims.Completeness.Score, a.config.CompletenessThreshold),
-			Description: fmt.Sprintf("Completeness score %.2f below threshold %.2f", dims.Completeness.Score, a.config.CompletenessThreshold),
-			Impact:      "Missing data may lead to incomplete analysis",
-			Resolution:  "Review data collection pipeline for missing fields",
+			Description: fmt.Sprintf("Completeness score %.2f below threshold %.2f. Missing data may lead to incomplete analysis. Review data collection pipeline for missing fields.", dims.Completeness.Score, a.config.CompletenessThreshold),
+			Impact:      1.0 - dims.Completeness.Score,
+			DetectedAt:  time.Now(),
 		})
 	}
 	
 	if dims.Consistency.Score < a.config.ConsistencyThreshold {
 		issues = append(issues, discovery.QualityIssue{
-			Dimension:   "Consistency",
+			Type:        "consistency",
 			Severity:    a.getSeverity(dims.Consistency.Score, a.config.ConsistencyThreshold),
-			Description: fmt.Sprintf("Consistency score %.2f below threshold %.2f", dims.Consistency.Score, a.config.ConsistencyThreshold),
-			Impact:      "Inconsistent data formats may cause parsing errors",
-			Resolution:  "Standardize data formats at ingestion",
+			Description: fmt.Sprintf("Consistency score %.2f below threshold %.2f. Inconsistent data formats may cause parsing errors. Standardize data formats at ingestion.", dims.Consistency.Score, a.config.ConsistencyThreshold),
+			Impact:      1.0 - dims.Consistency.Score,
+			DetectedAt:  time.Now(),
 		})
 	}
 	
 	if dims.Timeliness.Score < 0.8 { // Fixed threshold for timeliness
 		issues = append(issues, discovery.QualityIssue{
-			Dimension:   "Timeliness",
+			Type:        "timeliness",
 			Severity:    a.getSeverity(dims.Timeliness.Score, 0.8),
-			Description: fmt.Sprintf("Data freshness score %.2f indicates delays", dims.Timeliness.Score),
-			Impact:      "Stale data may not reflect current state",
-			Resolution:  "Investigate data pipeline latency",
+			Description: fmt.Sprintf("Data freshness score %.2f indicates delays. Stale data may not reflect current state. Investigate data pipeline latency.", dims.Timeliness.Score),
+			Impact:      0.8 - dims.Timeliness.Score,
+			DetectedAt:  time.Now(),
 		})
 	}
 	
 	if dims.Uniqueness.Score < a.config.UniquenessThreshold {
 		issues = append(issues, discovery.QualityIssue{
-			Dimension:   "Uniqueness",
+			Type:        "uniqueness",
 			Severity:    a.getSeverity(dims.Uniqueness.Score, a.config.UniquenessThreshold),
-			Description: fmt.Sprintf("Duplicate data detected, uniqueness score %.2f", dims.Uniqueness.Score),
-			Impact:      "Duplicates may skew aggregations and counts",
-			Resolution:  "Implement deduplication logic",
+			Description: fmt.Sprintf("Duplicate data detected, uniqueness score %.2f. Duplicates may skew aggregations and counts. Implement deduplication logic.", dims.Uniqueness.Score),
+			Impact:      1.0 - dims.Uniqueness.Score,
+			DetectedAt:  time.Now(),
 		})
 	}
 	
 	if dims.Validity.Score < a.config.ValidityThreshold {
 		issues = append(issues, discovery.QualityIssue{
-			Dimension:   "Validity",
+			Type:        "validity",
 			Severity:    a.getSeverity(dims.Validity.Score, a.config.ValidityThreshold),
-			Description: fmt.Sprintf("Invalid values detected, validity score %.2f", dims.Validity.Score),
-			Impact:      "Invalid data may cause processing errors",
-			Resolution:  "Add validation rules at data ingestion",
+			Description: fmt.Sprintf("Invalid values detected, validity score %.2f. Invalid data may cause processing errors. Add validation rules at data ingestion.", dims.Validity.Score),
+			Impact:      1.0 - dims.Validity.Score,
+			DetectedAt:  time.Now(),
 		})
 	}
 	
@@ -589,50 +557,122 @@ func (a *Assessor) getSeverity(score, threshold float64) string {
 }
 
 // generateRecommendations creates actionable recommendations
-func (a *Assessor) generateRecommendations(issues []discovery.QualityIssue) []string {
-	recommendations := []string{}
+func (a *Assessor) generateRecommendations(issues []discovery.QualityIssue) []discovery.QualityRecommendation {
+	recommendations := []discovery.QualityRecommendation{}
 	
 	// Group issues by dimension
 	dimensionCounts := make(map[string]int)
 	for _, issue := range issues {
-		dimensionCounts[issue.Dimension]++
+		dimensionCounts[issue.Type]++
 	}
 	
 	// Generate recommendations based on issue patterns
 	if dimensionCounts["Completeness"] > 0 {
 		recommendations = append(recommendations, 
-			"Implement data validation at ingestion to catch missing fields",
-			"Set up alerts for schemas with low completeness scores")
+			discovery.QualityRecommendation{
+				Type:        "completeness",
+				Priority:    "high",
+				Description: "Implement data validation at ingestion to catch missing fields",
+				Impact:      0.8,
+				Effort:      "medium",
+			},
+			discovery.QualityRecommendation{
+				Type:        "completeness",
+				Priority:    "medium",
+				Description: "Set up alerts for schemas with low completeness scores",
+				Impact:      0.6,
+				Effort:      "low",
+			})
 	}
 	
 	if dimensionCounts["Consistency"] > 0 {
 		recommendations = append(recommendations,
-			"Create data transformation rules to standardize formats",
-			"Document expected data formats for each attribute")
+			discovery.QualityRecommendation{
+				Type:        "consistency",
+				Priority:    "high",
+				Description: "Create data transformation rules to standardize formats",
+				Impact:      0.9,
+				Effort:      "high",
+			},
+			discovery.QualityRecommendation{
+				Type:        "consistency",
+				Priority:    "medium",
+				Description: "Document expected data formats for each attribute",
+				Impact:      0.5,
+				Effort:      "low",
+			})
 	}
 	
 	if dimensionCounts["Timeliness"] > 0 {
 		recommendations = append(recommendations,
-			"Optimize data pipeline for reduced latency",
-			"Consider implementing real-time data streaming")
+			discovery.QualityRecommendation{
+				Type:        "timeliness",
+				Priority:    "high",
+				Description: "Optimize data pipeline for reduced latency",
+				Impact:      0.85,
+				Effort:      "high",
+			},
+			discovery.QualityRecommendation{
+				Type:        "timeliness",
+				Priority:    "medium",
+				Description: "Consider implementing real-time data streaming",
+				Impact:      0.9,
+				Effort:      "very_high",
+			})
 	}
 	
 	if dimensionCounts["Uniqueness"] > 0 {
 		recommendations = append(recommendations,
-			"Add unique constraints or deduplication logic",
-			"Review data sources for duplicate generation")
+			discovery.QualityRecommendation{
+				Type:        "uniqueness",
+				Priority:    "high",
+				Description: "Add unique constraints or deduplication logic",
+				Impact:      0.75,
+				Effort:      "medium",
+			},
+			discovery.QualityRecommendation{
+				Type:        "uniqueness",
+				Priority:    "medium",
+				Description: "Review data sources for duplicate generation",
+				Impact:      0.6,
+				Effort:      "low",
+			})
 	}
 	
 	if dimensionCounts["Validity"] > 0 {
 		recommendations = append(recommendations,
-			"Implement schema validation with explicit constraints",
-			"Create data quality monitoring dashboards")
+			discovery.QualityRecommendation{
+				Type:        "validity",
+				Priority:    "high",
+				Description: "Implement schema validation with explicit constraints",
+				Impact:      0.8,
+				Effort:      "medium",
+			},
+			discovery.QualityRecommendation{
+				Type:        "validity",
+				Priority:    "medium",
+				Description: "Create data quality monitoring dashboards",
+				Impact:      0.7,
+				Effort:      "medium",
+			})
 	}
 	
 	// Always recommend monitoring
 	recommendations = append(recommendations,
-		"Set up continuous data quality monitoring",
-		"Create quality score trending dashboards")
+		discovery.QualityRecommendation{
+			Type:        "monitoring",
+			Priority:    "high",
+			Description: "Set up continuous data quality monitoring",
+			Impact:      0.9,
+			Effort:      "medium",
+		},
+		discovery.QualityRecommendation{
+			Type:        "monitoring",
+			Priority:    "medium",
+			Description: "Create quality score trending dashboards",
+			Impact:      0.7,
+			Effort:      "low",
+		})
 	
 	return recommendations
 }
@@ -644,6 +684,8 @@ func (a *Assessor) shouldUsePredictions() bool {
 }
 
 // generatePredictions generates quality predictions
+// TODO: Implement when QualityPredictions type is added to discovery package
+/*
 func (a *Assessor) generatePredictions(schema discovery.Schema, report discovery.QualityReport) *discovery.QualityPredictions {
 	// Placeholder for ML-based predictions
 	return &discovery.QualityPredictions{
@@ -653,3 +695,4 @@ func (a *Assessor) generatePredictions(schema discovery.Schema, report discovery
 		PreventiveActions: []string{},
 	}
 }
+*/

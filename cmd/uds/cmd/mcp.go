@@ -230,8 +230,7 @@ func executeToolCommand(stdin io.Writer, stdout io.Reader, command string) error
 }
 
 func printMCPHelp() {
-	fmt.Println(`
-Available commands:
+	fmt.Println(`Available commands:
   help              Show this help message
   tools             List available tools
   exit/quit         Exit the session

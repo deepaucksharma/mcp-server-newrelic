@@ -3,6 +3,8 @@ package mcp
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
+	"time"
 )
 
 // ErrorType represents the type of error
@@ -221,11 +223,11 @@ func NewQueryError(query string, err error) *MCPError {
 		// Add specific hints based on error message
 		errStr := err.Error()
 		switch {
-		case contains(errStr, "timeout"):
+		case strings.Contains(errStr, "timeout"):
 			mcpErr.Hint = "Try reducing the time range or query complexity"
-		case contains(errStr, "syntax"):
+		case strings.Contains(errStr, "syntax"):
 			mcpErr.Hint = "Check NRQL syntax: https://docs.newrelic.com/docs/query-your-data/nrql-reference/"
-		case contains(errStr, "permission"):
+		case strings.Contains(errStr, "permission"):
 			mcpErr.Hint = "Ensure your API key has query permissions"
 		}
 	}

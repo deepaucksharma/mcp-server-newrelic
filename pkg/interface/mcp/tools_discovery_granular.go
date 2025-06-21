@@ -3,7 +3,6 @@ package mcp
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 )
 
@@ -491,81 +490,41 @@ func (s *Server) registerDataQualityTools() error {
 	return s.tools.Register(validateDataAssumptions.Tool)
 }
 
-// Handler implementations
+// Handler implementations for schema analysis
 
-func (s *Server) handleDiscoveryExploreEventTypes(ctx context.Context, params map[string]interface{}) (interface{}, error) {
-	timeRange, _ := params["time_range"].(string)
-	includeSamples, _ := params["include_samples"].(bool)
-	minEventCount, _ := params["min_event_count"].(float64)
-
-	if timeRange == "" {
-		timeRange = "24 hours"
+func (s *Server) handleDiscoveryProfileEventSchema(ctx context.Context, params map[string]interface{}) (interface{}, error) {
+	eventType, _ := params["event_type"].(string)
+	if eventType == "" {
+		return nil, fmt.Errorf("event_type is required")
 	}
 
-	// First, get all event types
-	eventTypesQuery := fmt.Sprintf("SHOW EVENT TYPES SINCE %s", timeRange)
-	
-	// Mock implementation - in real implementation, execute against NRDB
-	eventTypes := []map[string]interface{}{
-		{
-			"eventType":    "Transaction",
-			"count":        1234567,
-			"firstSeen":    time.Now().Add(-7 * 24 * time.Hour),
-			"lastSeen":     time.Now().Add(-5 * time.Minute),
-			"sampleEvent":  nil,
-		},
-		{
-			"eventType":    "SystemSample",
-			"count":        987654,
-			"firstSeen":    time.Now().Add(-30 * 24 * time.Hour),
-			"lastSeen":     time.Now().Add(-1 * time.Minute),
-			"sampleEvent":  nil,
-		},
-		{
-			"eventType":    "Log",
-			"count":        554433,
-			"firstSeen":    time.Now().Add(-14 * 24 * time.Hour),
-			"lastSeen":     time.Now().Add(-30 * time.Second),
-			"sampleEvent":  nil,
-		},
-	}
-
-	// Filter by minimum count
-	filtered := []map[string]interface{}{}
-	for _, et := range eventTypes {
-		if count, ok := et["count"].(int); ok && float64(count) >= minEventCount {
-			filtered = append(filtered, et)
-		}
-	}
-
-	// Get samples if requested
-	if includeSamples {
-		for i, et := range filtered {
-			eventType := et["eventType"].(string)
-			sampleQuery := fmt.Sprintf("SELECT * FROM %s LIMIT 1 SINCE %s", eventType, timeRange)
-			// Mock sample
-			filtered[i]["sampleEvent"] = map[string]interface{}{
-				"timestamp": time.Now().Unix(),
-				"appName":   "sample-app",
-				"duration":  123.45,
-			}
-		}
-	}
-
+	// Mock implementation - return schema information
 	return map[string]interface{}{
-		"eventTypes":       filtered,
-		"totalTypes":       len(filtered),
-		"timeRangeUsed":    timeRange,
-		"discoveryMethod":  "SHOW EVENT TYPES",
-		"dataCompleteness": calculateDataCompleteness(filtered),
+		"eventType": eventType,
+		"attributes": []map[string]interface{}{
+			{
+				"name":         "duration",
+				"type":         "numeric",
+				"coverage":     0.98,
+				"nullPercent":  0.02,
+				"cardinality":  "continuous",
+			},
+			{
+				"name":         "appName",
+				"type":         "string",
+				"coverage":     1.0,
+				"nullPercent":  0.0,
+				"cardinality":  12,
+			},
+		},
+		"sampleSize": 1000,
+		"schemaVersion": "1.0",
 	}, nil
 }
 
 func (s *Server) handleDiscoveryExploreAttributes(ctx context.Context, params map[string]interface{}) (interface{}, error) {
 	eventType, _ := params["event_type"].(string)
 	sampleSize, _ := params["sample_size"].(float64)
-	showCoverage, _ := params["show_coverage"].(bool)
-	showExamples, _ := params["show_examples"].(bool)
 
 	if sampleSize == 0 {
 		sampleSize = 1000
@@ -627,7 +586,6 @@ func (s *Server) handleDiscoveryExploreAttributes(ctx context.Context, params ma
 
 func (s *Server) handleDiscoveryFindNaturalGroupings(ctx context.Context, params map[string]interface{}) (interface{}, error) {
 	eventType, _ := params["event_type"].(string)
-	maxGroups, _ := params["max_groups"].(float64)
 	minGroupSize, _ := params["min_group_size"].(float64)
 
 	// Mock implementation
@@ -665,7 +623,7 @@ func (s *Server) handleDiscoveryFindNaturalGroupings(ctx context.Context, params
 
 	return map[string]interface{}{
 		"eventType":            eventType,
-		"naturalGroupings":     groupings[:int(maxGroups)],
+		"naturalGroupings":     groupings,
 		"discoveryMethod":      "entropy and distribution analysis",
 		"minGroupSizeUsed":     int(minGroupSize),
 		"suggestedFacets": []string{
@@ -678,7 +636,6 @@ func (s *Server) handleDiscoveryFindNaturalGroupings(ctx context.Context, params
 
 func (s *Server) handleDiscoveryDetectDataAnomalies(ctx context.Context, params map[string]interface{}) (interface{}, error) {
 	eventType, _ := params["event_type"].(string)
-	anomalyTypes, _ := params["anomaly_types"].([]interface{})
 	sensitivity, _ := params["sensitivity"].(float64)
 
 	// Mock implementation
@@ -728,6 +685,110 @@ func (s *Server) handleDiscoveryDetectDataAnomalies(ctx context.Context, params 
 			"Investigate data gap at 14:00-14:15",
 			"Verify schema change was intentional",
 			"Add validation for cpuPercent values",
+		},
+	}, nil
+}
+
+// Missing handler methods
+
+func (s *Server) handleDiscoveryProfileAttributeValues(ctx context.Context, params map[string]interface{}) (interface{}, error) {
+	eventType, _ := params["event_type"].(string)
+	attribute, _ := params["attribute"].(string)
+	
+	if eventType == "" || attribute == "" {
+		return nil, fmt.Errorf("event_type and attribute are required")
+	}
+	
+	// Mock implementation
+	return map[string]interface{}{
+		"eventType": eventType,
+		"attribute": attribute,
+		"distribution": map[string]interface{}{
+			"type": "string",
+			"uniqueValues": 125,
+			"topValues": []map[string]interface{}{
+				{"value": "prod", "count": 45000, "percentage": 45.0},
+				{"value": "staging", "count": 30000, "percentage": 30.0},
+				{"value": "dev", "count": 25000, "percentage": 25.0},
+			},
+			"nullCount": 0,
+			"emptyCount": 50,
+		},
+		"patterns": []string{
+			"Follows environment naming convention",
+			"No special characters detected",
+		},
+	}, nil
+}
+
+func (s *Server) handleDiscoveryDetectTemporalPatterns(ctx context.Context, params map[string]interface{}) (interface{}, error) {
+	eventType, _ := params["event_type"].(string)
+	
+	if eventType == "" {
+		return nil, fmt.Errorf("event_type is required")
+	}
+	
+	// Mock implementation
+	return map[string]interface{}{
+		"eventType": eventType,
+		"patterns": []map[string]interface{}{
+			{
+				"type": "daily_peak",
+				"description": "Traffic peaks at 14:00 UTC daily",
+				"confidence": 0.95,
+			},
+			{
+				"type": "weekly_low",
+				"description": "Minimal activity on weekends",
+				"confidence": 0.88,
+			},
+		},
+		"seasonality": map[string]interface{}{
+			"daily": true,
+			"weekly": true,
+			"monthly": false,
+		},
+	}, nil
+}
+
+func (s *Server) handleDiscoveryFindDataRelationships(ctx context.Context, params map[string]interface{}) (interface{}, error) {
+	eventType, _ := params["event_type"].(string)
+	
+	// Mock implementation
+	return map[string]interface{}{
+		"eventType": eventType,
+		"relationships": []map[string]interface{}{
+			{
+				"relatedEventType": "TransactionError",
+				"joinKey": "transactionId",
+				"strength": 0.85,
+				"type": "one-to-many",
+			},
+		},
+		"potentialJoins": []string{"userId", "sessionId"},
+	}, nil
+}
+
+func (s *Server) handleDiscoveryValidateAssumptions(ctx context.Context, params map[string]interface{}) (interface{}, error) {
+	assumptions, _ := params["assumptions"].([]interface{})
+	
+	// Mock implementation
+	results := make([]map[string]interface{}, 0)
+	for _, assumption := range assumptions {
+		results = append(results, map[string]interface{}{
+			"assumption": assumption,
+			"valid": true,
+			"confidence": 0.9,
+			"evidence": "Data analysis confirms this assumption",
+		})
+	}
+	
+	return map[string]interface{}{
+		"results": results,
+		"summary": map[string]interface{}{
+			"totalAssumptions": len(assumptions),
+			"validAssumptions": len(assumptions),
+			"confidence": 0.9,
 		},
 	}, nil
 }

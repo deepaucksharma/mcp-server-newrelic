@@ -318,7 +318,7 @@ func (t *EnhancedTool) ValidateParams(params map[string]interface{}) error {
 
 		// Enum validation
 		if len(prop.Enum) > 0 {
-			if !contains(prop.Enum, fmt.Sprintf("%v", value)) {
+			if !containsString(prop.Enum, fmt.Sprintf("%v", value)) {
 				return fmt.Errorf("parameter '%s' must be one of: %s", name, strings.Join(prop.Enum, ", "))
 			}
 		}
@@ -360,7 +360,7 @@ func validateType(value interface{}, expectedType string) error {
 	return nil
 }
 
-func contains(slice []string, item string) bool {
+func containsString(slice []string, item string) bool {
 	for _, s := range slice {
 		if s == item {
 			return true

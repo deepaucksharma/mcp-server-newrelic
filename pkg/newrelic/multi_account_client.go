@@ -104,13 +104,14 @@ func (m *MultiAccountClient) QueryNRQL(ctx context.Context, query string, accoun
 	return client.QueryNRQL(ctx, query)
 }
 
-// QueryNRQLWithOptions executes an NRQL query with options including account override
-func (m *MultiAccountClient) QueryNRQLWithOptions(ctx context.Context, query string, opts QueryOptions) (*NRQLResult, error) {
-	client, err := m.WithAccount(opts.AccountID)
+// QueryNRQLWithAccount executes an NRQL query with account override
+// (Note: QueryOptions doesn't exist in the current implementation)
+func (m *MultiAccountClient) QueryNRQLWithAccount(ctx context.Context, query string, accountID string) (*NRQLResult, error) {
+	client, err := m.WithAccount(accountID)
 	if err != nil {
 		return nil, err
 	}
-	return client.QueryNRQLWithOptions(ctx, query, opts)
+	return client.QueryNRQL(ctx, query)
 }
 
 // ListDashboards lists dashboards with optional account override
@@ -138,29 +139,29 @@ func (m *MultiAccountClient) CreateDashboard(ctx context.Context, dashboard Dash
 	return client.CreateDashboard(ctx, dashboard)
 }
 
-// CreateAlert creates an alert in the specified account
-func (m *MultiAccountClient) CreateAlert(ctx context.Context, alert Alert, accountID string) (*Alert, error) {
+// CreateAlertCondition creates an alert condition in the specified account
+func (m *MultiAccountClient) CreateAlertCondition(ctx context.Context, condition AlertCondition, accountID string) (*AlertCondition, error) {
 	client, err := m.WithAccount(accountID)
 	if err != nil {
 		return nil, err
 	}
-	return client.CreateAlert(ctx, alert)
+	return client.CreateAlertCondition(ctx, condition)
 }
 
-// ListAlerts lists alerts with optional account override
-func (m *MultiAccountClient) ListAlerts(ctx context.Context, accountID string) ([]Alert, error) {
+// ListAlertConditions lists alert conditions for a policy with optional account override
+func (m *MultiAccountClient) ListAlertConditions(ctx context.Context, policyID string, accountID string) ([]AlertCondition, error) {
 	client, err := m.WithAccount(accountID)
 	if err != nil {
 		return nil, err
 	}
-	return client.ListAlerts(ctx)
+	return client.ListAlertConditions(ctx, policyID)
 }
 
-// BulkUpdateAlerts updates multiple alerts in the specified account
-func (m *MultiAccountClient) BulkUpdateAlerts(ctx context.Context, updates []AlertUpdate, accountID string) ([]Alert, error) {
+// CreateAlertPolicy creates an alert policy in the specified account
+func (m *MultiAccountClient) CreateAlertPolicy(ctx context.Context, policy AlertPolicy, accountID string) (*AlertPolicy, error) {
 	client, err := m.WithAccount(accountID)
 	if err != nil {
 		return nil, err
 	}
-	return client.BulkUpdateAlerts(ctx, updates)
+	return client.CreateAlertPolicy(ctx, policy)
 }

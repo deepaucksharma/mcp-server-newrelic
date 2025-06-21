@@ -47,6 +47,7 @@ Welcome to the New Relic MCP Server documentation. This index provides quick acc
 - **[Refactoring Guide](./guides/refactoring.md)** - Modernizing the codebase
 - **[Mock Mode Guide](./guides/mock-mode.md)** - Development without New Relic connection
 - **[Error Handling Guide](./guides/error-handling.md)** - Comprehensive error handling
+- **[Bulk Operations Guide](./guides/bulk-operations.md)** - Efficient bulk resource management
 
 ## 🎯 Examples & Tutorials
 

@@ -135,7 +135,7 @@ func runDiscover(cmd *cobra.Command, args []string) {
 		// Use standard discovery
 		filter := discovery.DiscoveryFilter{
 			MaxSchemas:     maxSchemas,
-			MinRecordCount: minRecords,
+			MinRecordCount: int64(minRecords),
 			EventTypes:     eventTypes,
 		}
 		
@@ -186,7 +186,7 @@ func runRelationships(cmd *cobra.Command, args []string) {
 	// First discover schemas
 	filter := discovery.DiscoveryFilter{
 		MaxSchemas:     maxSchemas,
-		MinRecordCount: minRecords,
+		MinRecordCount: int64(minRecords),
 	}
 	
 	if verbose {
@@ -376,9 +376,9 @@ func outputRelationships(relationships []discovery.Relationship) {
 		for _, rel := range relationships {
 			fmt.Printf("%-20s %-20s %-15s %10.2f\n",
 				rel.SourceSchema, rel.TargetSchema, rel.Type, rel.Confidence)
-			if rel.JoinKeys != nil {
-				fmt.Printf("  Join: %s <-> %s (%s)\n",
-					rel.JoinKeys.SourceKey, rel.JoinKeys.TargetKey, rel.JoinKeys.JoinType)
+			if rel.Type == discovery.RelationTypeJoin && rel.SourceAttribute != "" {
+				fmt.Printf("  Join: %s <-> %s\n",
+					rel.SourceAttribute, rel.TargetAttribute)
 			}
 		}
 	default:
@@ -394,7 +394,7 @@ func outputQualityReport(report *discovery.QualityReport) {
 	case "table":
 		fmt.Printf("Quality Report for: %s\n", report.SchemaName)
 		fmt.Printf("Overall Score: %.2f\n", report.OverallScore)
-		fmt.Printf("Sample Size: %d\n", report.SampleSize)
+		fmt.Printf("Assessed at: %s\n", report.Timestamp.Format(time.RFC3339))
 		fmt.Printf("\nDimensions:\n")
 		fmt.Printf("  Completeness: %.2f\n", report.Dimensions.Completeness.Score)
 		fmt.Printf("  Consistency:  %.2f\n", report.Dimensions.Consistency.Score)
@@ -405,7 +405,7 @@ func outputQualityReport(report *discovery.QualityReport) {
 		if len(report.Issues) > 0 {
 			fmt.Printf("\nIssues:\n")
 			for _, issue := range report.Issues {
-				fmt.Printf("  [%s] %s - %s\n", issue.Severity, issue.Dimension, issue.Description)
+				fmt.Printf("  [%s] %s - %s\n", issue.Severity, issue.Type, issue.Description)
 			}
 		}
 		

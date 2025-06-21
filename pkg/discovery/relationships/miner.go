@@ -171,19 +171,28 @@ func (m *Miner) findJoinRelationships(ctx context.Context, schema1, schema2 disc
 				
 				if confidence >= m.config.MinCorrelation {
 					relationships = append(relationships, discovery.Relationship{
-						Type:       discovery.RelationshipTypeJoin,
-						SourceSchema: schema1.Name,
-						TargetSchema: schema2.Name,
-						Confidence:  confidence,
-						JoinKeys: &discovery.JoinKeyInfo{
-							SourceKey: attr1.Name,
-							TargetKey: attr2.Name,
-							JoinType:  m.determineJoinType(attr1, attr2),
+						Type:            discovery.RelationTypeJoin,
+						SourceSchema:    schema1.Name,
+						TargetSchema:    schema2.Name,
+						SourceAttribute: attr1.Name,
+						TargetAttribute: attr2.Name,
+						Confidence:      confidence,
+						Evidence: []discovery.Evidence{
+							{
+								Type:        "attribute_type",
+								Value:       fmt.Sprintf("source=%s, target=%s", attr1.DataType, attr2.DataType),
+								Confidence:  confidence,
+								Description: "Attribute data types match",
+							},
+							{
+								Type:        "semantic_match",
+								Value:       attr1.Name == attr2.Name,
+								Confidence:  1.0,
+								Description: "Attribute names match",
+							},
 						},
-						Evidence: map[string]interface{}{
-							"source_attribute_type": attr1.DataType,
-							"target_attribute_type": attr2.DataType,
-							"semantic_match":        attr1.Name == attr2.Name,
+						Metadata: map[string]interface{}{
+							"join_type": m.determineJoinType(attr1, attr2),
 						},
 					})
 				}
@@ -302,14 +311,17 @@ func (m *Miner) findTemporalRelationships(ctx context.Context, schema1, schema2 
 	
 	// Both have timestamps - they can be temporally correlated
 	return &discovery.Relationship{
-		Type:         discovery.RelationshipTypeTemporal,
+		Type:         discovery.RelationTypeTemporal,
 		SourceSchema: schema1.Name,
 		TargetSchema: schema2.Name,
 		Confidence:   0.9, // High confidence for temporal alignment
-		Evidence: map[string]interface{}{
-			"source_timestamp": ts1.Name,
-			"target_timestamp": ts2.Name,
-			"alignment_type":   "timestamp",
+		Evidence: []discovery.Evidence{
+			{
+				Type:        "temporal_alignment",
+				Value:       fmt.Sprintf("source=%s, target=%s", ts1.Name, ts2.Name),
+				Confidence:  0.9,
+				Description: "Schemas have timestamp fields for temporal correlation",
+			},
 		},
 	}
 }
@@ -331,15 +343,17 @@ func (m *Miner) findStatisticalCorrelations(ctx context.Context, schema1, schema
 			
 			if math.Abs(correlation) >= m.config.MinCorrelation {
 				relationships = append(relationships, discovery.Relationship{
-					Type:         discovery.RelationshipTypeCorrelation,
+					Type:         discovery.RelationTypeCorrelation,
 					SourceSchema: schema1.Name,
 					TargetSchema: schema2.Name,
 					Confidence:   math.Abs(correlation),
-					Evidence: map[string]interface{}{
-						"source_attribute": attr1.Name,
-						"target_attribute": attr2.Name,
-						"correlation":      correlation,
-						"correlation_type": m.getCorrelationType(correlation),
+					Evidence: []discovery.Evidence{
+						{
+							Type:        "statistical_correlation",
+							Value:       fmt.Sprintf("source=%s, target=%s, correlation=%.2f", attr1.Name, attr2.Name, correlation),
+							Confidence:  math.Abs(correlation),
+							Description: fmt.Sprintf("Numeric attributes show %s correlation", m.getCorrelationType(correlation)),
+						},
 					},
 				})
 			}
@@ -420,27 +434,33 @@ func (m *Miner) findSemanticRelationships(schema1, schema2 discovery.Schema) *di
 	for _, pattern := range patterns {
 		if strings.Contains(name1, pattern.parent) && strings.Contains(name2, pattern.child) {
 			return &discovery.Relationship{
-				Type:         discovery.RelationshipTypeHierarchy,
+				Type:         discovery.RelationTypeHierarchy,
 				SourceSchema: schema1.Name,
 				TargetSchema: schema2.Name,
 				Confidence:   0.8,
-				Evidence: map[string]interface{}{
-					"relationship": "parent-child",
-					"parent":       name1,
-					"child":        name2,
+				Evidence: []discovery.Evidence{
+					{
+						Type:        "hierarchical_pattern",
+						Value:       fmt.Sprintf("parent=%s, child=%s", name1, name2),
+						Confidence:  0.8,
+						Description: "Detected parent-child relationship pattern",
+					},
 				},
 			}
 		}
 		if strings.Contains(name2, pattern.parent) && strings.Contains(name1, pattern.child) {
 			return &discovery.Relationship{
-				Type:         discovery.RelationshipTypeHierarchy,
+				Type:         discovery.RelationTypeHierarchy,
 				SourceSchema: schema2.Name,
 				TargetSchema: schema1.Name,
 				Confidence:   0.8,
-				Evidence: map[string]interface{}{
-					"relationship": "parent-child",
-					"parent":       name2,
-					"child":        name1,
+				Evidence: []discovery.Evidence{
+					{
+						Type:        "hierarchical_pattern",
+						Value:       fmt.Sprintf("parent=%s, child=%s", name2, name1),
+						Confidence:  0.8,
+						Description: "Detected parent-child relationship pattern",
+					},
 				},
 			}
 		}
@@ -449,12 +469,17 @@ func (m *Miner) findSemanticRelationships(schema1, schema2 discovery.Schema) *di
 	// Check for composition patterns
 	if strings.HasPrefix(name2, name1) || strings.HasPrefix(name1, name2) {
 		return &discovery.Relationship{
-			Type:         discovery.RelationshipTypeComposition,
+			Type:         discovery.RelationTypeDerived,
 			SourceSchema: schema1.Name,
 			TargetSchema: schema2.Name,
 			Confidence:   0.7,
-			Evidence: map[string]interface{}{
-				"pattern": "naming_prefix",
+			Evidence: []discovery.Evidence{
+				{
+					Type:        "naming_pattern",
+					Value:       "prefix-based composition",
+					Confidence:  0.7,
+					Description: "Schemas share naming prefix indicating derived relationship",
+				},
 			},
 		}
 	}

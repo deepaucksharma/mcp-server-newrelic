@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 )
@@ -351,6 +350,7 @@ func DryRunBulkTag(ctx context.Context, params map[string]interface{}) (interfac
 
 	// Simulate entity validation
 	validEntities := len(entityGUIDs)
+	invalidGUIDs := 0 // Initialize to avoid undefined error
 	if invalidGUIDs > 0 {
 		validEntities -= invalidGUIDs
 	}

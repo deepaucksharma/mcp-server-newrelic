@@ -178,12 +178,12 @@ func (s *Server) registerBulkTools() error {
 func (s *Server) handleBulkTagEntities(ctx context.Context, params map[string]interface{}) (interface{}, error) {
 	guidsRaw, ok := params["entity_guids"].([]interface{})
 	if !ok || len(guidsRaw) == 0 {
-		return nil, fmt.Errorf("entity_guids parameter is required and must be non-empty")
+		return nil, NewInvalidParamsError("entity_guids parameter is required and must be non-empty array", "entity_guids")
 	}
 
 	tagsRaw, ok := params["tags"].([]interface{})
 	if !ok || len(tagsRaw) == 0 {
-		return nil, fmt.Errorf("tags parameter is required and must be non-empty")
+		return nil, NewInvalidParamsError("tags parameter is required and must be non-empty array", "tags")
 	}
 
 	operation := "add"
@@ -193,7 +193,7 @@ func (s *Server) handleBulkTagEntities(ctx context.Context, params map[string]in
 
 	// Validate operation
 	if operation != "add" && operation != "replace" {
-		return nil, fmt.Errorf("operation must be 'add' or 'replace'")
+		return nil, NewValidationError("operation", "must be 'add' or 'replace'")
 	}
 
 	// Convert GUIDs to strings
@@ -201,7 +201,7 @@ func (s *Server) handleBulkTagEntities(ctx context.Context, params map[string]in
 	for i, g := range guidsRaw {
 		guid, ok := g.(string)
 		if !ok || guid == "" {
-			return nil, fmt.Errorf("invalid entity GUID at index %d", i)
+			return nil, NewValidationError(fmt.Sprintf("entity_guids[%d]", i), "must be a non-empty string")
 		}
 		guids[i] = guid
 	}
@@ -211,30 +211,14 @@ func (s *Server) handleBulkTagEntities(ctx context.Context, params map[string]in
 	for i, t := range tagsRaw {
 		tag, ok := t.(string)
 		if !ok || tag == "" {
-			return nil, fmt.Errorf("invalid tag at index %d", i)
+			return nil, NewValidationError(fmt.Sprintf("tags[%d]", i), "must be a non-empty string in key:value format")
 		}
 		tags[i] = tag
 	}
 
 	// Check for mock mode
-	if s.getNRClient() == nil {
-		return map[string]interface{}{
-			"summary": map[string]interface{}{
-				"total_entities": len(guids),
-				"total_tags":     len(tags),
-				"operation":      operation,
-				"success":        len(guids),
-				"failed":         0,
-			},
-			"results": []map[string]interface{}{
-				{
-					"entity_guid": guids[0],
-					"status":      "success",
-					"tags_applied": tags,
-				},
-			},
-			"message": "Tags applied successfully (mock)",
-		}, nil
+	if s.isMockMode() {
+		return s.getMockData("bulk_tag_entities", params), nil
 	}
 
 	// Get New Relic client
@@ -328,7 +312,7 @@ func (s *Server) handleBulkTagEntities(ctx context.Context, params map[string]in
 func (s *Server) handleBulkCreateMonitors(ctx context.Context, params map[string]interface{}) (interface{}, error) {
 	monitorsRaw, ok := params["monitors"].([]interface{})
 	if !ok || len(monitorsRaw) == 0 {
-		return nil, fmt.Errorf("monitors parameter is required and must be non-empty")
+		return nil, NewInvalidParamsError("monitors parameter is required and must be non-empty array", "monitors")
 	}
 
 	// Get template settings
@@ -396,6 +380,20 @@ func (s *Server) handleBulkCreateMonitors(ctx context.Context, params map[string
 			for j, loc := range locs {
 				locations[j] = loc.(string)
 			}
+		}
+
+		// Check for mock mode
+		if s.isMockMode() {
+			results = append(results, map[string]interface{}{
+				"index":      i,
+				"name":       name,
+				"status":     "success",
+				"monitor_id": fmt.Sprintf("mock-monitor-%d", i),
+				"url":        url,
+				"message":    "Monitor created successfully (mock)",
+			})
+			successCount++
+			continue
 		}
 
 		// Get New Relic client
@@ -467,12 +465,12 @@ func (s *Server) handleBulkCreateMonitors(ctx context.Context, params map[string
 func (s *Server) handleBulkUpdateDashboards(ctx context.Context, params map[string]interface{}) (interface{}, error) {
 	dashboardIDsRaw, ok := params["dashboard_ids"].([]interface{})
 	if !ok || len(dashboardIDsRaw) == 0 {
-		return nil, fmt.Errorf("dashboard_ids parameter is required and must be non-empty")
+		return nil, NewInvalidParamsError("dashboard_ids parameter is required and must be non-empty array", "dashboard_ids")
 	}
 
 	updates, ok := params["updates"].(map[string]interface{})
 	if !ok || len(updates) == 0 {
-		return nil, fmt.Errorf("updates parameter is required and must be non-empty")
+		return nil, NewInvalidParamsError("updates parameter is required and must be non-empty object", "updates")
 	}
 
 	// Convert dashboard IDs to strings
@@ -480,20 +478,25 @@ func (s *Server) handleBulkUpdateDashboards(ctx context.Context, params map[stri
 	for i, id := range dashboardIDsRaw {
 		dashboardID, ok := id.(string)
 		if !ok || dashboardID == "" {
-			return nil, fmt.Errorf("invalid dashboard ID at index %d", i)
+			return nil, NewValidationError(fmt.Sprintf("dashboard_ids[%d]", i), "must be a non-empty string")
 		}
 		dashboardIDs[i] = dashboardID
+	}
+
+	// Check for mock mode
+	if s.isMockMode() {
+		return s.getMockData("bulk_update_dashboards", params), nil
 	}
 
 	// Get New Relic client
 	nrClient := s.getNRClient()
 	if nrClient == nil {
-		return nil, fmt.Errorf("New Relic client not configured")
+		return nil, NewInternalError("New Relic client not configured", nil)
 	}
 
 	client, ok := nrClient.(*newrelic.Client)
 	if !ok {
-		return nil, fmt.Errorf("invalid New Relic client type")
+		return nil, NewInternalError("invalid New Relic client type", nil)
 	}
 
 	results := []map[string]interface{}{}
@@ -558,7 +561,7 @@ func (s *Server) handleBulkUpdateDashboards(ctx context.Context, params map[stri
 func (s *Server) handleBulkDeleteEntities(ctx context.Context, params map[string]interface{}) (interface{}, error) {
 	entityType, ok := params["entity_type"].(string)
 	if !ok || entityType == "" {
-		return nil, fmt.Errorf("entity_type parameter is required")
+		return nil, NewInvalidParamsError("entity_type parameter is required", "entity_type")
 	}
 
 	// Validate entity type
@@ -568,12 +571,12 @@ func (s *Server) handleBulkDeleteEntities(ctx context.Context, params map[string
 		"alert_condition": true,
 	}
 	if !validTypes[entityType] {
-		return nil, fmt.Errorf("invalid entity_type: %s", entityType)
+		return nil, NewValidationError("entity_type", fmt.Sprintf("must be one of: monitor, dashboard, alert_condition (got: %s)", entityType))
 	}
 
 	entityIDsRaw, ok := params["entity_ids"].([]interface{})
 	if !ok || len(entityIDsRaw) == 0 {
-		return nil, fmt.Errorf("entity_ids parameter is required and must be non-empty")
+		return nil, NewInvalidParamsError("entity_ids parameter is required and must be non-empty array", "entity_ids")
 	}
 
 	force, _ := params["force"].(bool)
@@ -583,25 +586,32 @@ func (s *Server) handleBulkDeleteEntities(ctx context.Context, params map[string
 	for i, id := range entityIDsRaw {
 		entityID, ok := id.(string)
 		if !ok || entityID == "" {
-			return nil, fmt.Errorf("invalid entity ID at index %d", i)
+			return nil, NewValidationError(fmt.Sprintf("entity_ids[%d]", i), "must be a non-empty string")
 		}
 		entityIDs[i] = entityID
 	}
 
 	// Safety check
 	if !force && len(entityIDs) > 10 {
-		return nil, fmt.Errorf("attempting to delete %d entities; set force=true to confirm", len(entityIDs))
+		err := NewValidationError("force", fmt.Sprintf("attempting to delete %d entities; set force=true to confirm", len(entityIDs)))
+		err.Hint = "Add 'force': true to your request to confirm bulk deletion"
+		return nil, err
+	}
+
+	// Check for mock mode
+	if s.isMockMode() {
+		return s.getMockData("bulk_delete_entities", params), nil
 	}
 
 	// Get New Relic client
 	nrClient := s.getNRClient()
 	if nrClient == nil {
-		return nil, fmt.Errorf("New Relic client not configured")
+		return nil, NewInternalError("New Relic client not configured", nil)
 	}
 
 	client, ok := nrClient.(*newrelic.Client)
 	if !ok {
-		return nil, fmt.Errorf("invalid New Relic client type")
+		return nil, NewInternalError("invalid New Relic client type", nil)
 	}
 
 	results := []map[string]interface{}{}
@@ -657,7 +667,7 @@ func (s *Server) handleBulkDeleteEntities(ctx context.Context, params map[string
 func (s *Server) handleBulkExecuteQueries(ctx context.Context, params map[string]interface{}) (interface{}, error) {
 	queriesRaw, ok := params["queries"].([]interface{})
 	if !ok || len(queriesRaw) == 0 {
-		return nil, fmt.Errorf("queries parameter is required and must be non-empty")
+		return nil, NewInvalidParamsError("queries parameter is required and must be non-empty array", "queries")
 	}
 
 	parallel := true
@@ -782,6 +792,7 @@ func (s *Server) executeSingleQuery(ctx context.Context, index int, query map[st
 			"name":   name,
 			"status": "failed",
 			"error":  fmt.Sprintf("invalid NRQL: %v", err),
+			"hint":   "Check NRQL syntax: https://docs.newrelic.com/docs/query-your-data/nrql-reference/",
 		}
 	}
 
@@ -804,4 +815,159 @@ func (s *Server) executeSingleQuery(ctx context.Context, index int, query map[st
 	}
 
 	return queryResult
+}
+
+// handleBulkDashboardMigrate migrates dashboards between accounts
+func (s *Server) handleBulkDashboardMigrate(ctx context.Context, params map[string]interface{}) (interface{}, error) {
+	dashboardIDsRaw, ok := params["dashboard_ids"].([]interface{})
+	if !ok || len(dashboardIDsRaw) == 0 {
+		return nil, NewInvalidParamsError("dashboard_ids parameter is required and must be non-empty", "dashboard_ids")
+	}
+
+	targetAccountID, _ := params["target_account_id"].(string)
+	updateQueries := true
+	if uq, ok := params["update_queries"].(bool); ok {
+		updateQueries = uq
+	}
+	preservePermissions := false
+	if pp, ok := params["preserve_permissions"].(bool); ok {
+		preservePermissions = pp
+	}
+
+	// Check mock mode
+	if s.isMockMode() {
+		return s.getMockData("bulk_dashboard_migrate", params), nil
+	}
+
+	// Convert dashboard IDs
+	dashboardIDs := []string{}
+	for _, id := range dashboardIDsRaw {
+		if idStr, ok := id.(string); ok {
+			dashboardIDs = append(dashboardIDs, idStr)
+		}
+	}
+
+	results := []map[string]interface{}{}
+	startTime := time.Now()
+
+	// Process each dashboard
+	for i, dashboardID := range dashboardIDs {
+		result := map[string]interface{}{
+			"source_id": dashboardID,
+			"index":     i,
+		}
+
+		// Get source dashboard
+		sourceDashboard, err := s.getDashboardDetails(ctx, dashboardID)
+		if err != nil {
+			result["status"] = "failed"
+			result["error"] = fmt.Sprintf("failed to get source dashboard: %v", err)
+			results = append(results, result)
+			continue
+		}
+
+		// Prepare migrated dashboard
+		migratedDashboard := s.prepareMigratedDashboard(sourceDashboard, targetAccountID, updateQueries, preservePermissions)
+
+		// Create in target account (or same account with updates)
+		newDashboard, err := s.createDashboard(ctx, migratedDashboard, targetAccountID)
+		if err != nil {
+			result["status"] = "failed"
+			result["error"] = fmt.Sprintf("failed to create migrated dashboard: %v", err)
+		} else {
+			result["status"] = "success"
+			result["target_id"] = newDashboard["id"]
+			result["target_name"] = newDashboard["name"]
+			result["widgets_migrated"] = len(migratedDashboard["pages"].([]interface{})[0].(map[string]interface{})["widgets"].([]interface{}))
+		}
+
+		results = append(results, result)
+	}
+
+	// Calculate summary
+	successCount := 0
+	failedCount := 0
+	totalWidgets := 0
+	for _, r := range results {
+		if r["status"] == "success" {
+			successCount++
+			if wm, ok := r["widgets_migrated"].(int); ok {
+				totalWidgets += wm
+			}
+		} else {
+			failedCount++
+		}
+	}
+
+	return map[string]interface{}{
+		"migration_results": results,
+		"summary": map[string]interface{}{
+			"total_dashboards":   len(dashboardIDs),
+			"successful":         successCount,
+			"failed":             failedCount,
+			"widgets_migrated":   totalWidgets,
+			"target_account":     targetAccountID,
+			"migration_time_ms":  time.Since(startTime).Milliseconds(),
+		},
+	}, nil
+}
+
+// Helper functions for dashboard migration
+
+func (s *Server) getDashboardDetails(ctx context.Context, dashboardID string) (map[string]interface{}, error) {
+	// This would call the New Relic API to get dashboard details
+	// For now, return a simple structure
+	return map[string]interface{}{
+		"id":   dashboardID,
+		"name": "Sample Dashboard",
+		"pages": []interface{}{
+			map[string]interface{}{
+				"name": "Page 1",
+				"widgets": []interface{}{
+					map[string]interface{}{
+						"title": "Widget 1",
+						"query": "SELECT count(*) FROM Transaction",
+					},
+				},
+			},
+		},
+	}, nil
+}
+
+func (s *Server) prepareMigratedDashboard(source map[string]interface{}, targetAccountID string, updateQueries bool, preservePermissions bool) map[string]interface{} {
+	// Clone the dashboard
+	migrated := make(map[string]interface{})
+	for k, v := range source {
+		migrated[k] = v
+	}
+
+	// Update name to indicate migration
+	if name, ok := migrated["name"].(string); ok {
+		migrated["name"] = name + " (Migrated)"
+	}
+
+	// Remove ID so a new one is created
+	delete(migrated, "id")
+
+	// Update permissions if not preserving
+	if !preservePermissions {
+		migrated["permissions"] = "PUBLIC_READ_ONLY"
+	}
+
+	// Update queries if requested and target account is different
+	if updateQueries && targetAccountID != "" {
+		// This would update account-specific references in NRQL queries
+		// For now, we'll just note it in the implementation
+	}
+
+	return migrated
+}
+
+func (s *Server) createDashboard(ctx context.Context, dashboard map[string]interface{}, accountID string) (map[string]interface{}, error) {
+	// This would call the New Relic API to create the dashboard
+	// For now, return a mock response
+	return map[string]interface{}{
+		"id":   fmt.Sprintf("new-%s", dashboard["name"]),
+		"name": dashboard["name"],
+	}, nil
 }

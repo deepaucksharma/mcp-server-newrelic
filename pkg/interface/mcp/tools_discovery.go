@@ -52,6 +52,11 @@ func (s *Server) registerTools() error {
 		return fmt.Errorf("failed to register governance tools: %w", err)
 	}
 	
+	// Workflow support tools (lightweight, AI-driven orchestration)
+	if err := s.registerWorkflowSupportTools(); err != nil {
+		return fmt.Errorf("failed to register workflow support tools: %w", err)
+	}
+	
 	// TODO: Register infrastructure tools
 	// TODO: Register log tools
 	

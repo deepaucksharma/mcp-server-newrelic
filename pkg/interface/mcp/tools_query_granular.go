@@ -4,14 +4,13 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 )
 
-// registerGranularQueryTools registers atomic NRQL query tools
+// registerGranularQueryTools registers atomic NRQL query building and execution tools
 func (s *Server) registerGranularQueryTools() error {
-	// 1. Basic NRQL execution
-	nrqlExecute := NewToolBuilder("nrql.execute", "Execute a single NRQL query with full control").
-		Category(CategoryQuery).
+	// 1. Query Execution Tools
+	executeQuery := NewToolBuilder("nrql.execute", "Execute NRQL query with timeout and metadata controls").
+		Category(ToolCategoryCore).
 		Handler(s.handleNRQLExecute).
 		Required("query").
 		Param("query", EnhancedProperty{
@@ -20,25 +19,21 @@ func (s *Server) registerGranularQueryTools() error {
 				Description: "The NRQL query to execute",
 			},
 			Examples: []interface{}{
-				"SELECT count(*) FROM Transaction WHERE appName = 'my-app' SINCE 1 hour ago",
-				"SELECT average(duration) FROM Transaction FACET appName LIMIT 10",
+				"SELECT count(*) FROM Transaction",
+				"SELECT average(duration) FROM Transaction TIMESERIES",
 			},
-			AIHint: "Use proper NRQL syntax. Always include SINCE clause for time-based queries.",
 		}).
 		Param("account_id", EnhancedProperty{
 			Property: Property{
-				Type:        "integer",
-				Description: "Target account ID (uses default if not provided)",
+				Type:        "number",
+				Description: "Specific account ID to query (optional)",
 			},
 		}).
 		Param("timeout", EnhancedProperty{
 			Property: Property{
-				Type:        "integer",
+				Type:        "number",
 				Description: "Query timeout in seconds",
 				Default:     30,
-			},
-			ValidationRules: []ValidationRule{
-				{Field: "timeout", Rule: "range", Value: map[string]int{"min": 1, "max": 300}, Message: "Timeout must be between 1 and 300 seconds"},
 			},
 		}).
 		Param("include_metadata", EnhancedProperty{
@@ -48,52 +43,18 @@ func (s *Server) registerGranularQueryTools() error {
 				Default:     false,
 			},
 		}).
-		Safety(func(s *SafetyMetadata) {
-			s.Level = SafetyLevelSafe
-			s.IsDestructive = false
-		}).
-		Performance(func(p *PerformanceMetadata) {
-			p.ExpectedLatencyMS = 500
-			p.MaxLatencyMS = 30000
-			p.Cacheable = true
-			p.CacheTTLSeconds = 300
-			p.CostCategory = "medium"
-		}).
-		AIGuidance(func(g *AIGuidanceMetadata) {
-			g.UsageExamples = []string{
-				"To get error rate: nrql.execute with query 'SELECT percentage(count(*), WHERE error IS true) FROM Transaction'",
-				"To analyze performance: nrql.execute with query 'SELECT percentile(duration, 95) FROM Transaction'",
-			}
-			g.CommonPatterns = []string{
-				"Always include SINCE clause",
-				"Use LIMIT for large result sets",
-				"FACET for grouping results",
-			}
-			g.ChainsWith = []string{"nrql.validate", "nrql.estimate_cost", "entity.search_by_name"}
-			g.SuccessIndicators = []string{"results array is not empty", "no error field in response"}
-			g.ErrorPatterns = map[string]string{
-				"Unknown function": "Check NRQL function syntax",
-				"Unknown attribute": "Verify attribute exists with discovery.list_schemas",
-				"Timeout": "Reduce time range or simplify query",
-			}
-		}).
-		Example(ToolExample{
-			Name:        "Get application error rate",
-			Description: "Calculate error rate for an application",
-			Params: map[string]interface{}{
-				"query":   "SELECT percentage(count(*), WHERE error IS true) FROM Transaction WHERE appName = 'checkout-service' SINCE 1 hour ago",
-				"timeout": 10,
-			},
+		Safety(SafetyMetadata{Level: SafetyLevelSafe}).
+		Performance(PerformanceMetadata{
+			ExpectedLatencyMS: 1000,
+			MaxLatencyMS:      30000,
+			Cacheable:         true,
+			CacheTTLSeconds:   300,
 		}).
 		Build()
 
-	if err := s.tools.Register(nrqlExecute.Tool); err != nil {
-		return err
-	}
-
-	// 2. NRQL validation without execution
-	nrqlValidate := NewToolBuilder("nrql.validate", "Validate NRQL syntax without execution").
-		Category(CategoryQuery).
+	// 2. Query Validation
+	validateQuery := NewToolBuilder("nrql.validate", "Validate NRQL syntax and estimate impact").
+		Category(ToolCategoryCore).
 		Handler(s.handleNRQLValidate).
 		Required("query").
 		Param("query", EnhancedProperty{
@@ -105,170 +66,113 @@ func (s *Server) registerGranularQueryTools() error {
 		Param("check_permissions", EnhancedProperty{
 			Property: Property{
 				Type:        "boolean",
-				Description: "Check if user has permissions for referenced events/attributes",
+				Description: "Check if user has permissions for query",
 				Default:     false,
 			},
 		}).
 		Param("suggest_improvements", EnhancedProperty{
 			Property: Property{
 				Type:        "boolean",
-				Description: "Provide query optimization suggestions",
+				Description: "Provide optimization suggestions",
 				Default:     true,
 			},
 		}).
-		Safety(func(s *SafetyMetadata) {
-			s.Level = SafetyLevelSafe
-		}).
-		Performance(func(p *PerformanceMetadata) {
-			p.ExpectedLatencyMS = 50
-			p.MaxLatencyMS = 500
-			p.Cacheable = true
-			p.CacheTTLSeconds = 3600
-		}).
-		AIGuidance(func(g *AIGuidanceMetadata) {
-			g.UsageExamples = []string{
-				"Always validate before executing expensive queries",
-				"Use to check syntax when building queries programmatically",
-			}
-			g.PreferredOver = []string{"nrql.execute for syntax checking"}
-		}).
+		Safety(SafetyMetadata{Level: SafetyLevelSafe}).
 		Build()
 
-	if err := s.tools.Register(nrqlValidate.Tool); err != nil {
-		return err
-	}
-
-	// 3. Query cost estimation
-	nrqlEstimateCost := NewToolBuilder("nrql.estimate_cost", "Estimate query cost and performance impact").
-		Category(CategoryAnalysis).
+	// 3. Query Cost Estimation
+	estimateCost := NewToolBuilder("nrql.estimate_cost", "Estimate query execution cost and impact").
+		Category(ToolCategoryAnalysis).
 		Handler(s.handleNRQLEstimateCost).
 		Required("query").
 		Param("query", EnhancedProperty{
 			Property: Property{
 				Type:        "string",
-				Description: "The NRQL query to analyze",
+				Description: "The NRQL query to estimate",
 			},
 		}).
 		Param("time_range", EnhancedProperty{
 			Property: Property{
 				Type:        "string",
-				Description: "Time range for the query (e.g., '1 hour', '7 days')",
+				Description: "Time range for estimation",
 				Default:     "1 hour",
 			},
-			ValidationRules: []ValidationRule{
-				{Field: "time_range", Rule: "regex", Value: `^\d+\s+(minute|hour|day|week|month)s?$`, Message: "Invalid time range format"},
-			},
+			Examples: []interface{}{"1 hour", "24 hours", "7 days", "30 days"},
 		}).
 		Param("execution_frequency", EnhancedProperty{
 			Property: Property{
 				Type:        "string",
-				Description: "How often the query will run (for cost projection)",
+				Description: "How often query will run",
 				Enum:        []string{"once", "hourly", "daily", "continuous"},
 				Default:     "once",
 			},
 		}).
-		Performance(func(p *PerformanceMetadata) {
-			p.ExpectedLatencyMS = 100
-			p.Cacheable = true
-			p.CacheTTLSeconds = 1800
-		}).
-		AIGuidance(func(g *AIGuidanceMetadata) {
-			g.UsageExamples = []string{
-				"Check cost before scheduling recurring queries",
-				"Estimate impact of dashboard queries",
-			}
-			g.ChainsWith = []string{"nrql.validate", "alert.create_threshold_condition"}
-			g.WarningsForAI = []string{
-				"High cost queries should be optimized before production use",
-			}
-		}).
+		Safety(SafetyMetadata{Level: SafetyLevelSafe}).
 		Build()
 
-	if err := s.tools.Register(nrqlEstimateCost.Tool); err != nil {
-		return err
-	}
-
-	// 4. NRQL query builder - SELECT clause
-	nrqlBuildSelect := NewToolBuilder("nrql.build_select", "Build SELECT clause with proper escaping").
-		Category(CategoryUtility).
+	// 4. Query Builder - SELECT clause
+	buildSelect := NewToolBuilder("nrql.build_select", "Build SELECT clause with aggregations").
+		Category(ToolCategoryCore).
 		Handler(s.handleNRQLBuildSelect).
 		Required("event_type").
 		Param("event_type", EnhancedProperty{
 			Property: Property{
 				Type:        "string",
-				Description: "The event type to query",
+				Description: "Event type to query from",
 			},
-			Examples: []interface{}{"Transaction", "SystemSample", "Log"},
+			Examples: []interface{}{"Transaction", "PageView", "SystemSample"},
 		}).
 		Param("aggregations", EnhancedProperty{
 			Property: Property{
 				Type:        "array",
-				Description: "List of aggregation specifications",
+				Description: "Aggregation functions to apply",
 				Items: &Property{
 					Type: "object",
 				},
 			},
 			Examples: []interface{}{
-				[]map[string]interface{}{
-					{"function": "average", "attribute": "duration"},
-					{"function": "percentile", "attribute": "duration", "percentile": 95},
-				},
+				map[string]string{"function": "count", "attribute": "*"},
+				map[string]string{"function": "average", "attribute": "duration"},
 			},
 		}).
 		Param("attributes", EnhancedProperty{
 			Property: Property{
 				Type:        "array",
-				Description: "Raw attributes to select (no aggregation)",
+				Description: "Raw attributes to select",
 				Items: &Property{
 					Type: "string",
 				},
 			},
+			Examples: []interface{}{"appName", "host", "error"},
 		}).
 		Param("aliases", EnhancedProperty{
 			Property: Property{
 				Type:        "object",
-				Description: "Attribute aliases (attribute -> alias mapping)",
+				Description: "Attribute aliases",
+			},
+			Examples: []interface{}{
+				map[string]string{"duration": "avgDuration", "count(*)": "totalCount"},
 			},
 		}).
-		Safety(func(s *SafetyMetadata) {
-			s.Level = SafetyLevelSafe
-		}).
-		Performance(func(p *PerformanceMetadata) {
-			p.ExpectedLatencyMS = 10
-			p.Cacheable = true
-		}).
-		AIGuidance(func(g *AIGuidanceMetadata) {
-			g.UsageExamples = []string{
-				"Use to build complex SELECT clauses safely",
-				"Handles proper escaping of attribute names",
-			}
-			g.ChainsWith = []string{"nrql.build_where", "nrql.build_facet"}
-		}).
+		Safety(SafetyMetadata{Level: SafetyLevelSafe}).
 		Build()
 
-	if err := s.tools.Register(nrqlBuildSelect.Tool); err != nil {
-		return err
-	}
-
-	// 5. NRQL query builder - WHERE clause
-	nrqlBuildWhere := NewToolBuilder("nrql.build_where", "Build WHERE clause with proper escaping").
-		Category(CategoryUtility).
+	// 5. Query Builder - WHERE clause
+	buildWhere := NewToolBuilder("nrql.build_where", "Build WHERE clause with conditions").
+		Category(ToolCategoryCore).
 		Handler(s.handleNRQLBuildWhere).
 		Required("conditions").
 		Param("conditions", EnhancedProperty{
 			Property: Property{
 				Type:        "array",
-				Description: "List of condition specifications",
+				Description: "Conditions to combine",
 				Items: &Property{
 					Type: "object",
 				},
 			},
 			Examples: []interface{}{
-				[]map[string]interface{}{
-					{"attribute": "appName", "operator": "=", "value": "my-app"},
-					{"attribute": "duration", "operator": ">", "value": 1000},
-					{"attribute": "error", "operator": "IS", "value": true},
-				},
+				map[string]interface{}{"attribute": "appName", "operator": "=", "value": "my-app"},
+				map[string]interface{}{"attribute": "duration", "operator": ">", "value": 100},
 			},
 		}).
 		Param("operator", EnhancedProperty{
@@ -282,231 +186,159 @@ func (s *Server) registerGranularQueryTools() error {
 		Param("nest_groups", EnhancedProperty{
 			Property: Property{
 				Type:        "boolean",
-				Description: "Allow nested condition groups",
+				Description: "Wrap conditions in parentheses",
 				Default:     false,
 			},
 		}).
-		Safety(func(s *SafetyMetadata) {
-			s.Level = SafetyLevelSafe
-		}).
-		Performance(func(p *PerformanceMetadata) {
-			p.ExpectedLatencyMS = 10
-			p.Cacheable = true
-		}).
-		AIGuidance(func(g *AIGuidanceMetadata) {
-			g.UsageExamples = []string{
-				"Build complex WHERE clauses with proper escaping",
-				"Handles special characters in values automatically",
-			}
-			g.ChainsWith = []string{"nrql.build_select", "nrql.build_facet"}
-			g.WarningsForAI = []string{
-				"String values are automatically quoted",
-				"NULL checks use IS NULL, not = NULL",
-			}
-		}).
+		Safety(SafetyMetadata{Level: SafetyLevelSafe}).
 		Build()
 
-	if err := s.tools.Register(nrqlBuildWhere.Tool); err != nil {
-		return err
+	// 6. Query Builder - Time range
+	buildTimeRange := NewToolBuilder("nrql.build_time_range", "Build SINCE/UNTIL time clauses").
+		Category(ToolCategoryCore).
+		Handler(s.handleNRQLBuildTimeRange).
+		Param("since", EnhancedProperty{
+			Property: Property{
+				Type:        "string",
+				Description: "Start time",
+			},
+			Examples: []interface{}{"1 hour ago", "2024-01-20T00:00:00Z", "yesterday"},
+		}).
+		Param("until", EnhancedProperty{
+			Property: Property{
+				Type:        "string",
+				Description: "End time",
+			},
+			Examples: []interface{}{"now", "1 hour ago", "2024-01-20T23:59:59Z"},
+		}).
+		Param("compare_with", EnhancedProperty{
+			Property: Property{
+				Type:        "string",
+				Description: "Time period to compare with",
+			},
+			Examples: []interface{}{"1 week ago", "1 month ago"},
+		}).
+		Safety(SafetyMetadata{Level: SafetyLevelSafe}).
+		Build()
+
+	// 7. Query Template Library
+	getQueryTemplate := NewToolBuilder("nrql.get_template", "Get pre-built query templates").
+		Category(ToolCategoryCore).
+		Handler(s.handleNRQLGetTemplate).
+		Required("template_name").
+		Param("template_name", EnhancedProperty{
+			Property: Property{
+				Type:        "string",
+				Description: "Name of query template",
+				Enum:        []string{"error_rate", "latency_percentiles", "throughput", "apdex", "top_transactions"},
+			},
+		}).
+		Param("event_type", EnhancedProperty{
+			Property: Property{
+				Type:        "string",
+				Description: "Event type to apply template to",
+				Default:     "Transaction",
+			},
+		}).
+		Param("parameters", EnhancedProperty{
+			Property: Property{
+				Type:        "object",
+				Description: "Template parameters",
+			},
+		}).
+		Safety(SafetyMetadata{Level: SafetyLevelSafe}).
+		Build()
+
+	// Register all tools
+	tools := []Tool{
+		executeQuery.Tool,
+		validateQuery.Tool,
+		estimateCost.Tool,
+		buildSelect.Tool,
+		buildWhere.Tool,
+		buildTimeRange.Tool,
+		getQueryTemplate.Tool,
+	}
+
+	for _, tool := range tools {
+		if err := s.tools.Register(tool); err != nil {
+			return fmt.Errorf("failed to register tool %s: %w", tool.Name, err)
+		}
 	}
 
 	return nil
 }
 
-// Handler implementations
+// Handler implementations - duplicates removed as they're defined in tools_nrql_adaptive.go
 
-func (s *Server) handleNRQLExecute(ctx context.Context, params map[string]interface{}) (interface{}, error) {
-	query, _ := params["query"].(string)
-	accountID, _ := params["account_id"].(float64)
-	timeout, _ := params["timeout"].(float64)
-	includeMetadata, _ := params["include_metadata"].(bool)
+// handleNRQLBuildTimeRange builds time range clauses
+func (s *Server) handleNRQLBuildTimeRange(ctx context.Context, params map[string]interface{}) (interface{}, error) {
+	since, _ := params["since"].(string)
+	until, _ := params["until"].(string)
+	compareWith, _ := params["compare_with"].(string)
 
-	if timeout == 0 {
-		timeout = 30
+	var clauses []string
+
+	if since != "" {
+		clauses = append(clauses, fmt.Sprintf("SINCE %s", since))
 	}
 
-	// Create timeout context
-	queryCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
-	defer cancel()
-
-	// Execute query
-	start := time.Now()
-	
-	// Mock implementation for now
-	result := map[string]interface{}{
-		"results": []map[string]interface{}{
-			{"count": 12345, "appName": "my-app"},
-		},
-		"performanceStats": map[string]interface{}{
-			"wallClockTime": time.Since(start).Milliseconds(),
-			"inspectedCount": 50000,
-			"omittedCount":   0,
-		},
+	if until != "" {
+		clauses = append(clauses, fmt.Sprintf("UNTIL %s", until))
 	}
 
-	if includeMetadata {
-		result["metadata"] = map[string]interface{}{
-			"query":          query,
-			"accountId":      accountID,
-			"executionTime":  time.Since(start).Milliseconds(),
-			"resultCount":    1,
-			"cacheHit":       false,
-		}
+	if compareWith != "" {
+		clauses = append(clauses, fmt.Sprintf("COMPARE WITH %s", compareWith))
 	}
-
-	return result, nil
-}
-
-func (s *Server) handleNRQLValidate(ctx context.Context, params map[string]interface{}) (interface{}, error) {
-	query, _ := params["query"].(string)
-	checkPermissions, _ := params["check_permissions"].(bool)
-	suggestImprovements, _ := params["suggest_improvements"].(bool)
-
-	// Basic validation
-	validation := map[string]interface{}{
-		"valid":  true,
-		"errors": []string{},
-		"warnings": []string{},
-	}
-
-	// Check for common issues
-	if !strings.Contains(strings.ToUpper(query), "SELECT") {
-		validation["valid"] = false
-		validation["errors"] = append(validation["errors"].([]string), "Query must start with SELECT")
-	}
-
-	if !strings.Contains(strings.ToUpper(query), "FROM") {
-		validation["valid"] = false
-		validation["errors"] = append(validation["errors"].([]string), "Query must include FROM clause")
-	}
-
-	// Warnings
-	if !strings.Contains(strings.ToUpper(query), "SINCE") && !strings.Contains(strings.ToUpper(query), "UNTIL") {
-		validation["warnings"] = append(validation["warnings"].([]string), "Query has no time range specified")
-	}
-
-	if suggestImprovements {
-		validation["suggestions"] = []string{}
-		
-		if strings.Contains(strings.ToUpper(query), "SELECT *") {
-			validation["suggestions"] = append(validation["suggestions"].([]string), 
-				"Avoid SELECT *, specify needed attributes for better performance")
-		}
-
-		if !strings.Contains(strings.ToUpper(query), "LIMIT") && strings.Contains(strings.ToUpper(query), "FACET") {
-			validation["suggestions"] = append(validation["suggestions"].([]string), 
-				"Consider adding LIMIT when using FACET to control result size")
-		}
-	}
-
-	if checkPermissions {
-		validation["permissions"] = map[string]interface{}{
-			"hasAccess": true,
-			"missingPermissions": []string{},
-		}
-	}
-
-	return validation, nil
-}
-
-func (s *Server) handleNRQLEstimateCost(ctx context.Context, params map[string]interface{}) (interface{}, error) {
-	query, _ := params["query"].(string)
-	timeRange, _ := params["time_range"].(string)
-	frequency, _ := params["execution_frequency"].(string)
-
-	// Mock cost estimation
-	estimation := map[string]interface{}{
-		"query": query,
-		"timeRange": timeRange,
-		"estimation": map[string]interface{}{
-			"dataSizeGB": 0.5,
-			"estimatedDurationMS": 1200,
-			"inspectedEvents": 1000000,
-			"complexity": "medium",
-			"costCategory": "standard",
-		},
-		"recommendations": []string{},
-	}
-
-	// Add frequency-based projections
-	if frequency != "once" {
-		monthlyExecutions := map[string]int{
-			"hourly": 720,
-			"daily": 30,
-			"continuous": 43200, // every minute
-		}
-		
-		if execs, ok := monthlyExecutions[frequency]; ok {
-			estimation["monthlyProjection"] = map[string]interface{}{
-				"executions": execs,
-				"totalDataGB": 0.5 * float64(execs),
-				"estimatedCost": "medium",
-			}
-		}
-	}
-
-	// Add recommendations based on analysis
-	if strings.Contains(strings.ToUpper(query), "SELECT *") {
-		estimation["recommendations"] = append(estimation["recommendations"].([]string), 
-			"Replace SELECT * with specific attributes to reduce data transfer")
-	}
-
-	return estimation, nil
-}
-
-func (s *Server) handleNRQLBuildSelect(ctx context.Context, params map[string]interface{}) (interface{}, error) {
-	eventType, _ := params["event_type"].(string)
-	aggregations, _ := params["aggregations"].([]interface{})
-	attributes, _ := params["attributes"].([]interface{})
-	aliases, _ := params["aliases"].(map[string]interface{})
-
-	var selectParts []string
-
-	// Process aggregations
-	for _, agg := range aggregations {
-		if aggMap, ok := agg.(map[string]interface{}); ok {
-			function, _ := aggMap["function"].(string)
-			attribute, _ := aggMap["attribute"].(string)
-			
-			part := fmt.Sprintf("%s(%s)", function, attribute)
-			
-			// Handle special cases
-			if function == "percentile" {
-				if p, ok := aggMap["percentile"].(float64); ok {
-					part = fmt.Sprintf("percentile(%s, %v)", attribute, p)
-				}
-			}
-			
-			// Add alias if provided
-			if alias, ok := aliases[attribute]; ok {
-				part = fmt.Sprintf("%s as '%s'", part, alias)
-			}
-			
-			selectParts = append(selectParts, part)
-		}
-	}
-
-	// Process raw attributes
-	for _, attr := range attributes {
-		if attrStr, ok := attr.(string); ok {
-			part := attrStr
-			if alias, ok := aliases[attrStr]; ok {
-				part = fmt.Sprintf("%s as '%s'", attrStr, alias)
-			}
-			selectParts = append(selectParts, part)
-		}
-	}
-
-	// Build the complete SELECT clause
-	selectClause := fmt.Sprintf("SELECT %s FROM %s", strings.Join(selectParts, ", "), eventType)
 
 	return map[string]interface{}{
-		"clause": selectClause,
-		"parts": selectParts,
-		"eventType": eventType,
+		"clause": strings.Join(clauses, " "),
+		"parts":  clauses,
 	}, nil
 }
 
+// handleNRQLGetTemplate returns query templates
+func (s *Server) handleNRQLGetTemplate(ctx context.Context, params map[string]interface{}) (interface{}, error) {
+	templateName, _ := params["template_name"].(string)
+	eventType, _ := params["event_type"].(string)
+	templateParams, _ := params["parameters"].(map[string]interface{})
+
+	if eventType == "" {
+		eventType = "Transaction"
+	}
+
+	templates := map[string]string{
+		"error_rate": fmt.Sprintf("SELECT percentage(count(*), WHERE error = true) FROM %s", eventType),
+		"latency_percentiles": fmt.Sprintf("SELECT percentile(duration, 50, 75, 90, 95, 99) FROM %s", eventType),
+		"throughput": fmt.Sprintf("SELECT rate(count(*), 1 minute) FROM %s TIMESERIES", eventType),
+		"apdex": fmt.Sprintf("SELECT apdex(duration, 0.5) FROM %s", eventType),
+		"top_transactions": fmt.Sprintf("SELECT count(*) FROM %s FACET name LIMIT 10", eventType),
+	}
+
+	template, exists := templates[templateName]
+	if !exists {
+		return nil, fmt.Errorf("unknown template: %s", templateName)
+	}
+
+	// Apply template parameters
+	if templateParams != nil {
+		if threshold, ok := templateParams["apdex_threshold"].(float64); ok && templateName == "apdex" {
+			template = fmt.Sprintf("SELECT apdex(duration, %v) FROM %s", threshold, eventType)
+		}
+		if limit, ok := templateParams["limit"].(float64); ok && templateName == "top_transactions" {
+			template = fmt.Sprintf("SELECT count(*) FROM %s FACET name LIMIT %d", eventType, int(limit))
+		}
+	}
+
+	return map[string]interface{}{
+		"query":       template,
+		"template":    templateName,
+		"eventType":   eventType,
+		"description": getTemplateDescription(templateName),
+	}, nil
+}
+
+// handleNRQLBuildWhere builds WHERE clauses
 func (s *Server) handleNRQLBuildWhere(ctx context.Context, params map[string]interface{}) (interface{}, error) {
 	conditions, _ := params["conditions"].([]interface{})
 	operator, _ := params["operator"].(string)
@@ -517,7 +349,6 @@ func (s *Server) handleNRQLBuildWhere(ctx context.Context, params map[string]int
 	}
 
 	var whereParts []string
-
 	for _, cond := range conditions {
 		if condMap, ok := cond.(map[string]interface{}); ok {
 			attribute, _ := condMap["attribute"].(string)
@@ -525,34 +356,29 @@ func (s *Server) handleNRQLBuildWhere(ctx context.Context, params map[string]int
 			value := condMap["value"]
 
 			var part string
-			
-			// Handle different value types
 			switch v := value.(type) {
 			case string:
-				// Escape single quotes in string values
-				escaped := strings.ReplaceAll(v, "'", "\\'")
-				part = fmt.Sprintf("%s %s '%s'", attribute, op, escaped)
-			case bool:
-				if op == "IS" {
-					part = fmt.Sprintf("%s IS %v", attribute, v)
+				if op == "IN" || op == "NOT IN" {
+					part = fmt.Sprintf("%s %s (%s)", attribute, op, v)
 				} else {
-					part = fmt.Sprintf("%s = %v", attribute, v)
+					part = fmt.Sprintf("%s %s '%s'", attribute, op, v)
 				}
+			case float64:
+				part = fmt.Sprintf("%s %s %v", attribute, op, v)
+			case bool:
+				part = fmt.Sprintf("%s %s %v", attribute, op, v)
 			case nil:
-				if op == "IS" {
-					part = fmt.Sprintf("%s IS NULL", attribute)
-				} else if op == "IS NOT" {
-					part = fmt.Sprintf("%s IS NOT NULL", attribute)
+				if op == "IS" || op == "IS NOT" {
+					part = fmt.Sprintf("%s %s NULL", attribute, op)
 				}
-			default:
-				part = fmt.Sprintf("%s %s %v", attribute, op, value)
 			}
-			
-			whereParts = append(whereParts, part)
+
+			if part != "" {
+				whereParts = append(whereParts, part)
+			}
 		}
 	}
 
-	// Combine with operator
 	whereClause := strings.Join(whereParts, fmt.Sprintf(" %s ", operator))
 	
 	if nestGroups && len(whereParts) > 1 {
@@ -564,4 +390,16 @@ func (s *Server) handleNRQLBuildWhere(ctx context.Context, params map[string]int
 		"parts": whereParts,
 		"operator": operator,
 	}, nil
+}
+
+// getTemplateDescription returns descriptions for query templates
+func getTemplateDescription(templateName string) string {
+	descriptions := map[string]string{
+		"error_rate":          "Calculate the percentage of transactions with errors",
+		"latency_percentiles": "Show latency distribution across percentiles",
+		"throughput":          "Measure requests per minute over time",
+		"apdex":               "Calculate Application Performance Index score",
+		"top_transactions":    "Find the most frequently called transactions",
+	}
+	return descriptions[templateName]
 }

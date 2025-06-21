@@ -1,5 +1,7 @@
 package grpc
 
+import "context"
+
 // This file contains the simplified gRPC types without requiring protobuf generation
 // These types match the proto definitions but are plain Go structs
 

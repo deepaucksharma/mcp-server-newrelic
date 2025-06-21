@@ -102,6 +102,37 @@ func (sm *StateAwareSessionManager) Cleanup() error {
 	return sm.stateManager.CleanupExpired(ctx)
 }
 
+// List returns all active sessions
+func (sm *StateAwareSessionManager) List() []Session {
+	// TODO: Implement ListSessions in StateManager
+	// For now, return empty list
+	return []Session{}
+}
+
+// End terminates a session
+func (sm *StateAwareSessionManager) End(id string) {
+	sm.Delete(id)
+}
+
+// StoreClientInfo stores client information for a session
+func (sm *StateAwareSessionManager) StoreClientInfo(id string, info interface{}) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	
+	ctx := context.Background()
+	sm.stateManager.SetContext(ctx, id, "clientInfo", info)
+}
+
+// GetClientInfo retrieves client information for a session
+func (sm *StateAwareSessionManager) GetClientInfo(id string) interface{} {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	
+	ctx := context.Background()
+	info, _ := sm.stateManager.GetContext(ctx, id, "clientInfo")
+	return info
+}
+
 // EnhancedServer extends the MCP server with state management
 type EnhancedServer struct {
 	*Server

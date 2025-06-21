@@ -153,7 +153,7 @@ func (s *AdaptiveSamplingStrategy) Sample(ctx context.Context, params discovery.
 		int(time.Since(params.TimeRange.Start).Minutes()),
 	)
 	
-	initialResult, err := s.nrdb.Query(ctx, initialQuery)
+	_, err := s.nrdb.Query(ctx, initialQuery)
 	if err != nil {
 		return nil, err
 	}
@@ -161,6 +161,7 @@ func (s *AdaptiveSamplingStrategy) Sample(ctx context.Context, params discovery.
 	// Analyze initial sample to determine best approach
 	// For now, just use random sampling
 	// TODO: Implement adaptive logic based on data characteristics
+	// _ = initialResult // Will use this when implementing adaptive logic
 	
 	random := &RandomSamplingStrategy{nrdb: s.nrdb}
 	return random.Sample(ctx, params)

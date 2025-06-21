@@ -52,7 +52,7 @@ func (s *Server) handleDiscoveryExploreAttributesImpl(ctx context.Context, param
 		SINCE 1 hour ago
 	`, eventType, int(sampleSize))
 
-	keysetResult, err := client.QueryNRDB(ctx, keysetQuery)
+	keysetResult, err := client.QueryNRQL(ctx, keysetQuery)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query keyset: %w", err)
 	}
@@ -100,7 +100,7 @@ func (s *Server) handleDiscoveryExploreAttributesImpl(ctx context.Context, param
 				SINCE 1 hour ago
 			`, attr, attr, eventType, int(sampleSize))
 
-			detailResult, err := client.QueryNRDB(ctx, detailQuery)
+			detailResult, err := client.QueryNRQL(ctx, detailQuery)
 			if err == nil && len(detailResult["results"].([]interface{})) > 0 {
 				if res, ok := detailResult["results"].([]interface{})[0].(map[string]interface{}); ok {
 					total := getFloat64(res, "total")
@@ -124,7 +124,7 @@ func (s *Server) handleDiscoveryExploreAttributesImpl(ctx context.Context, param
 					SINCE 1 hour ago
 				`, attr, eventType, attr)
 
-				exampleResult, err := client.QueryNRDB(ctx, exampleQuery)
+				exampleResult, err := client.QueryNRQL(ctx, exampleQuery)
 				if err == nil && len(exampleResult["results"].([]interface{})) > 0 {
 					if res, ok := exampleResult["results"].([]interface{})[0].(map[string]interface{}); ok {
 						if examples, ok := res["examples"].([]interface{}); ok {

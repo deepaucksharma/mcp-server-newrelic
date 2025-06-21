@@ -23,7 +23,7 @@ func (s *Server) handleDiscoveryExploreEventTypes(ctx context.Context, params ma
 	accountID, _ := params["account_id"].(string)
 
 	// Get New Relic client with account support
-	nrClient, err := s.getNRClientWithAccount(accountID)
+	_, err := s.getNRClientWithAccount(accountID)
 	if err != nil {
 		return nil, err
 	}

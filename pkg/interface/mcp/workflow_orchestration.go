@@ -3,9 +3,26 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
+
+// ContextManager manages workflow execution context
+type ContextManager struct {
+	data map[string]interface{}
+	mu   sync.RWMutex
+}
+
+// StepValidator validates workflow steps
+type StepValidator interface {
+	Validate(step *WorkflowStep, context *WorkflowContext) error
+}
+
+// DataTransformer transforms data between workflow steps
+type DataTransformer interface {
+	Transform(input interface{}, spec map[string]interface{}) (interface{}, error)
+}
 
 // WorkflowOrchestrator manages complex workflow execution patterns
 type WorkflowOrchestrator struct {
@@ -445,7 +462,9 @@ func (o *WorkflowOrchestrator) evaluateCondition(ctx context.Context, execution 
 	case "less_than":
 		return compareNumeric(left, right, "<")
 	case "contains":
-		return contains(fmt.Sprintf("%v", left), fmt.Sprintf("%v", right)), nil
+		leftStr := fmt.Sprintf("%v", left)
+		rightStr := fmt.Sprintf("%v", right)
+		return strings.Contains(leftStr, rightStr), nil
 	case "exists":
 		return left != nil, nil
 	default:
@@ -505,6 +524,221 @@ func (c *WorkflowContext) GetFindings() []Finding {
 }
 
 // Supporting types
+
+// Helper methods for WorkflowOrchestrator
+
+func (o *WorkflowOrchestrator) getExecution(id string) (*WorkflowExecution, error) {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	
+	execution, exists := o.workflows[id]
+	if !exists {
+		return nil, fmt.Errorf("workflow execution not found: %s", id)
+	}
+	return execution, nil
+}
+
+func (o *WorkflowOrchestrator) shouldExecuteStep(ctx context.Context, execution *WorkflowExecution, step *WorkflowStep) bool {
+	// Check conditions
+	if step.Condition != "" {
+		result, err := o.evaluateCondition(ctx, execution, step.Condition)
+		if err != nil || !result {
+			return false
+		}
+	}
+	
+	// Check dependencies
+	for _, dep := range step.DependsOn {
+		if !o.isStepCompleted(execution, dep) {
+			return false
+		}
+	}
+	
+	return true
+}
+
+func (o *WorkflowOrchestrator) isStepCompleted(execution *WorkflowExecution, stepName string) bool {
+	for _, log := range execution.ExecutionLog {
+		if log.StepName == stepName && log.Status == "completed" {
+			return true
+		}
+	}
+	return false
+}
+
+func (o *WorkflowOrchestrator) logStepSkipped(execution *WorkflowExecution, stepName string, reason string) {
+	o.addLogEntry(execution, ExecutionLogEntry{
+		Timestamp: time.Now(),
+		StepName:  stepName,
+		Status:    "skipped",
+		Message:   reason,
+	})
+}
+
+func (o *WorkflowOrchestrator) logStepError(execution *WorkflowExecution, stepName string, err error) {
+	o.addLogEntry(execution, ExecutionLogEntry{
+		Timestamp: time.Now(),
+		StepName:  stepName,
+		Status:    "error",
+		Error:     err,
+		Message:   err.Error(),
+	})
+}
+
+func (o *WorkflowOrchestrator) logStepCompleted(execution *WorkflowExecution, stepName string, result interface{}) {
+	o.addLogEntry(execution, ExecutionLogEntry{
+		Timestamp: time.Now(),
+		StepName:  stepName,
+		Status:    "completed",
+		Result:    result,
+	})
+}
+
+func (o *WorkflowOrchestrator) logDecision(execution *WorkflowExecution, message string) {
+	o.addLogEntry(execution, ExecutionLogEntry{
+		Timestamp: time.Now(),
+		StepName:  "decision",
+		Status:    "info",
+		Message:   message,
+	})
+}
+
+func (o *WorkflowOrchestrator) logInfo(execution *WorkflowExecution, message string) {
+	o.addLogEntry(execution, ExecutionLogEntry{
+		Timestamp: time.Now(),
+		Status:    "info",
+		Message:   message,
+	})
+}
+
+func (o *WorkflowOrchestrator) logError(execution *WorkflowExecution, message string, err error) {
+	o.addLogEntry(execution, ExecutionLogEntry{
+		Timestamp: time.Now(),
+		Status:    "error",
+		Message:   message,
+		Error:     err,
+	})
+}
+
+func (o *WorkflowOrchestrator) logWarning(execution *WorkflowExecution, message string) {
+	o.addLogEntry(execution, ExecutionLogEntry{
+		Timestamp: time.Now(),
+		Status:    "warning",
+		Message:   message,
+	})
+}
+
+func (o *WorkflowOrchestrator) addLogEntry(execution *WorkflowExecution, entry ExecutionLogEntry) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	execution.ExecutionLog = append(execution.ExecutionLog, entry)
+}
+
+func (o *WorkflowOrchestrator) resolveInputs(ctx context.Context, execution *WorkflowExecution, inputs map[string]interface{}) (map[string]interface{}, error) {
+	resolved := make(map[string]interface{})
+	
+	for key, value := range inputs {
+		resolvedValue, err := o.resolveValue(ctx, execution, value)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve input %s: %w", key, err)
+		}
+		resolved[key] = resolvedValue
+	}
+	
+	return resolved, nil
+}
+
+func (o *WorkflowOrchestrator) resolveValue(ctx context.Context, execution *WorkflowExecution, value interface{}) (interface{}, error) {
+	switch v := value.(type) {
+	case string:
+		// Check if it's a reference like ${context.variable}
+		if strings.HasPrefix(v, "${") && strings.HasSuffix(v, "}") {
+			ref := strings.TrimSuffix(strings.TrimPrefix(v, "${"), "}")
+			parts := strings.Split(ref, ".")
+			
+			if len(parts) >= 2 && parts[0] == "context" {
+				val, exists := execution.Context.Get(parts[1])
+				if !exists {
+					return nil, fmt.Errorf("context variable not found: %s", parts[1])
+				}
+				return val, nil
+			}
+		}
+		return v, nil
+		
+	case map[string]interface{}:
+		// Recursively resolve nested maps
+		resolved := make(map[string]interface{})
+		for k, v := range v {
+			resolvedValue, err := o.resolveValue(ctx, execution, v)
+			if err != nil {
+				return nil, err
+			}
+			resolved[k] = resolvedValue
+		}
+		return resolved, nil
+		
+	case []interface{}:
+		// Recursively resolve arrays
+		resolved := make([]interface{}, len(v))
+		for i, item := range v {
+			resolvedValue, err := o.resolveValue(ctx, execution, item)
+			if err != nil {
+				return nil, err
+			}
+			resolved[i] = resolvedValue
+		}
+		return resolved, nil
+		
+	default:
+		return value, nil
+	}
+}
+
+func (o *WorkflowOrchestrator) executeWithRetry(ctx context.Context, execution *WorkflowExecution, step *WorkflowStep, inputs map[string]interface{}) (interface{}, error) {
+	maxRetries := step.MaxRetries
+	if maxRetries <= 0 {
+		maxRetries = 1
+	}
+	
+	var lastErr error
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			// Wait before retry
+			time.Sleep(time.Duration(attempt) * time.Second)
+		}
+		
+		result, err := o.executeTool(ctx, step.Tool, inputs)
+		if err == nil {
+			return result, nil
+		}
+		
+		lastErr = err
+		o.logWarning(execution, fmt.Sprintf("Attempt %d failed for step %s: %v", attempt+1, step.Name, err))
+	}
+	
+	return nil, fmt.Errorf("all %d attempts failed: %w", maxRetries, lastErr)
+}
+
+// Helper function for numeric comparison
+func compareNumeric(left, right float64, operator string) bool {
+	switch operator {
+	case ">":
+		return left > right
+	case ">=":
+		return left >= right
+	case "<":
+		return left < right
+	case "<=":
+		return left <= right
+	case "==":
+		return left == right
+	case "!=":
+		return left != right
+	default:
+		return false
+	}
+}
 
 type StepCondition struct {
 	Left     interface{} `json:"left"`

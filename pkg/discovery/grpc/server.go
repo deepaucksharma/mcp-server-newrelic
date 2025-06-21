@@ -20,7 +20,7 @@ import (
 
 // DiscoveryServer implements a gRPC server for the discovery engine
 type DiscoveryServer struct {
-	engine *discovery.InstrumentedEngine
+	engine discovery.DiscoveryEngine
 	tracer *telemetry.Tracer
 	server *grpc.Server
 }
@@ -46,7 +46,7 @@ func DefaultConfig() Config {
 }
 
 // NewDiscoveryServer creates a new gRPC server for discovery
-func NewDiscoveryServer(engine *discovery.InstrumentedEngine, config Config) (*DiscoveryServer, error) {
+func NewDiscoveryServer(engine discovery.DiscoveryEngine, config Config) (*DiscoveryServer, error) {
 	// Create tracer
 	tracerConfig := telemetry.DefaultConfig()
 	tracer, err := telemetry.NewTracer(tracerConfig)

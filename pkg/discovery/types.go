@@ -208,6 +208,16 @@ type TimeRange struct {
 	End   time.Time `json:"end"`
 }
 
+// RelationshipGraph represents the overall graph structure of relationships
+type RelationshipGraph struct {
+	Nodes         int                    `json:"nodes"`          // Total number of schemas
+	Edges         int                    `json:"edges"`          // Total number of relationships
+	Hubs          []string               `json:"hubs"`           // High-connectivity schemas
+	Isolated      []string               `json:"isolated"`       // Schemas with no relationships
+	AverageDegree float64                `json:"average_degree"` // Average connections per schema
+	Relationships []Relationship         `json:"relationships"`  // All relationships in the graph
+}
+
 // Duration methods for custom JSON marshaling
 func (d Duration) MarshalJSON() ([]byte, error) {
 	return []byte(`"` + d.Duration.String() + `"`), nil
