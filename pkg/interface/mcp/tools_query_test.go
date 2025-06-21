@@ -148,7 +148,7 @@ func TestHandleQueryBuilder(t *testing.T) {
 		{
 			name: "simple count query",
 			params: map[string]interface{}{
-				"select":     "count(*)",
+				"select":     []interface{}{"count(*)"},
 				"event_type": "Transaction",
 			},
 			wantErr: false,
@@ -166,7 +166,7 @@ func TestHandleQueryBuilder(t *testing.T) {
 		{
 			name: "query with where clause",
 			params: map[string]interface{}{
-				"select":     "average(duration)",
+				"select":     []interface{}{"average(duration)"},
 				"event_type": "Transaction",
 				"where":      "appName = 'myapp'",
 			},
@@ -182,9 +182,9 @@ func TestHandleQueryBuilder(t *testing.T) {
 		{
 			name: "query with facet",
 			params: map[string]interface{}{
-				"select":     "count(*)",
+				"select":     []interface{}{"count(*)"},
 				"event_type": "Transaction",
-				"facet":      "appName",
+				"facet":      []interface{}{"appName"},
 			},
 			wantErr: false,
 			check: func(t *testing.T, result interface{}) {
@@ -206,7 +206,7 @@ func TestHandleQueryBuilder(t *testing.T) {
 		{
 			name:    "missing required event_type",
 			params:  map[string]interface{}{
-				"select": "count(*)",
+				"select": []interface{}{"count(*)"},
 			},
 			wantErr: true,
 			errMsg:  "event_type parameter is required",

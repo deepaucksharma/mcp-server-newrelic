@@ -3,13 +3,13 @@
 package mcp
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -24,21 +24,16 @@ func TestStdioTransportIntegration(t *testing.T) {
 	err := server.registerTools()
 	require.NoError(t, err)
 	
-	transport := NewStdioTransport()
-	
 	// Create mock stdio
 	input := &bytes.Buffer{}
 	output := &bytes.Buffer{}
 	
-	// Override stdio for testing
-	oldStdin := transport.(*StdioTransport).stdin
-	oldStdout := transport.(*StdioTransport).stdout
-	transport.(*StdioTransport).stdin = input
-	transport.(*StdioTransport).stdout = output
-	defer func() {
-		transport.(*StdioTransport).stdin = oldStdin
-		transport.(*StdioTransport).stdout = oldStdout
-	}()
+	// Create transport with mocked reader/writer
+	transport := &StdioTransport{
+		reader: bufio.NewReader(input),
+		writer: output,
+		done:   make(chan struct{}),
+	}
 	
 	// Start transport in background
 	ctx, cancel := context.WithCancel(context.Background())
@@ -114,7 +109,7 @@ func TestHTTPTransportIntegration(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	
 	// Get actual address
-	addr := transport.(*HTTPTransport).server.Addr
+	addr := transport.server.Addr
 	baseURL := fmt.Sprintf("http://%s", addr)
 	
 	t.Run("Single Request", func(t *testing.T) {
@@ -225,7 +220,7 @@ func TestSSETransportIntegration(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	
 	// Get actual address
-	addr := transport.(*SSETransport).server.Addr
+	addr := transport.server.Addr
 	baseURL := fmt.Sprintf("http://%s", addr)
 	
 	t.Run("SSE Connection", func(t *testing.T) {
@@ -366,7 +361,7 @@ func TestTransportResilience(t *testing.T) {
 		go transport.Start(ctx, server.protocol)
 		time.Sleep(100 * time.Millisecond)
 		
-		addr := transport.(*HTTPTransport).server.Addr
+		addr := transport.server.Addr
 		baseURL := fmt.Sprintf("http://%s/rpc", addr)
 		
 		// Send many concurrent requests
@@ -431,11 +426,11 @@ func TestTransportMetrics(t *testing.T) {
 	server.registerTools()
 	
 	// Mock metrics collector
-	metrics := &mockMetrics{
-		requests:   make(map[string]int),
-		durations:  make([]time.Duration, 0),
-		errors:     make(map[string]int),
-	}
+	// metrics := &mockMetrics{
+	// 	requests:   make(map[string]int),
+	// 	durations:  make([]time.Duration, 0),
+	// 	errors:     make(map[string]int),
+	// }
 	
 	// Inject metrics collector (would be done via config in production)
 	// server.metrics = metrics
@@ -448,7 +443,7 @@ func TestTransportMetrics(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	
 	// Send various requests
-	addr := transport.(*HTTPTransport).server.Addr
+	addr := transport.server.Addr
 	baseURL := fmt.Sprintf("http://%s/rpc", addr)
 	
 	// Successful request

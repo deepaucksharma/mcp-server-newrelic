@@ -129,6 +129,7 @@ func TestEnhancedProtocol_BatchRequests(t *testing.T) {
 func TestEnhancedProtocol_ParameterValidation(t *testing.T) {
 	config := ServerConfig{
 		StreamingEnabled: true,
+		RequestTimeout:   30 * time.Second,
 	}
 	server := NewServer(config)
 	

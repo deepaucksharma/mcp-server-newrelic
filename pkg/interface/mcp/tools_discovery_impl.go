@@ -252,7 +252,7 @@ func (s *Server) handleDiscoveryExploreAttributesImpl(ctx context.Context, param
 		}
 
 		// Infer data type from attribute name and examples
-		detail["inferredType"] = inferDataType(attr, detail["examples"])
+		detail["type"] = inferDataType(attr, detail["examples"])
 
 		attributeDetails = append(attributeDetails, detail)
 	}

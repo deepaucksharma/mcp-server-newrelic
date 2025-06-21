@@ -229,6 +229,20 @@ func (s *Server) handleQueryNRDB(ctx context.Context, params map[string]interfac
 		return nil, NewQueryError(query, err)
 	}
 
+	// Ensure metadata has messages field for API contract compliance
+	if resultMap, ok := result.(map[string]interface{}); ok {
+		if metadata, ok := resultMap["metadata"].(map[string]interface{}); ok {
+			if _, hasMessages := metadata["messages"]; !hasMessages {
+				metadata["messages"] = []string{}
+			}
+		} else {
+			// Create metadata if it doesn't exist
+			resultMap["metadata"] = map[string]interface{}{
+				"messages": []string{},
+			}
+		}
+	}
+
 	return result, nil
 }
 
@@ -380,12 +394,47 @@ func (s *Server) handleQueryBuilder(ctx context.Context, params map[string]inter
 // Helper functions for query operations
 
 func (s *Server) validateNRQLSafety(query string) error {
+	// Check if validator is available
+	if s.nrqlValidator == nil {
+		// Basic safety check if validator not available
+		if query == "" {
+			return fmt.Errorf("query cannot be empty")
+		}
+		// Check for potentially dangerous patterns
+		dangerousPatterns := []string{"DROP", "DELETE", "UPDATE", "INSERT", "CREATE", "ALTER"}
+		upperQuery := strings.ToUpper(query)
+		for _, pattern := range dangerousPatterns {
+			if strings.Contains(upperQuery, pattern) {
+				return fmt.Errorf("potentially dangerous operation: %s", pattern)
+			}
+		}
+		return nil
+	}
 	// Use the validator to sanitize and check the query
 	_, err := s.nrqlValidator.Sanitize(query)
 	return err
 }
 
 func (s *Server) validateNRQLSyntax(query string) error {
+	// Check if validator is available
+	if s.nrqlValidator == nil {
+		// Basic validation if validator not available
+		if query == "" {
+			return fmt.Errorf("query cannot be empty")
+		}
+		upperQuery := strings.ToUpper(query)
+		if !strings.Contains(upperQuery, "SELECT") {
+			return fmt.Errorf("invalid NRQL query: missing SELECT")
+		}
+		if !strings.Contains(upperQuery, "FROM") {
+			return fmt.Errorf("invalid NRQL query: missing FROM clause")
+		}
+		// Check for incomplete queries
+		if strings.TrimSpace(query) == "SELECT" || strings.HasSuffix(strings.TrimSpace(query), "SELECT") {
+			return fmt.Errorf("invalid NRQL query: incomplete SELECT statement")
+		}
+		return nil
+	}
 	// Use the validator for comprehensive syntax checking
 	_, err := s.nrqlValidator.Sanitize(query)
 	return err

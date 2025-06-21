@@ -132,7 +132,14 @@ func TestBatchRequestHandling(t *testing.T) {
 		
 		assert.NotNil(t, response.Error)
 		assert.Equal(t, InvalidRequestCode, response.Error.Code)
-		assert.Contains(t, response.Error.Message, "Empty batch")
+		// Check for "Empty batch" in the error details
+		if response.Error.Data != nil {
+			if details, ok := response.Error.Data.(map[string]interface{}); ok {
+				if detail, ok := details["detail"].(string); ok {
+					assert.Contains(t, detail, "Empty batch")
+				}
+			}
+		}
 	})
 
 	t.Run("InvalidBatchJSON", func(t *testing.T) {

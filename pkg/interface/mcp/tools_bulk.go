@@ -715,19 +715,21 @@ func (s *Server) handleBulkExecuteQueries(ctx context.Context, params map[string
 			}(job)
 		}
 
-		// Collect results
+		// Collect results in order
+		orderedResults := make([]map[string]interface{}, len(jobs))
 		for _, job := range jobs {
 			select {
 			case result := <-job.result:
-				results = append(results, result)
+				orderedResults[job.index] = result
 			case <-queryCtx.Done():
-				results = append(results, map[string]interface{}{
+				orderedResults[job.index] = map[string]interface{}{
 					"index":  job.index,
 					"status": "failed",
 					"error":  "query timeout",
-				})
+				}
 			}
 		}
+		results = orderedResults
 	} else {
 		// Sequential execution
 		for i, qRaw := range queriesRaw {

@@ -523,6 +523,11 @@ func (s *Server) handleAnalyzeAlerts(ctx context.Context, params map[string]inte
 		timeRange = tr
 	}
 
+	// Check mock mode
+	if s.isMockMode() {
+		return s.getMockData("analyze_alerts", params), nil
+	}
+
 	// Get New Relic client
 	nrClient := s.getNRClient()
 	if nrClient == nil {
@@ -657,6 +662,11 @@ func (s *Server) handleBulkUpdateAlerts(ctx context.Context, params map[string]i
 		"results":       []map[string]interface{}{},
 	}
 
+	// Check mock mode
+	if s.isMockMode() {
+		return s.getMockData("bulk_update_alerts", params), nil
+	}
+
 	// Get New Relic client
 	nrClient := s.getNRClient()
 	if nrClient == nil {
@@ -785,6 +795,11 @@ func (s *Server) handleCreateAlertPolicy(ctx context.Context, params map[string]
 	}
 	if !validPrefs[incidentPref] {
 		return nil, fmt.Errorf("invalid incident_preference: %s", incidentPref)
+	}
+
+	// Check mock mode
+	if s.isMockMode() {
+		return s.getMockData("create_alert_policy", params), nil
 	}
 
 	// Get New Relic client
@@ -953,6 +968,11 @@ func (s *Server) handleCreateAlertCondition(ctx context.Context, params map[stri
 	}
 	if !validComparisons[comparison] {
 		return nil, fmt.Errorf("invalid comparison: %s", comparison)
+	}
+
+	// Check mock mode
+	if s.isMockMode() {
+		return s.getMockData("create_alert_condition", params), nil
 	}
 
 	// Get New Relic client

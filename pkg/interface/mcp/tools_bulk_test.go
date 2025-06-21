@@ -81,7 +81,7 @@ func TestHandleBulkTagEntities(t *testing.T) {
 				"tags":         []interface{}{"env:production"},
 			},
 			wantErr: true,
-			errMsg:  "invalid entity GUID at index 0",
+			errMsg:  "must be a non-empty string",
 		},
 		{
 			name: "invalid tag type",
@@ -90,7 +90,7 @@ func TestHandleBulkTagEntities(t *testing.T) {
 				"tags":         []interface{}{123, "env:production"},
 			},
 			wantErr: true,
-			errMsg:  "invalid tag at index 0",
+			errMsg:  "must be a non-empty string in key:value format",
 		},
 	}
 
@@ -334,7 +334,7 @@ func TestHandleBulkUpdateDashboards(t *testing.T) {
 				"updates":       map[string]interface{}{"add_tags": []interface{}{"team:platform"}},
 			},
 			wantErr: true,
-			errMsg:  "invalid dashboard ID at index 0",
+			errMsg:  "must be a non-empty string",
 		},
 	}
 
@@ -408,7 +408,7 @@ func TestHandleBulkDeleteEntities(t *testing.T) {
 				"entity_ids":  []interface{}{"entity-1"},
 			},
 			wantErr: true,
-			errMsg:  "invalid entity_type",
+			errMsg:  "must be one of: monitor, dashboard, alert_condition",
 		},
 		{
 			name:    "missing entity_ids",
@@ -445,7 +445,7 @@ func TestHandleBulkDeleteEntities(t *testing.T) {
 				"entity_ids":  []interface{}{123, "monitor-2"},
 			},
 			wantErr: true,
-			errMsg:  "invalid entity ID at index 0",
+			errMsg:  "must be a non-empty string",
 		},
 	}
 
