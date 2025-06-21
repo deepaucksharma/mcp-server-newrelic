@@ -343,3 +343,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 **Version**: 1.0.0-beta | **Last Updated**: June 2025
+See [CHANGELOG](./CHANGELOG.md) for release history.
+

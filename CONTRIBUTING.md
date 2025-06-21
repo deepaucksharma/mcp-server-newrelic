@@ -286,6 +286,12 @@ func TestDiscoverSchemas(t *testing.T) {
 - **Architecture Questions**: Review [Architecture Docs](./docs/architecture/)
 - **Discussions**: Use GitHub Discussions
 - **Real-time Chat**: [Discord/Slack] (if available)
+### Updating the Changelog
+
+1. Update `CHANGELOG.md` at the repository root.
+2. Add a version heading with the release date and summary.
+3. Commit the changelog with your PR.
+
 
 ## Recognition
 
