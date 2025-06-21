@@ -315,48 +315,41 @@ func (s *Server) handleAnalysisDetectAnomalies(ctx context.Context, params map[s
 	
 	sensitivity, _ := params["sensitivity"].(float64)
 	if sensitivity == 0 {
-		sensitivity = 3
+		sensitivity = 0.7 // 0-1 scale
 	}
 	
 	method, _ := params["method"].(string)
 	if method == "" {
-		method = "zscore"
+		method = "multi" // Use all methods
 	}
 
 	// Check mock mode
-	if s.nrClient == nil {
-		return s.mockAnalysisAnomalies(metric, eventType, timeRange, sensitivity, method), nil
+	if s.isMockMode() {
+		return s.getMockData("analysis.detect_anomalies", params), nil
 	}
 
-	// Get time series data
-	query := fmt.Sprintf(`
-		SELECT 
-			average(%s) as value
-		FROM %s
-		TIMESERIES 5 minutes
-		SINCE %s
-	`, metric, eventType, timeRange)
-
-	result, err := s.executeNRQL(ctx, query, nil)
+	// Use the new anomaly detector
+	detector := &AnomalyDetector{server: s}
+	result, err := detector.DetectAnomalies(ctx, metric, eventType, timeRange, sensitivity)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get time series: %w", err)
+		return nil, err
 	}
 
-	// Apply anomaly detection
-	timeSeries := extractTimeSeries(result)
-	anomalies := detectAnomalies(timeSeries, method, sensitivity)
-
-	return map[string]interface{}{
-		"metric":             metric,
-		"eventType":          eventType,
-		"timeRange":          timeRange,
+	// Convert to response format
+	response := map[string]interface{}{
+		"metric":             result.Metric,
+		"event_type":         result.EventType,
+		"time_range":         result.TimeRange,
 		"method":             method,
 		"sensitivity":        sensitivity,
-		"anomaliesDetected":  len(anomalies),
-		"anomalies":          anomalies,
-		"normalRanges":       calculateNormalRanges(timeSeries, anomalies),
-		"recommendations":    generateAnomalyRecommendations(anomalies),
-	}, nil
+		"anomalies_detected": len(result.Anomalies),
+		"anomalies":          result.Anomalies,
+		"statistics":         result.Statistics,
+		"summary":            result.Summary,
+		"recommendations":    generateAnomalyRecommendations(result.Anomalies),
+	}
+
+	return response, nil
 }
 
 func (s *Server) handleAnalysisFindCorrelations(ctx context.Context, params map[string]interface{}) (interface{}, error) {

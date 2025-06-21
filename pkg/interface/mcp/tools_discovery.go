@@ -32,9 +32,9 @@ func (s *Server) registerTools() error {
 		return fmt.Errorf("failed to register dashboard tools: %w", err)
 	}
 	
-	// Alert tools
-	if err := s.registerAlertTools(); err != nil {
-		return fmt.Errorf("failed to register alert tools: %w", err)
+	// Action tools (alerts, dashboards, SLOs, reports)
+	if err := s.RegisterActionTools(); err != nil {
+		return fmt.Errorf("failed to register action tools: %w", err)
 	}
 	
 	// Bulk operations tools
