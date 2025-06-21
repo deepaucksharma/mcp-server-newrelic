@@ -65,18 +65,18 @@ func runMCPConnect(cmd *cobra.Command, args []string) error {
 
 	// Start MCP server as subprocess
 	serverCmd := exec.Command(serverPath, "--transport", "stdio")
-	
+
 	// Get pipes
 	stdin, err := serverCmd.StdinPipe()
 	if err != nil {
 		return fmt.Errorf("failed to get stdin pipe: %w", err)
 	}
-	
+
 	stdout, err := serverCmd.StdoutPipe()
 	if err != nil {
 		return fmt.Errorf("failed to get stdout pipe: %w", err)
 	}
-	
+
 	stderr, err := serverCmd.StderrPipe()
 	if err != nil {
 		return fmt.Errorf("failed to get stderr pipe: %w", err)
@@ -105,10 +105,10 @@ func runMCPConnect(cmd *cobra.Command, args []string) error {
 	// Interactive loop
 	scanner := bufio.NewScanner(os.Stdin)
 	fmt.Print("> ")
-	
+
 	for scanner.Scan() {
 		line := scanner.Text()
-		
+
 		switch line {
 		case "help":
 			printMCPHelp()
@@ -124,7 +124,7 @@ func runMCPConnect(cmd *cobra.Command, args []string) error {
 				fmt.Printf("Error: %v\n", err)
 			}
 		}
-		
+
 		fmt.Print("> ")
 	}
 
@@ -145,7 +145,7 @@ func runMCPServer(cmd *cobra.Command, args []string) error {
 		"--port", fmt.Sprintf("%d", port),
 		"--timeout", timeout.String(),
 	}
-	
+
 	if debug {
 		serverArgs = append(serverArgs, "--debug")
 	}
@@ -179,7 +179,7 @@ func sendMCPRequest(stdin io.Writer, stdout io.Reader, request interface{}) erro
 
 	// Read response
 	reader := bufio.NewReader(stdout)
-	
+
 	// Read length header
 	var respLength uint32
 	if err := binary.Read(reader, binary.BigEndian, &respLength); err != nil {
@@ -223,14 +223,14 @@ func listTools(stdin io.Writer, stdout io.Reader) error {
 func executeToolCommand(stdin io.Writer, stdout io.Reader, command string) error {
 	// Simple command parsing (in production, use a proper parser)
 	// Format: tool-name [args as JSON]
-	
+
 	// For now, just echo the command
 	fmt.Printf("Would execute: %s\n", command)
 	return nil
 }
 
 func printMCPHelp() {
-	fmt.Println(`Available commands:
+	fmt.Print(`Available commands:
   help              Show this help message
   tools             List available tools
   exit/quit         Exit the session

@@ -4,17 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestEnhancedProtocol_JSONRPCCompliance(t *testing.T) {
-	// Create server with enhanced protocol
+	// Create server with standard configuration
 	config := ServerConfig{
-		EnhancedProtocol: true,
 		MaxConcurrent:    10,
-		RequestTimeout:   30,
+		RequestTimeout:   30 * time.Second,
+		StreamingEnabled: true,
 	}
 	server := NewServer(config)
 	handler := &ProtocolHandler{server: server}
@@ -82,7 +83,7 @@ func TestEnhancedProtocol_JSONRPCCompliance(t *testing.T) {
 	ctx := context.Background()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			response, err := handler.EnhancedHandleMessage(ctx, []byte(tt.request))
+			response, err := handler.HandleMessage(ctx, []byte(tt.request))
 			tt.validate(t, response, err)
 		})
 	}
@@ -90,9 +91,9 @@ func TestEnhancedProtocol_JSONRPCCompliance(t *testing.T) {
 
 func TestEnhancedProtocol_BatchRequests(t *testing.T) {
 	config := ServerConfig{
-		EnhancedProtocol: true,
 		MaxConcurrent:    10,
-		RequestTimeout:   30,
+		RequestTimeout:   30 * time.Second,
+		StreamingEnabled: true,
 	}
 	server := NewServer(config)
 	handler := &ProtocolHandler{server: server}
@@ -105,7 +106,7 @@ func TestEnhancedProtocol_BatchRequests(t *testing.T) {
 	]`
 
 	ctx := context.Background()
-	response, err := handler.EnhancedHandleMessage(ctx, []byte(batchRequest))
+	response, err := handler.HandleMessage(ctx, []byte(batchRequest))
 	require.NoError(t, err)
 
 	// Parse batch response
@@ -127,7 +128,7 @@ func TestEnhancedProtocol_BatchRequests(t *testing.T) {
 
 func TestEnhancedProtocol_ParameterValidation(t *testing.T) {
 	config := ServerConfig{
-		EnhancedProtocol: true,
+		StreamingEnabled: true,
 	}
 	server := NewServer(config)
 	
@@ -214,7 +215,8 @@ func TestEnhancedProtocol_ParameterValidation(t *testing.T) {
 				ID: 1,
 			}
 
-			response, err := handler.handleEnhancedToolCall(ctx, req)
+			reqBytes, _ := json.Marshal(req)
+			response, err := handler.HandleMessage(ctx, reqBytes)
 			require.NoError(t, err)
 
 			var resp Response

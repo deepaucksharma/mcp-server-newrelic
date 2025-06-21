@@ -119,10 +119,8 @@ func (s *DiscoveryServer) DiscoverSchemas(ctx context.Context, req *DiscoverSche
 
 	// Convert request to discovery filter
 	filter := discovery.DiscoveryFilter{
-		AccountID:   req.AccountID,
-		Pattern:     req.Pattern,
-		MaxSchemas:  int(req.MaxSchemas),
 		EventTypes:  req.EventTypes,
+		MaxSchemas:  int(req.MaxSchemas),
 		Tags:        req.Tags,
 	}
 
@@ -193,18 +191,27 @@ func (s *DiscoveryServer) IntelligentDiscovery(ctx context.Context, req *Intelli
 
 	// Convert hints
 	hints := discovery.DiscoveryHints{
-		FocusAreas:          req.FocusAreas,
-		EventTypes:          req.EventTypes,
-		AnomalyDetection:    req.AnomalyDetection,
-		PatternMining:       req.PatternMining,
-		QualityAssessment:   req.QualityAssessment,
-		ConfidenceThreshold: req.ConfidenceThreshold,
-		Context:             req.Context,
+		Keywords:       req.FocusAreas, // Map FocusAreas to Keywords
+		Purpose:        "", // Not directly provided in request
+		PreferredTypes: req.EventTypes,
+		Domain:         "", // Not provided in request
+		Examples:       []string{}, // Not provided in request
+		Constraints:    make(map[string]interface{}), // Could add confidence threshold here
+	}
+	
+	// Add context to constraints if provided
+	if len(req.Context) > 0 {
+		hints.Constraints["context"] = req.Context
+	}
+	
+	// Add confidence threshold to constraints if provided
+	if req.ConfidenceThreshold > 0 {
+		hints.Constraints["confidence_threshold"] = req.ConfidenceThreshold
 	}
 
 	// Call engine
 	start := time.Now()
-	schemas, err := s.engine.IntelligentDiscovery(ctx, hints)
+	result, err := s.engine.DiscoverWithIntelligence(ctx, hints)
 	duration := time.Since(start)
 
 	if err != nil {
@@ -214,6 +221,11 @@ func (s *DiscoveryServer) IntelligentDiscovery(ctx context.Context, req *Intelli
 	}
 
 	// Convert response
+	var schemas []discovery.Schema
+	if result != nil {
+		schemas = result.Schemas
+	}
+	
 	resp := &IntelligentDiscoveryResponse{
 		Schemas:           convertSchemas(schemas),
 		DiscoveryDuration: duration.Milliseconds(),
@@ -293,29 +305,42 @@ func (s *DiscoveryServer) GetHealth(ctx context.Context, req *GetHealthRequest) 
 	ctx, span := s.tracer.Start(ctx, "grpc.GetHealth")
 	defer span.End()
 
-	health := s.engine.GetHealth(ctx)
+	health := s.engine.Health()
 
 	resp := &GetHealthResponse{
-		IsHealthy: health.IsHealthy,
+		IsHealthy: health.Status == "healthy",
 		Status:    health.Status,
 		Timestamp: time.Now().Unix(),
-		Checks:    convertHealthChecks(health),
+		Checks:    convertHealthChecks(&health),
 	}
 
 	if req.IncludeMetrics {
-		resp.Metrics = &HealthMetrics{
-			QueriesProcessed:   health.QueriesProcessed,
-			ErrorsCount:        health.ErrorsCount,
-			CacheHitRate:       health.CacheHitRate,
-			Uptime:             int64(health.Uptime.Seconds()),
-			AverageQueryTimeMs: health.AverageQueryTime.Milliseconds(),
+		// Extract metrics from health.Metrics if available
+		metrics := &HealthMetrics{
+			Uptime: int64(health.Uptime.Seconds()),
 		}
+		
+		// Extract other metrics from health.Metrics map if they exist
+		if qp, ok := health.Metrics["queries_processed"].(int64); ok {
+			metrics.QueriesProcessed = qp
+		}
+		if ec, ok := health.Metrics["errors_count"].(int64); ok {
+			metrics.ErrorsCount = ec
+		}
+		if chr, ok := health.Metrics["cache_hit_rate"].(float64); ok {
+			metrics.CacheHitRate = chr
+		}
+		if aqt, ok := health.Metrics["average_query_time_ms"].(int64); ok {
+			metrics.AverageQueryTimeMs = aqt
+		}
+		
+		resp.Metrics = metrics
 	}
 
-	if health.IsHealthy {
+	if health.Status == "healthy" {
 		span.SetStatus(codes.Ok, "Healthy")
 	} else {
-		span.SetStatus(codes.Error, health.LastError)
+		span.SetStatus(codes.Error, health.Status)
 	}
 
 	return resp, nil
@@ -356,15 +381,19 @@ func convertSchema(s *discovery.Schema) *Schema {
 func convertAttributes(attrs []discovery.Attribute) []*Attribute {
 	result := make([]*Attribute, len(attrs))
 	for i, a := range attrs {
+		sampleValues := make([]string, 0, len(a.SampleValues))
+		for _, v := range a.SampleValues {
+			sampleValues = append(sampleValues, fmt.Sprintf("%v", v))
+		}
 		result[i] = &Attribute{
 			Name:         a.Name,
 			DataType:     string(a.DataType),
 			SemanticType: string(a.SemanticType),
-			IsRequired:   a.IsRequired,
-			IsUnique:     a.IsUnique,
-			IsIndexed:    a.IsIndexed,
-			Cardinality:  a.Cardinality,
-			SampleValues: a.SampleValues,
+			IsRequired:   a.NullRatio == 0, // Inferred from null ratio
+			IsUnique:     a.Cardinality.Ratio > 0.9, // High cardinality suggests uniqueness
+			IsIndexed:    false, // Not available in the struct
+			Cardinality:  a.Cardinality.Ratio,
+			SampleValues: sampleValues,
 		}
 	}
 	return result
@@ -372,19 +401,44 @@ func convertAttributes(attrs []discovery.Attribute) []*Attribute {
 
 func convertDataVolume(dv discovery.DataVolumeProfile) *DataVolumeProfile {
 	return &DataVolumeProfile{
-		TotalEvents:      dv.TotalEvents,
-		EventsPerMinute:  dv.EventsPerMinute,
-		DataSizeBytes:    dv.DataSizeBytes,
-		FirstSeen:        dv.FirstSeen.Unix(),
-		LastSeen:         dv.LastSeen.Unix(),
+		TotalEvents:      dv.TotalRecords,
+		EventsPerMinute:  float64(dv.RecordsPerHour) / 60.0,
+		DataSizeBytes:    int64(dv.EstimatedSizeGB * 1024 * 1024 * 1024),
+		FirstSeen:        time.Now().Unix(), // Not available in the struct
+		LastSeen:         time.Now().Unix(), // Not available in the struct
 	}
 }
 
 func convertQualityMetrics(qm discovery.QualityMetrics) *QualityMetrics {
 	return &QualityMetrics{
 		OverallScore: qm.OverallScore,
-		Dimensions:   convertQualityDimensions(qm.Dimensions),
+		Dimensions:   convertQualityDimensionsFromMetrics(qm),
 		Issues:       convertQualityIssues(qm.Issues),
+	}
+}
+
+func convertQualityDimensionsFromMetrics(qm discovery.QualityMetrics) *QualityDimensions {
+	return &QualityDimensions{
+		Completeness: &QualityDimension{
+			Score:  qm.Completeness,
+			Issues: []string{},
+		},
+		Consistency: &QualityDimension{
+			Score:  qm.Consistency,
+			Issues: []string{},
+		},
+		Timeliness: &QualityDimension{
+			Score:  qm.Timeliness,
+			Issues: []string{},
+		},
+		Uniqueness: &QualityDimension{
+			Score:  qm.Uniqueness,
+			Issues: []string{},
+		},
+		Validity: &QualityDimension{
+			Score:  qm.Validity,
+			Issues: []string{},
+		},
 	}
 }
 
@@ -398,7 +452,7 @@ func convertQualityDimensions(qd discovery.QualityDimensions) *QualityDimensions
 	}
 }
 
-func convertQualityDimension(qd discovery.QualityDimension) *QualityDimension {
+func convertQualityDimension(qd discovery.DimensionScore) *QualityDimension {
 	return &QualityDimension{
 		Score:  qd.Score,
 		Issues: qd.Issues,
@@ -408,12 +462,16 @@ func convertQualityDimension(qd discovery.QualityDimension) *QualityDimension {
 func convertQualityIssues(issues []discovery.QualityIssue) []*QualityIssue {
 	result := make([]*QualityIssue, len(issues))
 	for i, issue := range issues {
+		affectedAttrs := []string{}
+		if issue.Attribute != "" {
+			affectedAttrs = append(affectedAttrs, issue.Attribute)
+		}
 		result[i] = &QualityIssue{
-			Severity:           string(issue.Severity),
-			Type:               string(issue.Type),
+			Severity:           issue.Severity,
+			Type:               issue.Type,
 			Description:        issue.Description,
-			AffectedAttributes: issue.AffectedAttributes,
-			OccurrenceCount:    issue.OccurrenceCount,
+			AffectedAttributes: affectedAttrs,
+			OccurrenceCount:    int64(issue.Impact), // Using impact as occurrence count proxy
 		}
 	}
 	return result
@@ -422,14 +480,14 @@ func convertQualityIssues(issues []discovery.QualityIssue) []*QualityIssue {
 func convertPatterns(patterns []discovery.DetectedPattern) []*DetectedPattern {
 	result := make([]*DetectedPattern, len(patterns))
 	for i, p := range patterns {
-		params, _ := json.Marshal(p.Parameters)
+		params, _ := json.Marshal(p.Evidence)
 		result[i] = &DetectedPattern{
-			Type:               string(p.Type),
-			Subtype:            p.Subtype,
+			Type:               p.Type,
+			Subtype:            p.Name, // Using Name as subtype
 			Confidence:         p.Confidence,
 			Description:        p.Description,
 			Parameters:         string(params),
-			AffectedAttributes: p.AffectedAttributes,
+			AffectedAttributes: p.Attributes,
 		}
 	}
 	return result
@@ -438,62 +496,67 @@ func convertPatterns(patterns []discovery.DetectedPattern) []*DetectedPattern {
 func convertRelationships(relationships []discovery.Relationship) []*Relationship {
 	result := make([]*Relationship, len(relationships))
 	for i, r := range relationships {
+		// Create join conditions from source and target attributes
+		joinConditions := []*JoinCondition{{
+			SourceAttribute: r.SourceAttribute,
+			TargetAttribute: r.TargetAttribute,
+			Operator:        "=", // Default operator
+		}}
+		
 		result[i] = &Relationship{
 			Id:              r.ID,
 			Type:            string(r.Type),
 			SourceSchema:    r.SourceSchema,
 			TargetSchema:    r.TargetSchema,
-			JoinConditions:  convertJoinConditions(r.JoinConditions),
-			Strength:        r.Strength,
+			JoinConditions:  joinConditions,
+			Strength:        r.Confidence, // Using confidence as strength
 			Confidence:      r.Confidence,
-			SampleMatches:   r.SampleMatches,
+			SampleMatches:   0, // Not available in the struct
 		}
 	}
 	return result
 }
 
-func convertJoinConditions(conditions []discovery.JoinCondition) []*JoinCondition {
-	result := make([]*JoinCondition, len(conditions))
-	for i, c := range conditions {
-		result[i] = &JoinCondition{
-			SourceAttribute: c.SourceAttribute,
-			TargetAttribute: c.TargetAttribute,
-			Operator:        c.Operator,
-		}
-	}
-	return result
-}
 
 func convertQualityReport(report *discovery.QualityReport) *QualityReport {
 	if report == nil {
 		return nil
 	}
 	
-	metadata, _ := json.Marshal(report.Metadata)
+	var metadata []byte
+	// Create empty metadata if not available
+	metadataMap := make(map[string]string)
+	metadata, _ = json.Marshal(metadataMap)
 	
 	return &QualityReport{
-		EventType:    report.EventType,
+		EventType:    report.SchemaName,
 		OverallScore: report.OverallScore,
 		Dimensions:   convertQualityDimensions(report.Dimensions),
 		Issues:       convertQualityIssues(report.Issues),
-		AssessedAt:   report.AssessedAt.Unix(),
+		AssessedAt:   report.Timestamp.Unix(),
 		Metadata:     string(metadata),
 	}
 }
 
 func convertHealthChecks(health *discovery.HealthStatus) []*HealthCheck {
-	checks := []*HealthCheck{
-		{
-			Name:      "engine",
-			IsHealthy: health.IsHealthy,
-			Message:   health.Status,
-		},
-		{
-			Name:      "cache",
-			IsHealthy: health.CacheHitRate > 0.5,
-			Message:   fmt.Sprintf("Hit rate: %.2f", health.CacheHitRate),
-		},
+	checks := make([]*HealthCheck, 0)
+	
+	// Add engine health check
+	checks = append(checks, &HealthCheck{
+		Name:      "engine",
+		IsHealthy: health.Status == "healthy",
+		Message:   health.Status,
+	})
+	
+	// Add component health checks
+	for name, comp := range health.Components {
+		checks = append(checks, &HealthCheck{
+			Name:      name,
+			IsHealthy: comp.Status == "healthy",
+			Message:   comp.Message,
+		})
 	}
+	
 	return checks
 }
 
@@ -525,7 +588,7 @@ func buildRelationshipGraph(schemas []discovery.Schema, relationships []discover
 			Source:         r.SourceSchema,
 			Target:         r.TargetSchema,
 			RelationshipId: r.ID,
-			Weight:         r.Strength,
+			Weight:         r.Confidence, // Using confidence as weight
 		}
 	}
 

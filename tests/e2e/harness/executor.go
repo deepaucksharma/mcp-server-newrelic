@@ -2,8 +2,9 @@ package harness
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -168,7 +169,15 @@ func (e *StepExecutor) executeStep(ctx context.Context, step ParsedStep) StepRes
 		toolResult, err := e.client.ExecuteTool(stepCtx, step.Tool, resolvedParams)
 		
 		if err == nil {
-			result.Result = toolResult
+			// Type assert toolResult to map[string]interface{} if needed
+			if resultMap, ok := toolResult.(map[string]interface{}); ok {
+				result.Result = resultMap
+			} else {
+				// If not a map, wrap it in a map
+				result.Result = map[string]interface{}{
+					"value": toolResult,
+				}
+			}
 			break
 		}
 

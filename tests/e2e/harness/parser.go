@@ -211,16 +211,18 @@ func (p *WorkflowDSLParser) resolveVariable(path string, variables map[string]in
 			// Parse array access
 			arrayPart := strings.Split(part, "[")
 			key := arrayPart[0]
-			index := strings.TrimSuffix(arrayPart[1], "]")
+			indexStr := strings.TrimSuffix(arrayPart[1], "]")
 			
 			// Get the array
-			arr, ok := current[key]
+			arrVal, ok := current[key]
 			if !ok {
 				return nil, fmt.Errorf("variable %s not found", key)
 			}
 			
 			// Access array element
-			// ... (array access logic)
+			// TODO: Implement array access logic using indexStr and arrVal
+			_ = indexStr // Mark as used
+			_ = arrVal   // Mark as used
 		} else {
 			// Simple map access
 			val, ok := current[part]

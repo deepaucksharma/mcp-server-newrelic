@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 )
 
@@ -21,6 +20,31 @@ type TestReport struct {
 	Environment  string            `json:"environment"`
 	Scenarios    []ScenarioResult  `json:"scenarios"`
 	Summary      ReportSummary     `json:"summary"`
+}
+
+// WriteJUnit writes the report in JUnit XML format
+func (r *TestReport) WriteJUnit(path string) error {
+	// TODO: Implement JUnit XML generation
+	return fmt.Errorf("JUnit format not yet implemented")
+}
+
+// WriteHTML writes the report in HTML format
+func (r *TestReport) WriteHTML(path string) error {
+	// TODO: Implement HTML report generation
+	return fmt.Errorf("HTML format not yet implemented")
+}
+
+// WriteJSON writes the report in JSON format
+func (r *TestReport) WriteJSON(path string) error {
+	file, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(r)
 }
 
 // ScenarioResult contains the result of a single scenario

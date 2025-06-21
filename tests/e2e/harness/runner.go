@@ -8,8 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/deepaucksharma/mcp-server-newrelic/pkg/interface/mcp"
-	"github.com/deepaucksharma/mcp-server-newrelic/tests/e2e/framework"
 	"gopkg.in/yaml.v3"
 )
 
@@ -25,14 +23,22 @@ type ScenarioRunner struct {
 
 // RunnerConfig holds configuration for the scenario runner
 type RunnerConfig struct {
-	Region        string
-	AccountType   string
-	DataSourceMix string
-	SchemaDrift   string
-	LoadProfile   string
-	Timeout       time.Duration
-	Parallel      int
-	SkipChaos     bool
+	Region           string
+	AccountType      string
+	DataSourceMix    string
+	SchemaDrift      string
+	LoadProfile      string
+	Timeout          time.Duration
+	Parallel         int
+	SkipChaos        bool
+	MaxParallel      int
+	RetryAttempts    int
+	CaptureTraffic   bool
+	SaveResponses    bool
+	CleanupTestData  bool
+	OutputDir        string
+	MCPServerURL     string
+	MCPServerCommand string
 }
 
 // NewScenarioRunner creates a new scenario runner
@@ -100,6 +106,62 @@ func (r *ScenarioRunner) RunAll(ctx context.Context, scenarioDir string) (*TestR
 	return report, nil
 }
 
+// RunScenarios runs multiple scenarios and returns a test report
+func (r *ScenarioRunner) RunScenarios(ctx context.Context, scenarioFiles []string) (*TestReport, error) {
+	report := &TestReport{
+		StartTime:    time.Now(),
+		Region:       r.config.Region,
+		Environment:  r.config.AccountType, // Map AccountType to Environment
+		Scenarios:    make([]ScenarioResult, 0, len(scenarioFiles)),
+	}
+
+	// Run scenarios in parallel based on configuration
+	sem := make(chan struct{}, r.config.MaxParallel)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	for _, file := range scenarioFiles {
+		wg.Add(1)
+		go func(scenarioFile string) {
+			defer wg.Done()
+			
+			// Acquire semaphore
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			// Run scenario
+			result, err := r.RunScenario(ctx, scenarioFile)
+			if err != nil {
+				// Create a failed result
+				result = &ScenarioResult{
+					ID:        filepath.Base(scenarioFile),
+					Title:     scenarioFile,
+					Status:    StatusFailed,
+					StartTime: time.Now(),
+					EndTime:   time.Now(),
+					Error:     err,
+				}
+			}
+
+			// Add to report
+			mu.Lock()
+			report.Scenarios = append(report.Scenarios, *result)
+			mu.Unlock()
+		}(file)
+	}
+
+	wg.Wait()
+
+	// Finalize report
+	report.EndTime = time.Now()
+	report.Duration = report.EndTime.Sub(report.StartTime)
+
+	// Calculate summary
+	report.Summary = r.calculateSummary(report.Scenarios)
+
+	return report, nil
+}
+
 // RunScenario runs a single scenario
 func (r *ScenarioRunner) RunScenario(ctx context.Context, scenarioFile string) (*ScenarioResult, error) {
 	scenario, err := r.loadScenario(scenarioFile)
@@ -107,7 +169,8 @@ func (r *ScenarioRunner) RunScenario(ctx context.Context, scenarioFile string) (
 		return nil, fmt.Errorf("failed to load scenario: %w", err)
 	}
 
-	return &r.runScenario(ctx, scenario), nil
+	result := r.runScenario(ctx, scenario)
+	return &result, nil
 }
 
 // runScenario executes a single scenario with full lifecycle
@@ -200,6 +263,11 @@ func (r *ScenarioRunner) loadScenarios(dir string) ([]*Scenario, error) {
 	})
 
 	return scenarios, err
+}
+
+// ParseScenario parses a scenario file without loading it fully
+func (r *ScenarioRunner) ParseScenario(file string) (*Scenario, error) {
+	return r.loadScenario(file)
 }
 
 // loadScenario loads a single scenario from a YAML file
@@ -344,4 +412,33 @@ func allAssertionsPassed(results []AssertionResult) bool {
 		}
 	}
 	return true
+}
+
+// calculateSummary calculates summary statistics from results
+func (r *ScenarioRunner) calculateSummary(results []ScenarioResult) ReportSummary {
+	summary := ReportSummary{
+		TotalScenarios: len(results),
+	}
+
+	var totalDuration time.Duration
+	for _, result := range results {
+		totalDuration += result.Duration
+		
+		switch result.Status {
+		case StatusPassed:
+			summary.PassedScenarios++
+		case StatusFailed:
+			summary.FailedScenarios++
+		case StatusSkipped:
+			summary.SkippedScenarios++
+		}
+	}
+
+	if summary.TotalScenarios > 0 {
+		summary.PassRate = float64(summary.PassedScenarios) / float64(summary.TotalScenarios) * 100
+		summary.AverageDuration = totalDuration / time.Duration(summary.TotalScenarios)
+	}
+	summary.TotalDuration = totalDuration
+
+	return summary
 }

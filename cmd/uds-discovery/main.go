@@ -9,24 +9,24 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/deepaucksharma/mcp-server-newrelic/pkg/discovery"
+	"github.com/spf13/cobra"
 )
 
 var (
 	// Global flags
-	configFile string
+	configFile   string
 	outputFormat string
-	verbose bool
-	
+	verbose      bool
+
 	// Discovery flags
 	maxSchemas int
 	minRecords int
 	eventTypes []string
-	keywords []string
-	purpose string
-	domain string
-	
+	keywords   []string
+	purpose    string
+	domain     string
+
 	// Profile flags
 	profileDepth string
 )
@@ -77,7 +77,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "", "config file (default is ./discovery.yaml)")
 	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "json", "output format (json, yaml, table)")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
-	
+
 	// Discover command flags
 	discoverCmd.Flags().IntVar(&maxSchemas, "max-schemas", 50, "maximum number of schemas to discover")
 	discoverCmd.Flags().IntVar(&minRecords, "min-records", 100, "minimum record count for schema inclusion")
@@ -85,10 +85,10 @@ func init() {
 	discoverCmd.Flags().StringSliceVar(&keywords, "keywords", []string{}, "keywords for intelligent discovery")
 	discoverCmd.Flags().StringVar(&purpose, "purpose", "", "discovery purpose (e.g., 'performance analysis')")
 	discoverCmd.Flags().StringVar(&domain, "domain", "", "domain focus (e.g., 'apm', 'infrastructure', 'logs')")
-	
+
 	// Profile command flags
 	profileCmd.Flags().StringVar(&profileDepth, "depth", "standard", "profiling depth (basic, standard, full)")
-	
+
 	// Add commands
 	rootCmd.AddCommand(discoverCmd)
 	rootCmd.AddCommand(profileCmd)
@@ -109,9 +109,9 @@ func runDiscover(cmd *cobra.Command, args []string) {
 	if err != nil {
 		log.Fatal("Failed to create engine:", err)
 	}
-	
+
 	ctx := context.Background()
-	
+
 	// Check if intelligent discovery is requested
 	if len(keywords) > 0 || purpose != "" || domain != "" {
 		// Use intelligent discovery
@@ -120,16 +120,16 @@ func runDiscover(cmd *cobra.Command, args []string) {
 			Purpose:  purpose,
 			Domain:   domain,
 		}
-		
+
 		if verbose {
 			fmt.Printf("Starting intelligent discovery with hints: %+v\n", hints)
 		}
-		
+
 		result, err := engine.DiscoverWithIntelligence(ctx, hints)
 		if err != nil {
 			log.Fatal("Discovery failed:", err)
 		}
-		
+
 		outputDiscoveryResult(result)
 	} else {
 		// Use standard discovery
@@ -138,16 +138,16 @@ func runDiscover(cmd *cobra.Command, args []string) {
 			MinRecordCount: int64(minRecords),
 			EventTypes:     eventTypes,
 		}
-		
+
 		if verbose {
 			fmt.Printf("Starting standard discovery with filter: %+v\n", filter)
 		}
-		
+
 		schemas, err := engine.DiscoverSchemas(ctx, filter)
 		if err != nil {
 			log.Fatal("Discovery failed:", err)
 		}
-		
+
 		outputSchemas(schemas)
 	}
 }
@@ -157,21 +157,21 @@ func runProfile(cmd *cobra.Command, args []string) {
 	if err != nil {
 		log.Fatal("Failed to create engine:", err)
 	}
-	
+
 	eventType := args[0]
 	depth := parseProfileDepth(profileDepth)
-	
+
 	ctx := context.Background()
-	
+
 	if verbose {
 		fmt.Printf("Profiling schema: %s (depth: %s)\n", eventType, profileDepth)
 	}
-	
+
 	schema, err := engine.ProfileSchema(ctx, eventType, depth)
 	if err != nil {
 		log.Fatal("Profile failed:", err)
 	}
-	
+
 	outputSchema(schema)
 }
 
@@ -180,33 +180,33 @@ func runRelationships(cmd *cobra.Command, args []string) {
 	if err != nil {
 		log.Fatal("Failed to create engine:", err)
 	}
-	
+
 	ctx := context.Background()
-	
+
 	// First discover schemas
 	filter := discovery.DiscoveryFilter{
 		MaxSchemas:     maxSchemas,
 		MinRecordCount: int64(minRecords),
 	}
-	
+
 	if verbose {
 		fmt.Println("Discovering schemas for relationship analysis...")
 	}
-	
+
 	schemas, err := engine.DiscoverSchemas(ctx, filter)
 	if err != nil {
 		log.Fatal("Schema discovery failed:", err)
 	}
-	
+
 	if verbose {
 		fmt.Printf("Found %d schemas, analyzing relationships...\n", len(schemas))
 	}
-	
+
 	relationships, err := engine.FindRelationships(ctx, schemas)
 	if err != nil {
 		log.Fatal("Relationship discovery failed:", err)
 	}
-	
+
 	outputRelationships(relationships)
 }
 
@@ -215,19 +215,19 @@ func runQuality(cmd *cobra.Command, args []string) {
 	if err != nil {
 		log.Fatal("Failed to create engine:", err)
 	}
-	
+
 	schemaName := args[0]
 	ctx := context.Background()
-	
+
 	if verbose {
 		fmt.Printf("Assessing quality for schema: %s\n", schemaName)
 	}
-	
+
 	report, err := engine.AssessQuality(ctx, schemaName)
 	if err != nil {
 		log.Fatal("Quality assessment failed:", err)
 	}
-	
+
 	outputQualityReport(report)
 }
 
@@ -236,14 +236,14 @@ func runHealth(cmd *cobra.Command, args []string) {
 	if err != nil {
 		log.Fatal("Failed to create engine:", err)
 	}
-	
+
 	health := engine.Health()
 	outputHealth(health)
 }
 
 func createEngine() (*discovery.Engine, error) {
 	var config *discovery.Config
-	
+
 	if configFile != "" {
 		// Load config from file
 		cfg, err := discovery.LoadConfig(configFile)
@@ -255,7 +255,7 @@ func createEngine() (*discovery.Engine, error) {
 		// Use default config
 		config = discovery.DefaultConfig()
 	}
-	
+
 	return discovery.NewEngine(config)
 }
 
@@ -401,18 +401,18 @@ func outputQualityReport(report *discovery.QualityReport) {
 		fmt.Printf("  Timeliness:   %.2f\n", report.Dimensions.Timeliness.Score)
 		fmt.Printf("  Uniqueness:   %.2f\n", report.Dimensions.Uniqueness.Score)
 		fmt.Printf("  Validity:     %.2f\n", report.Dimensions.Validity.Score)
-		
+
 		if len(report.Issues) > 0 {
 			fmt.Printf("\nIssues:\n")
 			for _, issue := range report.Issues {
 				fmt.Printf("  [%s] %s - %s\n", issue.Severity, issue.Type, issue.Description)
 			}
 		}
-		
+
 		if len(report.Recommendations) > 0 {
 			fmt.Printf("\nRecommendations:\n")
 			for _, rec := range report.Recommendations {
-				fmt.Printf("  - %s\n", rec)
+				fmt.Printf("  - %v\n", rec)
 			}
 		}
 	default:

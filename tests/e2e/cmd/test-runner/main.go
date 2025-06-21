@@ -67,10 +67,7 @@ func main() {
 	}
 
 	// Create runner
-	runner, err := harness.NewScenarioRunner(config)
-	if err != nil {
-		log.Fatalf("Failed to create runner: %v", err)
-	}
+	runner := harness.NewScenarioRunner(config)
 
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	defer cancel()
@@ -165,19 +162,19 @@ func main() {
 
 	// Print summary
 	fmt.Printf("\nTest Summary:\n")
-	fmt.Printf("Total Scenarios: %d\n", len(report.Results))
-	fmt.Printf("Passed: %d\n", countByStatus(report.Results, "passed"))
-	fmt.Printf("Failed: %d\n", countByStatus(report.Results, "failed"))
-	fmt.Printf("Skipped: %d\n", countByStatus(report.Results, "skipped"))
+	fmt.Printf("Total Scenarios: %d\n", len(report.Scenarios))
+	fmt.Printf("Passed: %d\n", countByStatus(report.Scenarios, harness.StatusPassed))
+	fmt.Printf("Failed: %d\n", countByStatus(report.Scenarios, harness.StatusFailed))
+	fmt.Printf("Skipped: %d\n", countByStatus(report.Scenarios, harness.StatusSkipped))
 	fmt.Printf("\nReport written to: %s\n", reportPath)
 
 	// Exit with error if any tests failed
-	if countByStatus(report.Results, "failed") > 0 {
+	if countByStatus(report.Scenarios, harness.StatusFailed) > 0 {
 		os.Exit(1)
 	}
 }
 
-func countByStatus(results []harness.ScenarioResult, status string) int {
+func countByStatus(results []harness.ScenarioResult, status harness.TestStatus) int {
 	count := 0
 	for _, r := range results {
 		if r.Status == status {
