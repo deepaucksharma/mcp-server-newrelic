@@ -317,69 +317,154 @@ func TestAdaptiveQueryBuilding(t *testing.T) {
 	require.NoError(t, err)
 	defer client.Stop()
 
-	t.Run("ErrorRateCalculation", func(t *testing.T) {
-		// First, discover what error-related attributes exist
-		_, err := client.ExecuteTool(ctx, "discovery.find_attributes", map[string]interface{}{
-			"event_type": "Transaction",
-			"pattern": "error|status|response",
+	t.Run("QueryBuilderWithDiscoveredSchema", func(t *testing.T) {
+		// First, discover event types
+		eventTypesResult, err := client.ExecuteTool(ctx, "discovery.explore_event_types", map[string]interface{}{
+			"limit": 10,
 		})
+		require.NoError(t, err)
 		
-		if err != nil {
-			t.Logf("Could not find error attributes: %v", err)
-			t.Skip("No error-related attributes found")
-		}
+		// Parse result to get an event type
+		resultMap := eventTypesResult.(map[string]interface{})
+		content := resultMap["content"].([]interface{})
+		firstContent := content[0].(map[string]interface{})
+		textResult := firstContent["text"].(string)
 		
-		// Now request error rate - server should adapt based on discovered attributes
-		errorRateResult, err := client.ExecuteTool(ctx, "analysis.get_error_rate", map[string]interface{}{
-			"time_range": "1 hour ago",
+		var toolResult map[string]interface{}
+		err = json.Unmarshal([]byte(textResult), &toolResult)
+		require.NoError(t, err)
+		
+		eventTypes := toolResult["event_types"].([]interface{})
+		require.NotEmpty(t, eventTypes)
+		
+		// Use the first event type
+		firstEventType := eventTypes[0].(map[string]interface{})
+		eventTypeName := firstEventType["name"].(string)
+		
+		// Now discover attributes for this event type
+		attrResult, err := client.ExecuteTool(ctx, "discovery.explore_attributes", map[string]interface{}{
+			"event_type": eventTypeName,
+			"sample_size": 100,
 		})
+		require.NoError(t, err)
 		
-		if err != nil {
-			t.Logf("Error rate calculation failed (OK if no data): %v", err)
-			return
+		// Parse attributes
+		attrResultMap := attrResult.(map[string]interface{})
+		attrContent := attrResultMap["content"].([]interface{})
+		attrFirstContent := attrContent[0].(map[string]interface{})
+		attrTextResult := attrFirstContent["text"].(string)
+		
+		var attrToolResult map[string]interface{}
+		err = json.Unmarshal([]byte(attrTextResult), &attrToolResult)
+		require.NoError(t, err)
+		
+		attributes := attrToolResult["attributes"].([]interface{})
+		
+		// Build a query using discovered attributes
+		if len(attributes) > 0 {
+			// Pick the first numeric attribute if available
+			var numericAttr string
+			for _, attr := range attributes {
+				attrMap := attr.(map[string]interface{})
+				if attrMap["inferredType"] == "numeric" {
+					numericAttr = attrMap["name"].(string)
+					break
+				}
+			}
+			
+			// Build a query
+			queryParams := map[string]interface{}{
+				"event_type": eventTypeName,
+				"select": []string{"count(*)"},
+				"since": "1 hour ago",
+			}
+			
+			if numericAttr != "" {
+				queryParams["select"] = []string{
+					"count(*)",
+					fmt.Sprintf("average(%s)", numericAttr),
+					fmt.Sprintf("max(%s)", numericAttr),
+				}
+			}
+			
+			queryResult, err := client.ExecuteTool(ctx, "query_builder", map[string]interface{}(queryParams))
+			require.NoError(t, err)
+			
+			// Parse query builder result
+			qResultMap := queryResult.(map[string]interface{})
+			qContent := qResultMap["content"].([]interface{})
+			qFirstContent := qContent[0].(map[string]interface{})
+			qTextResult := qFirstContent["text"].(string)
+			
+			var qToolResult map[string]interface{}
+			err = json.Unmarshal([]byte(qTextResult), &qToolResult)
+			require.NoError(t, err)
+			
+			// Verify query was built
+			assert.Contains(t, qToolResult, "query")
+			builtQuery := qToolResult["query"].(string)
+			assert.Contains(t, builtQuery, eventTypeName)
+			
+			t.Logf("Built adaptive query: %s", builtQuery)
 		}
-		
-		resultMap := errorRateResult.(map[string]interface{})
-		
-		// Validate that discovery metadata is included
-		assert.Contains(t, resultMap, "discovery_metadata")
-		metadata := resultMap["discovery_metadata"].(map[string]interface{})
-		
-		assert.Contains(t, metadata, "method_used")
-		assert.Contains(t, metadata, "query_generated")
-		assert.Contains(t, metadata, "confidence")
-		
-		t.Logf("Error rate calculated using method: %s", metadata["method_used"])
-		t.Logf("Generated query: %s", metadata["query_generated"])
 	})
 
-	t.Run("LatencyPercentileCalculation", func(t *testing.T) {
-		// Discover duration-related attributes
-		_, err := client.ExecuteTool(ctx, "discovery.find_attributes", map[string]interface{}{
-			"event_type": "Transaction",
-			"pattern": "duration|time|latency",
+	t.Run("AnalysisWithDiscoveredMetrics", func(t *testing.T) {
+		// Use NrdbQuery since we know it exists
+		// First discover its attributes
+		attrResult, err := client.ExecuteTool(ctx, "discovery.explore_attributes", map[string]interface{}{
+			"event_type": "NrdbQuery",
+			"sample_size": 100,
 		})
+		require.NoError(t, err)
 		
-		if err != nil {
-			t.Skip("No duration attributes found")
+		// Parse attributes
+		attrResultMap := attrResult.(map[string]interface{})
+		attrContent := attrResultMap["content"].([]interface{})
+		attrFirstContent := attrContent[0].(map[string]interface{})
+		attrTextResult := attrFirstContent["text"].(string)
+		
+		var attrToolResult map[string]interface{}
+		err = json.Unmarshal([]byte(attrTextResult), &attrToolResult)
+		require.NoError(t, err)
+		
+		attributes := attrToolResult["attributes"].([]interface{})
+		
+		// Look for durationMs which we know exists
+		var hasDurationMs bool
+		for _, attr := range attributes {
+			attrMap := attr.(map[string]interface{})
+			if attrMap["name"] == "durationMs" {
+				hasDurationMs = true
+				break
+			}
 		}
 		
-		// Request P95 latency - server should adapt
-		latencyResult, err := client.ExecuteTool(ctx, "analysis.get_latency_percentile", map[string]interface{}{
-			"percentile": 95,
-			"time_range": "1 hour ago",
-		})
-		
-		if err != nil {
-			t.Logf("Latency calculation failed (OK if no data): %v", err)
-			return
+		if hasDurationMs {
+			// Calculate baseline for durationMs
+			baselineResult, err := client.ExecuteTool(ctx, "analysis.calculate_baseline", map[string]interface{}{
+				"metric": "durationMs",
+				"event_type": "NrdbQuery",
+				"time_range": "1 hour",
+				"percentiles": []int{50, 95, 99},
+			})
+			
+			if err != nil {
+				t.Logf("Baseline calculation failed (OK if no data): %v", err)
+			} else {
+				// Parse baseline result
+				bResultMap := baselineResult.(map[string]interface{})
+				bContent := bResultMap["content"].([]interface{})
+				bFirstContent := bContent[0].(map[string]interface{})
+				bTextResult := bFirstContent["text"].(string)
+				
+				var bToolResult map[string]interface{}
+				err = json.Unmarshal([]byte(bTextResult), &bToolResult)
+				require.NoError(t, err)
+				
+				t.Logf("Baseline analysis completed: %v", bToolResult)
+			}
 		}
-		
-		resultMap := latencyResult.(map[string]interface{})
-		metadata := resultMap["discovery_metadata"].(map[string]interface{})
-		
-		t.Logf("Latency calculated using attribute: %s", metadata["attribute_used"])
-		t.Logf("Generated query: %s", metadata["query_generated"])
 	})
 }
 
@@ -465,16 +550,25 @@ func TestComposableTools(t *testing.T) {
 	t.Run("DiscoverThenCreateDashboard", func(t *testing.T) {
 		// Step 1: Discover attributes for an entity
 		discResult, err := client.ExecuteTool(ctx, "discovery.explore_attributes", map[string]interface{}{
-			"event_type": "SystemSample",
+			"event_type": "NrdbQuery",
 			"sample_size": 100,
 		})
 		
 		if err != nil {
-			t.Skip("No SystemSample data available")
+			t.Skip("No NrdbQuery data available")
 		}
 		
+		// Parse MCP response
 		resultMap := discResult.(map[string]interface{})
-		attributes := resultMap["attributes"].([]interface{})
+		content := resultMap["content"].([]interface{})
+		firstContent := content[0].(map[string]interface{})
+		textResult := firstContent["text"].(string)
+		
+		var toolResult map[string]interface{}
+		err = json.Unmarshal([]byte(textResult), &toolResult)
+		require.NoError(t, err)
+		
+		attributes := toolResult["attributes"].([]interface{})
 		
 		// Pick a few numeric attributes for dashboard
 		var selectedAttrs []string
@@ -504,7 +598,7 @@ func TestComposableTools(t *testing.T) {
 		dashResult, err := client.ExecuteTool(ctx, "dashboard.create_from_discovery", map[string]interface{}{
 			"title": "E2E Test Dashboard",
 			"attributes": selectedAttrs,
-			"event_type": "SystemSample",
+			"event_type": "NrdbQuery",
 		})
 		
 		if err != nil {

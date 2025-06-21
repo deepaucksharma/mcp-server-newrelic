@@ -7,7 +7,8 @@ This document explains the organization of documentation in the New Relic MCP Se
 ```
 docs/
 ├── README.md                    # Main documentation index
-├── QUICKSTART.md               # Quick start guide
+├── guides/
+│   └── quickstart.md           # Quick start guide
 ├── DISCOVERY_ECOSYSTEM_OVERVIEW.md # Complete ecosystem overview
 ├── TECHNICAL_PLATFORM_SPEC.md  # Unified technical blueprint
 ├── ORGANIZATION_STRUCTURE.md    # This file
@@ -59,7 +60,7 @@ docs/
 
 ### Getting Started
 1. `../README.md` - Start here for navigation
-2. `../QUICKSTART.md` - 5-minute setup guide
+2. `../guides/quickstart.md` - 5-minute setup guide
 3. `../DISCOVERY_ECOSYSTEM_OVERVIEW.md` - Understanding the system
 
 ### Architecture & Design
@@ -89,7 +90,7 @@ docs/
 
 ## Navigation Tips
 
-- **New Users**: Start with `../QUICKSTART.md` → `ecosystem-overview.md` → `../api/reference.md`
+- **New Users**: Start with `../guides/quickstart.md` → `ecosystem-overview.md` → `../api/reference.md`
 - **Developers**: Start with `../guides/development.md` → `../guides/refactoring.md` → `../guides/testing.md`
 - **Architects**: Start with `architecture/overview.md` → `philosophy/NO_ASSUMPTIONS_MANIFESTO.md`
 - **UX Designers**: Start with `ux/WOW_EXPERIENCE_DESIGN.md` → `ux/VISUAL_DISCOVERY_DESIGN.md`

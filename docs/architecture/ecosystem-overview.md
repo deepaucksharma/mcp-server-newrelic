@@ -290,7 +290,7 @@ Create an observability ecosystem where:
 
 ## 📖 Continue Your Journey
 
-- Start with **[QUICKSTART.md](docs/QUICKSTART.md)** for immediate value
+- Start with **[Quick Start Guide](../guides/quickstart.md)** for immediate value
 - Explore **[DISCOVERY_PHILOSOPHY.md](docs/DISCOVERY_PHILOSOPHY.md)** to understand why
 - Try **[INTERACTIVE_DISCOVERY_EXPERIENCES.md](docs/INTERACTIVE_DISCOVERY_EXPERIENCES.md)** to learn by doing
 - Read **[WOW_EXPERIENCE_SUMMARY.md](docs/WOW_EXPERIENCE_SUMMARY.md)** to create magic

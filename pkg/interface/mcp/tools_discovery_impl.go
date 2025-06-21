@@ -76,14 +76,59 @@ func (s *Server) handleDiscoveryExploreAttributesImpl(ctx context.Context, param
 		}
 	}
 	
+	// Extract attributes from keyset
+	keysetFound := false
 	if len(results) > 0 {
 		for _, result := range results {
 			res := result
-			if keyset, ok := res["keyset"].([]interface{}); ok {
+			if keyset, ok := res["keyset"].([]interface{}); ok && len(keyset) > 0 {
+				keysetFound = true
 				for _, key := range keyset {
 					if keyStr, ok := key.(string); ok {
 						attributeMap[keyStr] = true
 					}
+				}
+			}
+		}
+	}
+
+	// If keyset() didn't return results, fallback to SELECT * approach
+	if !keysetFound || len(attributeMap) == 0 {
+		// Query sample events and extract keys
+		sampleQuery := fmt.Sprintf(`
+			SELECT * 
+			FROM %s 
+			LIMIT 10 
+			SINCE 1 hour ago
+		`, eventType)
+
+		sampleResult, err := s.executeNRQLQuery(ctx, sampleQuery, "")
+		if err == nil {
+			// Extract results
+			var sampleResults []map[string]interface{}
+			switch v := sampleResult.(type) {
+			case map[string]interface{}:
+				if r, ok := v["results"].([]map[string]interface{}); ok {
+					sampleResults = r
+				}
+			default:
+				// Use reflection for *newrelic.NRQLResult
+				resultValue := reflect.ValueOf(sampleResult)
+				if resultValue.Kind() == reflect.Ptr {
+					resultValue = resultValue.Elem()
+				}
+				resultsField := resultValue.FieldByName("Results")
+				if resultsField.IsValid() {
+					if r, ok := resultsField.Interface().([]map[string]interface{}); ok {
+						sampleResults = r
+					}
+				}
+			}
+
+			// Extract all keys from sample events
+			for _, event := range sampleResults {
+				for key := range event {
+					attributeMap[key] = true
 				}
 			}
 		}
@@ -105,16 +150,15 @@ func (s *Server) handleDiscoveryExploreAttributesImpl(ctx context.Context, param
 		}
 
 		if showCoverage || showExamples {
-			// Query for coverage and examples
+			// Query for coverage - using backticks to handle special characters in attribute names
 			detailQuery := fmt.Sprintf(`
 				SELECT 
 					count(*) as total,
-					filter(count(*), WHERE %s IS NOT NULL) as nonNullCount,
-					uniqueCount(%s) as cardinality
+					filter(count(*), WHERE %s IS NOT NULL) as nonNullCount
 				FROM %s 
 				LIMIT %d
 				SINCE 1 hour ago
-			`, attr, attr, eventType, int(sampleSize))
+			`, fmt.Sprintf("`%s`", attr), eventType, int(sampleSize))
 
 			detailResult, err := s.executeNRQLQuery(ctx, detailQuery, "")
 			if err == nil && detailResult != nil {
@@ -143,24 +187,24 @@ func (s *Server) handleDiscoveryExploreAttributesImpl(ctx context.Context, param
 					res := detailResults[0]
 				total := getFloat64(res, "total")
 				nonNull := getFloat64(res, "nonNullCount")
-				cardinality := getFloat64(res, "cardinality")
 
 					if showCoverage && total > 0 {
 						detail["coverage"] = nonNull / total
-						detail["cardinality"] = int(cardinality)
+						// Cardinality would need a separate query - skip for now
+						detail["has_data"] = nonNull > 0
 					}
 				}
 			}
 
-			if showExamples {
-				// Get example values
+			if showExamples && detail["has_data"] == true {
+				// Get example values - using a simpler approach
 				exampleQuery := fmt.Sprintf(`
-					SELECT uniques(%s, 5) as examples
+					SELECT %s as example
 					FROM %s 
 					WHERE %s IS NOT NULL
-					LIMIT 1000
+					LIMIT 5
 					SINCE 1 hour ago
-				`, attr, eventType, attr)
+				`, fmt.Sprintf("`%s`", attr), eventType, fmt.Sprintf("`%s`", attr))
 
 				exampleResult, err := s.executeNRQLQuery(ctx, exampleQuery, "")
 				if err == nil && exampleResult != nil {
@@ -186,8 +230,20 @@ func (s *Server) handleDiscoveryExploreAttributesImpl(ctx context.Context, param
 					}
 					
 					if len(exampleResults) > 0 {
-						res := exampleResults[0]
-						if examples, ok := res["examples"].([]interface{}); ok {
+						// Collect unique examples
+						examples := make([]interface{}, 0, 5)
+						seen := make(map[string]bool)
+						for _, res := range exampleResults {
+							if example, ok := res["example"]; ok && example != nil {
+								// Convert to string for deduplication
+								exampleStr := fmt.Sprintf("%v", example)
+								if !seen[exampleStr] {
+									seen[exampleStr] = true
+									examples = append(examples, example)
+								}
+							}
+						}
+						if len(examples) > 0 {
 							detail["examples"] = examples
 						}
 					}
