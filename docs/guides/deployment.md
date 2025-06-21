@@ -446,6 +446,7 @@ Available metrics:
 # Add to environment configuration
 NEW_RELIC_LICENSE_KEY=your_license_key
 NEW_RELIC_APP_NAME=mcp-server-production
+NEW_RELIC_MONITOR_MODE=true
 NEW_RELIC_DISTRIBUTED_TRACING_ENABLED=true
 ```
 
