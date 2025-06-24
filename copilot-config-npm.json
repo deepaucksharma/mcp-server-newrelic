@@ -1,0 +1,11 @@
+{
+  "servers": {
+    "newrelic": {
+      "command": "npx",
+      "args": ["-y", "mcp-server-newrelic"],
+      "env": {
+        "NEW_RELIC_API_KEY": "${env:NEW_RELIC_API_KEY}"
+      }
+    }
+  }
+}
